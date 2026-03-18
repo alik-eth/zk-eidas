@@ -1,0 +1,2 @@
+pragma circom 2.1.5;
+include "../node_modules/circomlib/circuits/poseidon.circom";

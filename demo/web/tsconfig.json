@@ -1,0 +1,14 @@
+{
+  "compilerOptions": {
+    "jsx": "react-jsx",
+    "moduleResolution": "bundler",
+    "module": "ESNext",
+    "target": "ES2022",
+    "skipLibCheck": true,
+    "strict": true,
+    "esModuleInterop": true,
+    "paths": { "~/*": ["./app/*"] }
+  },
+  "include": ["app/**/*", "*.ts"],
+  "exclude": ["app/**/*.test.ts"]
+}

@@ -1,0 +1,88 @@
+//! Shared utility functions for the zk-eidas workspace.
+//!
+//! Currently provides date-to-epoch-days conversion used by both the types
+//! crate and the facade builder for age predicate calculations.
+
+/// Convert a date to days since 1970-01-01 (Unix epoch).
+///
+/// Uses the civil_from_days algorithm. This is the single canonical
+/// implementation used by both the types crate and the facade builder.
+pub fn date_to_epoch_days(year: u32, month: u32, day: u32) -> i64 {
+    let y = if month <= 2 {
+        year as i64 - 1
+    } else {
+        year as i64
+    };
+    let m = if month <= 2 {
+        month as i64 + 9
+    } else {
+        month as i64 - 3
+    };
+    let era = y.div_euclid(400);
+    let yoe = y.rem_euclid(400) as u64;
+    let doy = (153 * m as u64 + 2) / 5 + day as u64 - 1;
+    let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+    era * 146097 + doe as i64 - 719468
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn epoch_start() {
+        assert_eq!(date_to_epoch_days(1970, 1, 1), 0);
+    }
+
+    #[test]
+    fn known_date() {
+        // 2000-01-15 = 10971 days from epoch
+        assert_eq!(date_to_epoch_days(2000, 1, 15), 10971);
+    }
+
+    #[test]
+    fn leap_year_feb_29() {
+        let feb29 = date_to_epoch_days(2024, 2, 29);
+        let mar01 = date_to_epoch_days(2024, 3, 1);
+        assert_eq!(mar01 - feb29, 1);
+    }
+
+    #[test]
+    fn end_of_year() {
+        let dec31 = date_to_epoch_days(2025, 12, 31);
+        let jan01 = date_to_epoch_days(2026, 1, 1);
+        assert_eq!(jan01 - dec31, 1);
+    }
+
+    #[test]
+    fn month_boundaries() {
+        let jan31 = date_to_epoch_days(2025, 1, 31);
+        let feb01 = date_to_epoch_days(2025, 2, 1);
+        assert_eq!(feb01 - jan31, 1);
+    }
+
+    #[test]
+    fn far_future_date() {
+        // 2100 is NOT a leap year (century not divisible by 400)
+        let feb28 = date_to_epoch_days(2100, 2, 28);
+        let mar01 = date_to_epoch_days(2100, 3, 1);
+        assert_eq!(mar01 - feb28, 1);
+    }
+
+    #[test]
+    fn pre_1970_dates_are_distinct() {
+        let d1 = date_to_epoch_days(1960, 1, 1);
+        let d2 = date_to_epoch_days(1969, 12, 31);
+        assert_ne!(d1, d2, "pre-1970 dates must produce distinct values");
+    }
+
+    #[test]
+    fn year_2000_is_leap() {
+        // 2000 IS a leap year (divisible by 400)
+        let feb28 = date_to_epoch_days(2000, 2, 28);
+        let feb29 = date_to_epoch_days(2000, 2, 29);
+        let mar01 = date_to_epoch_days(2000, 3, 1);
+        assert_eq!(feb29 - feb28, 1);
+        assert_eq!(mar01 - feb29, 1);
+    }
+}

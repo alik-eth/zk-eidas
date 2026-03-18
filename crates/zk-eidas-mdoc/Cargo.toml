@@ -1,0 +1,16 @@
+[package]
+name = "zk-eidas-mdoc"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+zk-eidas-types = { workspace = true }
+ciborium = "0.2"
+coset = "0.4"
+p256 = "0.13"
+rand = "0.8"
+sha2 = "0.10"
+thiserror = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }

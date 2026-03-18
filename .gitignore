@@ -1,0 +1,25 @@
+/target
+*.swp
+*.swo
+.DS_Store
+.worktrees/
+node_modules/
+package-lock.json
+!/demo/web/package-lock.json
+dist/
+coverage/
+.playwright-mcp/
+*.png
+docs/plans/
+docs/superpowers/
+.superpowers/
+CLAUDE.md
+
+# Playwright
+demo/web/test-results/
+demo/web/playwright-report/
+
+# Circom circuits — large binaries hosted externally
+circuits/build/ecdsa_verify/ecdsa_verify.zkey
+circuits/node_modules/
+circuits/*.ptau

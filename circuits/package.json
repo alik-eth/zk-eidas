@@ -1,0 +1,9 @@
+{
+  "name": "zk-eidas-circuits",
+  "private": true,
+  "dependencies": {
+    "circom-ecdsa": "github:privacy-scaling-explorations/circom-ecdsa-p256",
+    "circomlib": "^2.0.5",
+    "circomlibjs": "^0.1.7"
+  }
+}

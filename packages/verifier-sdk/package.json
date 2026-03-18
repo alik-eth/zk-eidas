@@ -1,0 +1,20 @@
+{
+  "name": "@zk-eidas/verifier-sdk",
+  "version": "0.3.0",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "test": "node --test dist/test.js"
+  },
+  "dependencies": {
+    "snarkjs": "^0.7.6"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.0"
+  }
+}

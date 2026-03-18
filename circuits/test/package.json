@@ -1,0 +1,10 @@
+{
+  "name": "zk-eidas-circuit-tests",
+  "private": true,
+  "scripts": { "test": "mocha --timeout 120000 '*.test.js'" },
+  "devDependencies": {
+    "circom_tester": "^0.0.20",
+    "mocha": "^10.2.0",
+    "chai": "^4.3.7"
+  }
+}

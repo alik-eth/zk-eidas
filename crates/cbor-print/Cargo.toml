@@ -1,0 +1,11 @@
+[package]
+name = "cbor-print"
+version = "0.1.0"
+edition = "2021"
+description = "Print any binary payload as chunked QR codes and reassemble on scan. Deflate-raw compression, 8-byte protocol header, multi-document sets."
+license = "MIT OR Apache-2.0"
+
+[dependencies]
+flate2 = { version = "1", default-features = false, features = ["rust_backend"] }
+
+[dev-dependencies]

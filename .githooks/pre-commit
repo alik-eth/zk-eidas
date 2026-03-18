@@ -1,0 +1,20 @@
+#!/bin/sh
+set -e
+
+echo "==> cargo fmt --check..."
+cargo fmt --all -- --check
+
+echo "==> cargo clippy..."
+cargo clippy --workspace --quiet -- -D warnings
+
+echo "==> cargo check (all crates)..."
+cargo check --workspace --quiet
+
+echo "==> cargo test (fast suite)..."
+cargo test -p zk-eidas --test integration_test --test openid4vp_test --quiet
+cargo test -p zk-eidas-types -p zk-eidas-parser -p zk-eidas-utils --quiet
+
+echo "==> TypeScript check (demo/web)..."
+(cd demo/web && npx tsc --noEmit 2>&1)
+
+echo "==> All checks passed."
