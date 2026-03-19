@@ -4,7 +4,7 @@ import { Tooltip } from '../components/Tooltip'
 import { StepWizard } from '../components/StepWizard'
 import { useT, useLocale } from '../i18n'
 import { CREDENTIAL_TYPES, type FieldDisplay } from '../lib/credential-types'
-import { proveInBrowser, type BrowserProofResult } from '../lib/snarkjs-prover'
+import { proveCompoundInBrowser, getCacheStats, type BrowserProofResult } from '../lib/snarkjs-prover'
 
 // Types
 
@@ -259,7 +259,9 @@ function HolderStep({ state, setState, t }: { state: WizardState; setState: Reac
   const [discloseDocNumber, setDiscloseDocNumber] = useState(true)
   const [presReqLoading, setPresReqLoading] = useState(false)
   const [presReqResult, setPresReqResult] = useState<{ id: string; input_descriptors: { id: string; constraints: { path: string; predicate_op: string; value: string }[] }[] } | null>(null)
-  // Browser proving state (disabled for now — ECDSA requires server-side proving)
+  // Browser proving state
+  const [proveOnDevice, setProveOnDevice] = useState(false)
+  const [browserProgress, setBrowserProgress] = useState('')
   const [_browserResult, _setBrowserResult] = useState<BrowserProofResult | null>(null)
 
   // Reset proved state when user reverts back to this step
@@ -308,51 +310,44 @@ function HolderStep({ state, setState, t }: { state: WizardState; setState: Reac
   // Will be enabled when lightweight witness endpoint is implemented.
   // ECDSA (~2M constraints) always runs server-side; only predicate
   // circuits (~300 constraints) can prove in-browser via snarkjs.
-  const _handleProveBrowser = async () => {
+  const handleProveBrowser = async () => {
     setLoading(true)
     setElapsed(0)
+    setBrowserProgress('Preparing inputs...')
     _setBrowserResult(null)
     const timer = setInterval(() => setElapsed(prev => prev + 1), 1000)
     try {
       const userPredicates = resolvedPredicates.filter(p => selected[p.id]).map(p => p.predicate)
-      const res = await fetch(`${API_URL}/holder/prepare-witness`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          credential: state.credential,
-          format: state.format,
-          predicates: userPredicates,
-        }),
-      })
-      if (!res.ok) throw new Error(await res.text())
-      const witnessData = await res.json() as { circuit_name: string; inputs: Record<string, string | string[]> }[]
 
-      const proofs: ProofResult[] = []
-      const allResults: BrowserProofResult[] = []
-      for (const witness of witnessData) {
-        const result = await proveInBrowser(witness.circuit_name, witness.inputs, API_URL)
-        allResults.push(result)
-        proofs.push({
-          predicate: witness.circuit_name,
-          proof_json: JSON.stringify({ proof: result.proof, publicSignals: result.publicSignals }),
+      const result = await proveCompoundInBrowser(
+        state.credential!,
+        state.format!,
+        userPredicates,
+        API_URL,
+        (_stage, detail) => setBrowserProgress(detail),
+      )
+
+      // Build proof results from ECDSA + predicate proofs
+      const proofs: ProofResult[] = [
+        {
+          predicate: 'ecdsa_verify',
+          proof_json: JSON.stringify({ proof: result.ecdsaProof.proof, publicSignals: result.ecdsaProof.publicSignals }),
           proof_hex: '',
-          op: witness.circuit_name,
-        })
-      }
-      const totalProvingMs = allResults.reduce((s, r) => s + r.provingTimeMs, 0)
-      const totalVerifyMs = allResults.reduce((s, r) => s + r.verificationTimeMs, 0)
-      const allVerified = allResults.every(r => r.verified)
-      _setBrowserResult({
-        proof: allResults.map(r => r.proof),
-        publicSignals: allResults.flatMap(r => r.publicSignals),
-        provingTimeMs: totalProvingMs,
-        verified: allVerified,
-        verificationTimeMs: totalVerifyMs,
-      })
-      setProveTimeMs(totalProvingMs)
+          op: 'ecdsa',
+        },
+        ...result.predicateProofs.map((p, i) => ({
+          predicate: userPredicates[i]?.claim ?? `predicate_${i}`,
+          proof_json: JSON.stringify({ proof: p.proof, publicSignals: p.publicSignals }),
+          proof_hex: '',
+          op: userPredicates[i]?.op ?? 'unknown',
+        })),
+      ]
+
+      setProveTimeMs(result.totalTimeMs)
       clearInterval(timer)
       setLoading(false)
       setProved(true)
+      setBrowserProgress(`Done in ${(result.totalTimeMs / 1000).toFixed(1)}s — all proofs verified locally`)
       setTimeout(() => {
         setState(prev => ({
           ...prev,
@@ -368,7 +363,8 @@ function HolderStep({ state, setState, t }: { state: WizardState; setState: Reac
     } catch (e: unknown) {
       clearInterval(timer)
       setLoading(false)
-      alert(`Browser proof generation failed: ${e instanceof Error ? e.message : String(e)}`)
+      setBrowserProgress('')
+      alert(`On-device proof failed: ${e instanceof Error ? e.message : String(e)}`)
     }
   }
 
@@ -623,14 +619,37 @@ function HolderStep({ state, setState, t }: { state: WizardState; setState: Reac
         </div>
       )}
 
+      {/* On-device toggle */}
+      <label className="flex items-center gap-2 text-xs text-slate-400 cursor-pointer select-none mb-2">
+        <input
+          type="checkbox"
+          checked={proveOnDevice}
+          onChange={e => setProveOnDevice(e.target.checked)}
+          className="accent-blue-500"
+        />
+        <span>Prove on device</span>
+        <span className="text-slate-600">(private, ~3 min)</span>
+      </label>
+
+      {/* Progress */}
+      {loading && browserProgress && (
+        <p className="text-xs text-blue-400 mb-2 animate-pulse">{browserProgress}</p>
+      )}
+
       {/* Actions */}
       <button
-        onClick={handleProve}
+        onClick={proveOnDevice ? handleProveBrowser : handleProve}
         disabled={loading || selectedCount === 0}
         className="flex items-center justify-center gap-2 w-full bg-blue-600 hover:bg-blue-700 disabled:bg-slate-600 disabled:cursor-not-allowed text-white font-semibold py-3 rounded-lg transition-colors"
       >
         <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-        {loading ? t('demo.generatingShort') : t('demo.generateBtn')}
+        {loading
+          ? proveOnDevice
+            ? `${t('demo.generatingShort')} (${elapsed}s)`
+            : t('demo.generatingShort')
+          : proveOnDevice
+            ? 'Generate proof on device'
+            : t('demo.generateBtn')}
       </button>
     </div>
   )
