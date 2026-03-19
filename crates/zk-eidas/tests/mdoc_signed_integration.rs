@@ -3,6 +3,7 @@
 //! Proves the full pipeline works end-to-end for mdoc/mDL credentials using
 //! the same signed circuits as SD-JWT (ECDSA P-256 + SHA-256).
 
+use serial_test::serial;
 use zk_eidas::{Predicate, ZkCredential, ZkVerifier};
 use zk_eidas_mdoc::MdocParser;
 use zk_eidas_types::credential::ClaimValue;
@@ -11,6 +12,7 @@ const CIRCUITS_PATH: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../../circuits
 
 #[tokio::test]
 #[ignore = "requires compiled Circom circuit artifacts"]
+#[serial]
 async fn mdoc_signed_gte_proof_end_to_end() {
     let (mdoc_bytes, pub_key_x, pub_key_y) = zk_eidas_mdoc::test_utils::build_ecdsa_signed_mdoc(
         vec![
@@ -38,6 +40,7 @@ async fn mdoc_signed_gte_proof_end_to_end() {
 
 #[tokio::test]
 #[ignore = "requires compiled Circom circuit artifacts"]
+#[serial]
 async fn mdoc_signed_eq_proof_end_to_end() {
     let (mdoc_bytes, pub_key_x, pub_key_y) = zk_eidas_mdoc::test_utils::build_ecdsa_signed_mdoc(
         vec![("nationality", ClaimValue::String("UA".into()))],

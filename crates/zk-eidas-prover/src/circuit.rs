@@ -98,9 +98,12 @@ impl CircuitLoader {
         }
 
         // Check for CVM witness generator (ECDSA only, ~6x faster than WASM)
+        // Requires both the .cvm file AND cvm-compile binary to be available
         let cvm_witness_path = if matches!(op, PredicateOp::Ecdsa) {
             let cvm_file = self.base_path.join("ecdsa_verify_cvm/ecdsa_verify.cvm");
-            if cvm_file.exists() { Some(cvm_file) } else { None }
+            let cvm_bin = std::env::var("CVM_COMPILE_BIN").unwrap_or_else(|_| "cvm-compile".to_string());
+            let bin_exists = std::process::Command::new(&cvm_bin).arg("--help").output().is_ok();
+            if cvm_file.exists() && bin_exists { Some(cvm_file) } else { None }
         } else {
             None
         };

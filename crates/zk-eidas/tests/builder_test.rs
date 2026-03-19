@@ -1,7 +1,9 @@
+use serial_test::serial;
 use zk_eidas::{age_cutoff_epoch_days_from, Predicate, ZkCredential, ZkVerifier};
 
 #[tokio::test]
 #[ignore = "requires compiled Circom circuit artifacts"]
+#[serial]
 async fn test_builder_prove_age_gte() {
     let (sdjwt, _key) = zk_eidas_parser::test_utils::build_ecdsa_signed_sdjwt(
         serde_json::json!({
@@ -23,6 +25,7 @@ async fn test_builder_prove_age_gte() {
 
 #[tokio::test]
 #[ignore = "requires compiled Circom circuit artifacts"]
+#[serial]
 async fn test_builder_prove_and_verify() {
     let (sdjwt, _key) = zk_eidas_parser::test_utils::build_ecdsa_signed_sdjwt(
         serde_json::json!({
@@ -47,6 +50,7 @@ async fn test_builder_prove_and_verify() {
 
 #[tokio::test]
 #[ignore = "requires compiled Circom circuit artifacts"]
+#[serial]
 async fn test_builder_prove_age_lte() {
     let (sdjwt, _key) = zk_eidas_parser::test_utils::build_ecdsa_signed_sdjwt(
         serde_json::json!({

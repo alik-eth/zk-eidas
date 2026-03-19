@@ -68,10 +68,15 @@ ecdsa: $(BUILD_DIR)/$(ECDSA_CIRCUIT)/$(ECDSA_CIRCUIT).zkey
 $(BUILD_DIR)/$(ECDSA_CIRCUIT)/$(ECDSA_CIRCUIT).zkey: $(ECDSA_CIRCUIT)/$(ECDSA_CIRCUIT).circom $(PTAU_ECDSA)
 	@echo "==> Building ECDSA circuit (this takes ~15 minutes and needs 16GB RAM)..."
 	@mkdir -p $(BUILD_DIR)/$(ECDSA_CIRCUIT)
-	$(CIRCOM_CVM) $< --r1cs --wasm --cvm --output $(BUILD_DIR)/$(ECDSA_CIRCUIT)/ -l node_modules
-	@mkdir -p $(BUILD_DIR)/ecdsa_verify_cvm
-	@mv $(BUILD_DIR)/$(ECDSA_CIRCUIT)/$(ECDSA_CIRCUIT)_cvm/$(ECDSA_CIRCUIT).cvm $(BUILD_DIR)/ecdsa_verify_cvm/
-	@rm -rf $(BUILD_DIR)/$(ECDSA_CIRCUIT)/$(ECDSA_CIRCUIT)_cvm
+	$(CIRCOM) $< --r1cs --wasm --output $(BUILD_DIR)/$(ECDSA_CIRCUIT)/ -l node_modules
+	@# If circom_cvm is available, also generate CVM witness file for faster proving
+	@if command -v $(CIRCOM_CVM) >/dev/null 2>&1 && [ "$(CIRCOM_CVM)" != "$(CIRCOM)" ]; then \
+		echo "==> Generating CVM witness file..."; \
+		$(CIRCOM_CVM) $< --cvm --output $(BUILD_DIR)/$(ECDSA_CIRCUIT)/ -l node_modules; \
+		mkdir -p $(BUILD_DIR)/ecdsa_verify_cvm; \
+		mv $(BUILD_DIR)/$(ECDSA_CIRCUIT)/$(ECDSA_CIRCUIT)_cvm/$(ECDSA_CIRCUIT).cvm $(BUILD_DIR)/ecdsa_verify_cvm/; \
+		rm -rf $(BUILD_DIR)/$(ECDSA_CIRCUIT)/$(ECDSA_CIRCUIT)_cvm; \
+	fi
 	$(NODE) $(NODE_MEM) $$(which $(SNARKJS)) groth16 setup $(BUILD_DIR)/$(ECDSA_CIRCUIT)/$(ECDSA_CIRCUIT).r1cs $(PTAU_ECDSA) $(BUILD_DIR)/$(ECDSA_CIRCUIT)/$(ECDSA_CIRCUIT)_0.zkey
 	$(NODE) $(NODE_MEM) $$(which $(SNARKJS)) zkey contribute $(BUILD_DIR)/$(ECDSA_CIRCUIT)/$(ECDSA_CIRCUIT)_0.zkey $(BUILD_DIR)/$(ECDSA_CIRCUIT)/$(ECDSA_CIRCUIT).zkey --name="zk-eidas" -e="zk-eidas-dev-entropy"
 	$(SNARKJS) zkey export verificationkey $(BUILD_DIR)/$(ECDSA_CIRCUIT)/$(ECDSA_CIRCUIT).zkey $(BUILD_DIR)/$(ECDSA_CIRCUIT)/vk.json

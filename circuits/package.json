@@ -1,6 +1,9 @@
 {
   "name": "zk-eidas-circuits",
   "private": true,
+  "scripts": {
+    "postinstall": "bash patches/apply-circom-pairing-p256-fix.sh"
+  },
   "dependencies": {
     "circom-ecdsa": "github:privacy-scaling-explorations/circom-ecdsa-p256",
     "circomlib": "^2.0.5",

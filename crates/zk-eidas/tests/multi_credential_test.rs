@@ -3,6 +3,7 @@
 //! Proves that two different credentials issued to the same holder can be
 //! linked via a shared binding hash without revealing the linking claim.
 
+use serial_test::serial;
 use zk_eidas::{Predicate, ZkCredential, ZkVerifier};
 use zk_eidas_types::predicate::PredicateOp;
 
@@ -16,6 +17,7 @@ fn build_signed_sdjwt(claims: serde_json::Value, issuer: &str) -> String {
 
 #[tokio::test]
 #[ignore = "requires compiled Circom circuit artifacts"]
+#[serial]
 async fn multi_credential_holder_binding() {
     // Issue two credentials to the same holder (same personal_identifier)
     let sdjwt_pid = build_signed_sdjwt(
