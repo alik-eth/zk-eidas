@@ -7,11 +7,11 @@ use zk_eidas::{Predicate, ZkCredential, ZkVerifier};
 use zk_eidas_mdoc::MdocParser;
 use zk_eidas_types::credential::ClaimValue;
 
-const CIRCUITS_PATH: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../../circuits/predicates");
+const CIRCUITS_PATH: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../../circuits/build");
 
-#[test]
+#[tokio::test]
 #[ignore = "requires compiled Circom circuit artifacts"]
-fn mdoc_signed_gte_proof_end_to_end() {
+async fn mdoc_signed_gte_proof_end_to_end() {
     let (mdoc_bytes, pub_key_x, pub_key_y) = zk_eidas_mdoc::test_utils::build_ecdsa_signed_mdoc(
         vec![
             ("age", ClaimValue::Integer(25)),
@@ -36,9 +36,9 @@ fn mdoc_signed_gte_proof_end_to_end() {
     assert!(valid, "mdoc signed GTE proof should verify");
 }
 
-#[test]
+#[tokio::test]
 #[ignore = "requires compiled Circom circuit artifacts"]
-fn mdoc_signed_eq_proof_end_to_end() {
+async fn mdoc_signed_eq_proof_end_to_end() {
     let (mdoc_bytes, pub_key_x, pub_key_y) = zk_eidas_mdoc::test_utils::build_ecdsa_signed_mdoc(
         vec![("nationality", ClaimValue::String("UA".into()))],
         "DIIA",

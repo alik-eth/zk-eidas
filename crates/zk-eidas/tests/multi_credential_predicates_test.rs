@@ -7,7 +7,7 @@ use zk_eidas::{Predicate, ZkCredential, ZkVerifier};
 use zk_eidas_mdoc::MdocParser;
 use zk_eidas_types::credential::ClaimValue;
 
-const CIRCUITS_PATH: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../../circuits/predicates");
+const CIRCUITS_PATH: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../../circuits/build");
 
 fn build_signed_sdjwt(claims: serde_json::Value) -> String {
     let (sdjwt, _key) =
@@ -24,9 +24,9 @@ fn verify_proof(proof: &zk_eidas_types::proof::ZkProof) {
 
 // === Driver's License (mdoc) ===
 
-#[test]
+#[tokio::test]
 #[ignore = "requires compiled Circom circuit artifacts"]
-fn drivers_license_category_eq() {
+async fn drivers_license_category_eq() {
     let (mdoc_bytes, pkx, pky) = zk_eidas_mdoc::test_utils::build_ecdsa_signed_mdoc(
         vec![
             ("category", ClaimValue::String("A, B, C1".into())),
@@ -42,9 +42,9 @@ fn drivers_license_category_eq() {
     verify_proof(&proof);
 }
 
-#[test]
+#[tokio::test]
 #[ignore = "requires compiled Circom circuit artifacts"]
-fn drivers_license_expiry_date_gte_epoch_days() {
+async fn drivers_license_expiry_date_gte_epoch_days() {
     // expiry_date stored as epoch days integer (not ClaimValue::Date)
     let expiry_epoch_days = zk_eidas_utils::date_to_epoch_days(2034, 3, 22);
     let today_epoch_days = {
@@ -66,9 +66,9 @@ fn drivers_license_expiry_date_gte_epoch_days() {
     verify_proof(&proof);
 }
 
-#[test]
+#[tokio::test]
 #[ignore = "requires compiled Circom circuit artifacts"]
-fn drivers_license_issue_date_lte_epoch_days() {
+async fn drivers_license_issue_date_lte_epoch_days() {
     // issue_date as epoch days, proving it was issued at least 2 years ago
     let issue_epoch_days = zk_eidas_utils::date_to_epoch_days(2019, 3, 22);
     let two_years_ago = {
@@ -92,9 +92,9 @@ fn drivers_license_issue_date_lte_epoch_days() {
     verify_proof(&proof);
 }
 
-#[test]
+#[tokio::test]
 #[ignore = "requires compiled Circom circuit artifacts"]
-fn drivers_license_restrictions_eq_none() {
+async fn drivers_license_restrictions_eq_none() {
     let (mdoc_bytes, pkx, pky) = zk_eidas_mdoc::test_utils::build_ecdsa_signed_mdoc(
         vec![("restrictions", ClaimValue::String("None".into()))],
         "https://ppa.ee",
@@ -109,9 +109,9 @@ fn drivers_license_restrictions_eq_none() {
 
 // === University Diploma (SD-JWT) ===
 
-#[test]
+#[tokio::test]
 #[ignore = "requires compiled Circom circuit artifacts"]
-fn diploma_field_of_study_set_member() {
+async fn diploma_field_of_study_set_member() {
     let sdjwt = build_signed_sdjwt(serde_json::json!({
         "field_of_study": "Computer Science",
         "student_name": "Camille Dubois",
@@ -134,9 +134,9 @@ fn diploma_field_of_study_set_member() {
     verify_proof(&proof);
 }
 
-#[test]
+#[tokio::test]
 #[ignore = "requires compiled Circom circuit artifacts"]
-fn diploma_graduation_year_gte() {
+async fn diploma_graduation_year_gte() {
     let sdjwt = build_signed_sdjwt(serde_json::json!({
         "graduation_year": 2023,
         "student_name": "Camille Dubois",
@@ -149,9 +149,9 @@ fn diploma_graduation_year_gte() {
     verify_proof(&proof);
 }
 
-#[test]
+#[tokio::test]
 #[ignore = "requires compiled Circom circuit artifacts"]
-fn diploma_degree_set_member() {
+async fn diploma_degree_set_member() {
     let sdjwt = build_signed_sdjwt(serde_json::json!({
         "degree": "Master (M2)",
         "student_name": "Camille Dubois",
@@ -167,9 +167,9 @@ fn diploma_degree_set_member() {
     verify_proof(&proof);
 }
 
-#[test]
+#[tokio::test]
 #[ignore = "requires compiled Circom circuit artifacts"]
-fn diploma_university_eq() {
+async fn diploma_university_eq() {
     let sdjwt = build_signed_sdjwt(serde_json::json!({
         "university": "Sorbonne Universit\u{00e9}",
         "student_name": "Camille Dubois",
@@ -184,9 +184,9 @@ fn diploma_university_eq() {
 
 // === Vehicle Registration (SD-JWT) ===
 
-#[test]
+#[tokio::test]
 #[ignore = "requires compiled Circom circuit artifacts"]
-fn vehicle_insurance_expiry_gte_epoch_days() {
+async fn vehicle_insurance_expiry_gte_epoch_days() {
     // insurance_expiry stored as epoch days for direct comparison
     let expiry_epoch_days = zk_eidas_utils::date_to_epoch_days(2027, 1, 15) as i64;
     let today_epoch_days = {
@@ -208,9 +208,9 @@ fn vehicle_insurance_expiry_gte_epoch_days() {
     verify_proof(&proof);
 }
 
-#[test]
+#[tokio::test]
 #[ignore = "requires compiled Circom circuit artifacts"]
-fn vehicle_make_model_set_member() {
+async fn vehicle_make_model_set_member() {
     let sdjwt = build_signed_sdjwt(serde_json::json!({
         "make_model": "Volkswagen Golf",
         "owner_name": "Maximilian Schneider",
@@ -232,9 +232,9 @@ fn vehicle_make_model_set_member() {
     verify_proof(&proof);
 }
 
-#[test]
+#[tokio::test]
 #[ignore = "requires compiled Circom circuit artifacts"]
-fn vehicle_vin_neq_revoked() {
+async fn vehicle_vin_neq_revoked() {
     let sdjwt = build_signed_sdjwt(serde_json::json!({
         "vin": "WVWZZZ1JZYW000001",
         "owner_name": "Maximilian Schneider",
@@ -249,9 +249,9 @@ fn vehicle_vin_neq_revoked() {
 
 // === Compound proof with non-PID credential ===
 
-#[test]
+#[tokio::test]
 #[ignore = "requires compiled Circom circuit artifacts"]
-fn diploma_compound_and_stem_recent_grad() {
+async fn diploma_compound_and_stem_recent_grad() {
     let sdjwt = build_signed_sdjwt(serde_json::json!({
         "field_of_study": "Computer Science",
         "graduation_year": 2023,
@@ -282,9 +282,9 @@ fn diploma_compound_and_stem_recent_grad() {
 
 // === mdoc compound proof ===
 
-#[test]
+#[tokio::test]
 #[ignore = "requires compiled Circom circuit artifacts"]
-fn drivers_license_compound_category_and_valid() {
+async fn drivers_license_compound_category_and_valid() {
     let expiry_epoch_days = zk_eidas_utils::date_to_epoch_days(2034, 3, 22);
     let today_epoch_days = {
         let now = std::time::SystemTime::now()

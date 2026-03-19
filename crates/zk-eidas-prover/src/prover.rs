@@ -1,4 +1,5 @@
 use std::path::Path;
+use std::process::Command;
 
 use ark_bn254::Fr;
 use ark_circom::{CircomBuilder, CircomConfig};
@@ -109,8 +110,13 @@ impl Prover {
             builder.push_input("pub_key_y", limb.clone());
         }
 
-        // Generate proof
-        let (proof, public_inputs, vk_bytes) = generate_proof(&artifacts, builder)?;
+        // Generate proof: use CVM witness generator if available (~6x faster)
+        let (proof, public_inputs, vk_bytes) = if let Some(cvm_path) = &artifacts.cvm_witness_path {
+            let wtns_bytes = generate_cvm_witness(cvm_path, input)?;
+            prove_with_wtns(&artifacts, wtns_bytes)?
+        } else {
+            generate_proof(&artifacts, builder)?
+        };
 
         // Public outputs order (Circom convention: outputs first, then public inputs):
         //   [0] = commitment
@@ -447,56 +453,120 @@ fn witness_to_wtns(witness: &[Fr]) -> Vec<u8> {
     buf
 }
 
-/// Generate a Groth16 proof using rapidsnark with a pre-computed zkey.
-///
-/// Uses ark-circom for witness generation (WASM-based), then feeds the witness
-/// to rapidsnark for fast proof generation.
+/// Run rapidsnark Groth16 prover on pre-computed witness bytes.
 ///
 /// Returns (proof_json_bytes, public_inputs_bytes, vk_json_bytes).
-fn generate_proof(
+fn prove_with_wtns(
     artifacts: &CircuitArtifacts,
-    builder: CircomBuilder<Fr>,
+    wtns_bytes: Vec<u8>,
 ) -> Result<(Vec<u8>, Vec<Vec<u8>>, Vec<u8>), ProverError> {
-    // Build the circuit with witness using ark-circom (WASM witness generator)
-    let circom = builder
-        .build()
-        .map_err(|e| ProverError::ProvingFailed(format!("witness generation failed: {e}")))?;
-
-    // Extract the full witness (including public inputs)
-    let witness = circom
-        .witness
-        .ok_or_else(|| ProverError::ProvingFailed("no witness generated".into()))?;
-
-    // Convert witness to .wtns binary format
-    let wtns_bytes = witness_to_wtns(&witness);
-
-    // Use rapidsnark for fast proof generation
     let zkey_path = artifacts.zkey_path.to_string_lossy().to_string();
     let proof_result = groth16_prover_zkey_file_wrapper(&zkey_path, wtns_bytes)
         .map_err(|e| ProverError::ProvingFailed(format!("rapidsnark prove failed: {e}")))?;
 
-    // proof_result.proof is a JSON string, proof_result.public_signals is a JSON string
     let proof_json_bytes = proof_result.proof.into_bytes();
 
-    // Parse public signals from JSON array of decimal strings
     let public_signals: Vec<String> = serde_json::from_str(&proof_result.public_signals)
         .map_err(|e| ProverError::SerializationError(format!(
             "failed to parse public signals: {e}"
         )))?;
 
-    // Store each public signal as its decimal string bytes
     let pub_inputs_bytes: Vec<Vec<u8>> = public_signals
         .into_iter()
         .map(|s| s.into_bytes())
         .collect();
 
-    // Read VK JSON from the trusted vk.json file
     let vk_json_bytes = std::fs::read(&artifacts.vk_json_path)
         .map_err(|e| ProverError::ZkeyError(format!(
             "failed to read vk.json: {e}"
         )))?;
 
     Ok((proof_json_bytes, pub_inputs_bytes, vk_json_bytes))
+}
+
+/// Generate a Groth16 proof using WASM witness generation (ark-circom) + rapidsnark.
+///
+/// Used for predicate circuits (fast, <1s witness generation).
+fn generate_proof(
+    artifacts: &CircuitArtifacts,
+    builder: CircomBuilder<Fr>,
+) -> Result<(Vec<u8>, Vec<Vec<u8>>, Vec<u8>), ProverError> {
+    let circom = builder
+        .build()
+        .map_err(|e| ProverError::ProvingFailed(format!("witness generation failed: {e}")))?;
+
+    let witness = circom
+        .witness
+        .ok_or_else(|| ProverError::ProvingFailed("no witness generated".into()))?;
+
+    let wtns_bytes = witness_to_wtns(&witness);
+    prove_with_wtns(artifacts, wtns_bytes)
+}
+
+/// Generate witness using CVM (circom-witnesscalc) — ~6x faster than WASM for ECDSA.
+///
+/// Shells out to `cvm-compile` with the .cvm file and input JSON.
+fn generate_cvm_witness(
+    cvm_file: &Path,
+    input: &SignedProofInput,
+) -> Result<Vec<u8>, ProverError> {
+    let input_json = build_ecdsa_input_json(input);
+
+    let tmp_dir = tempfile::tempdir()
+        .map_err(|e| ProverError::ProvingFailed(format!("failed to create temp dir: {e}")))?;
+    let input_path = tmp_dir.path().join("input.json");
+    let output_path = tmp_dir.path().join("witness.wtns");
+
+    std::fs::write(&input_path, input_json)
+        .map_err(|e| ProverError::ProvingFailed(format!("failed to write input.json: {e}")))?;
+
+    let cvm_bin = std::env::var("CVM_COMPILE_BIN").unwrap_or_else(|_| "cvm-compile".to_string());
+    let result = Command::new(&cvm_bin)
+        .arg(cvm_file)
+        .arg("--wtns")
+        .arg(&output_path)
+        .arg("--inputs")
+        .arg(&input_path)
+        .output()
+        .map_err(|e| ProverError::ProvingFailed(format!("failed to run cvm-compile: {e}")))?;
+
+    if !result.status.success() {
+        let stderr = String::from_utf8_lossy(&result.stderr);
+        return Err(ProverError::ProvingFailed(format!(
+            "CVM witness generation failed (exit {}): {}",
+            result.status.code().unwrap_or(-1),
+            stderr.lines().last().unwrap_or("unknown error")
+        )));
+    }
+
+    std::fs::read(&output_path)
+        .map_err(|e| ProverError::ProvingFailed(format!("failed to read witness output: {e}")))
+}
+
+/// Build the input JSON for the ECDSA circuit's C++ witness generator.
+fn build_ecdsa_input_json(input: &SignedProofInput) -> String {
+    let r_limbs = SignedProofInput::to_43bit_limbs(&input.signature_r);
+    let s_limbs = SignedProofInput::to_43bit_limbs(&input.signature_s);
+    let msg_limbs = SignedProofInput::to_43bit_limbs(&input.message_hash);
+    let pkx_limbs = SignedProofInput::to_43bit_limbs(&input.pub_key_x);
+    let pky_limbs = SignedProofInput::to_43bit_limbs(&input.pub_key_y);
+
+    let to_strings = |limbs: &[BigInt; 6]| -> Vec<String> {
+        limbs.iter().map(|l| l.to_string()).collect()
+    };
+
+    let json = serde_json::json!({
+        "signature_r": to_strings(&r_limbs),
+        "signature_s": to_strings(&s_limbs),
+        "message_hash": to_strings(&msg_limbs),
+        "pub_key_x": to_strings(&pkx_limbs),
+        "pub_key_y": to_strings(&pky_limbs),
+        "claim_value": input.claim_value.to_string(),
+        "disclosure_hash": input.disclosure_hash.to_string(),
+        "sd_array": input.sd_array.iter().map(|v| v.to_string()).collect::<Vec<_>>(),
+    });
+
+    json.to_string()
 }
 
 #[cfg(test)]

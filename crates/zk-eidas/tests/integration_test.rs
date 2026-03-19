@@ -2,52 +2,52 @@ mod synthetic;
 
 use zk_eidas::{Predicate, ZkCredential, ZkVerifier};
 
-#[test]
+#[tokio::test]
 #[ignore = "requires compiled Circom circuit artifacts"]
-fn test_age_verification_over_18() {
+async fn test_age_verification_over_18() {
     let sdjwt = synthetic::pid_credential::adult_citizen();
-    let proof = ZkCredential::from_sdjwt(&sdjwt, "../../circuits/predicates")
+    let proof = ZkCredential::from_sdjwt(&sdjwt, "../../circuits/build")
         .unwrap()
         .predicate("birthdate", Predicate::gte(18))
         .prove()
         .unwrap();
-    let valid = ZkVerifier::new("../../circuits/predicates")
+    let valid = ZkVerifier::new("../../circuits/build")
         .verify(&proof)
         .unwrap();
     assert!(valid, "Adult citizen should pass age >= 18 verification");
 }
 
-#[test]
+#[tokio::test]
 #[ignore = "requires compiled Circom circuit artifacts"]
-fn test_age_verification_minor_fails() {
+async fn test_age_verification_minor_fails() {
     let sdjwt = synthetic::pid_credential::minor_citizen();
-    let result = ZkCredential::from_sdjwt(&sdjwt, "../../circuits/predicates")
+    let result = ZkCredential::from_sdjwt(&sdjwt, "../../circuits/build")
         .unwrap()
         .predicate("birthdate", Predicate::gte(18))
         .prove();
     assert!(result.is_err(), "Minor should fail age >= 18 verification");
 }
 
-#[test]
+#[tokio::test]
 #[ignore = "requires compiled Circom circuit artifacts"]
-fn test_french_citizen_age_verification() {
+async fn test_french_citizen_age_verification() {
     let sdjwt = synthetic::pid_credential::french_citizen();
-    let proof = ZkCredential::from_sdjwt(&sdjwt, "../../circuits/predicates")
+    let proof = ZkCredential::from_sdjwt(&sdjwt, "../../circuits/build")
         .unwrap()
         .predicate("birthdate", Predicate::gte(18))
         .prove()
         .unwrap();
-    let valid = ZkVerifier::new("../../circuits/predicates")
+    let valid = ZkVerifier::new("../../circuits/build")
         .verify(&proof)
         .unwrap();
     assert!(valid, "French citizen should pass age >= 18 verification");
 }
 
-#[test]
+#[tokio::test]
 #[ignore = "requires compiled Circom circuit artifacts"]
-fn test_dutch_citizen_nationality_set_member() {
+async fn test_dutch_citizen_nationality_set_member() {
     let sdjwt = synthetic::pid_credential::dutch_citizen();
-    let proof = ZkCredential::from_sdjwt(&sdjwt, "../../circuits/predicates")
+    let proof = ZkCredential::from_sdjwt(&sdjwt, "../../circuits/build")
         .unwrap()
         .predicate(
             "issuing_country",
@@ -55,7 +55,7 @@ fn test_dutch_citizen_nationality_set_member() {
         )
         .prove()
         .unwrap();
-    let valid = ZkVerifier::new("../../circuits/predicates")
+    let valid = ZkVerifier::new("../../circuits/build")
         .verify(&proof)
         .unwrap();
     assert!(valid, "Dutch citizen should be in EU nationality set");

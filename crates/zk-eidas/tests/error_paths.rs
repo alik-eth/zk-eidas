@@ -1,6 +1,6 @@
 use zk_eidas::{Predicate, ZkCredential, ZkError};
 
-const CIRCUITS: &str = "../../circuits/predicates";
+const CIRCUITS: &str = "../../circuits/build";
 
 #[test]
 fn prove_with_no_predicates_returns_error() {

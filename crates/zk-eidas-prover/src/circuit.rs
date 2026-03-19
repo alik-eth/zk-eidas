@@ -19,6 +19,9 @@ pub struct CircuitArtifacts {
     pub wasm_path: PathBuf,
     pub zkey_path: PathBuf,
     pub vk_json_path: PathBuf,
+    /// Path to CVM witness generator file (if available).
+    /// Only populated for ECDSA circuit when the .cvm file exists.
+    pub cvm_witness_path: Option<PathBuf>,
 }
 
 /// Loads compiled Circom circuit artifacts from a base directory.
@@ -94,11 +97,20 @@ impl CircuitLoader {
             return Err(CircuitError::NotFound(vk_json_path));
         }
 
+        // Check for CVM witness generator (ECDSA only, ~6x faster than WASM)
+        let cvm_witness_path = if matches!(op, PredicateOp::Ecdsa) {
+            let cvm_file = self.base_path.join("ecdsa_verify_cvm/ecdsa_verify.cvm");
+            if cvm_file.exists() { Some(cvm_file) } else { None }
+        } else {
+            None
+        };
+
         Ok(CircuitArtifacts {
             r1cs_path,
             wasm_path,
             zkey_path,
             vk_json_path,
+            cvm_witness_path,
         })
     }
 }

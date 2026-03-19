@@ -71,14 +71,37 @@ The [verify page](https://zk-eidas.com/verify) is a PWA — install it once, ver
 ## Building
 
 ```bash
-# Prerequisites: Rust 1.93+, Circom 2.1+, snarkjs 0.7+, Node 22+
+# Prerequisites: Rust 1.93+, Circom 2.1+, snarkjs 0.7+, Node 22+, jq
 
-# Build circuits (downloads 2.4GB Powers of Tau on first run)
-cd circuits && make
+# Download large circuit artifacts (zkeys, ptau files)
+cd circuits && ./download-artifacts.sh
+
+# Build predicate circuits from source (fast, ~30s)
+make predicates specials
 
 # Build and test
-cargo test --workspace
+cd .. && cargo test --workspace
 ```
+
+## Circuit Artifacts
+
+Large binary files (zkeys, ptau, CVM) are hosted externally. URLs are tracked in `circuits/artifact-urls.json`.
+
+```bash
+# Download artifacts for local development
+cd circuits && ./download-artifacts.sh
+
+# After recompiling circuits, upload new artifacts
+source .env.production && node scripts/upload-artifacts.mjs
+```
+
+| File | Size | Host |
+|------|------|------|
+| `ecdsa_verify.zkey` | 1.2 GB | UploadThing |
+| `ecdsa_verify.cvm` | 58 MB | UploadThing |
+| `pot21.ptau` | 2.4 GB | Hermez ceremony (Google Storage) |
+| `pot22.ptau` | 4.6 GB | Hermez ceremony (Google Storage) |
+| Predicate zkeys (8x) | ~2 MB | Git repo |
 
 ## Standards
 

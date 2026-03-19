@@ -5,7 +5,7 @@
 
 use zk_eidas::{Predicate, ZkCredential, ZkVerifier};
 
-const CIRCUITS_PATH: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../../circuits/predicates");
+const CIRCUITS_PATH: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../../circuits/build");
 
 /// Helper: build an ECDSA-signed SD-JWT with the given claims.
 fn build_signed_sdjwt(claims: serde_json::Value) -> String {
@@ -14,9 +14,9 @@ fn build_signed_sdjwt(claims: serde_json::Value) -> String {
     sdjwt
 }
 
-#[test]
+#[tokio::test]
 #[ignore = "requires compiled Circom circuit artifacts"]
-fn signed_gte_proof_end_to_end() {
+async fn signed_gte_proof_end_to_end() {
     let sdjwt = build_signed_sdjwt(serde_json::json!({ "age": 25 }));
 
     let proof = ZkCredential::from_sdjwt(&sdjwt, CIRCUITS_PATH)
@@ -31,9 +31,9 @@ fn signed_gte_proof_end_to_end() {
     assert!(valid, "signed GTE proof should verify");
 }
 
-#[test]
+#[tokio::test]
 #[ignore = "requires compiled Circom circuit artifacts"]
-fn signed_lte_proof_end_to_end() {
+async fn signed_lte_proof_end_to_end() {
     let sdjwt = build_signed_sdjwt(serde_json::json!({ "score": 42 }));
 
     let proof = ZkCredential::from_sdjwt(&sdjwt, CIRCUITS_PATH)
@@ -48,9 +48,9 @@ fn signed_lte_proof_end_to_end() {
     assert!(valid, "signed LTE proof should verify");
 }
 
-#[test]
+#[tokio::test]
 #[ignore = "requires compiled Circom circuit artifacts"]
-fn signed_eq_proof_end_to_end() {
+async fn signed_eq_proof_end_to_end() {
     let sdjwt = build_signed_sdjwt(serde_json::json!({ "country": "DE" }));
 
     let proof = ZkCredential::from_sdjwt(&sdjwt, CIRCUITS_PATH)
@@ -65,9 +65,9 @@ fn signed_eq_proof_end_to_end() {
     assert!(valid, "signed EQ proof should verify");
 }
 
-#[test]
+#[tokio::test]
 #[ignore = "requires compiled Circom circuit artifacts"]
-fn signed_neq_proof_end_to_end() {
+async fn signed_neq_proof_end_to_end() {
     let sdjwt = build_signed_sdjwt(serde_json::json!({ "country": "DE" }));
 
     let proof = ZkCredential::from_sdjwt(&sdjwt, CIRCUITS_PATH)
@@ -82,9 +82,9 @@ fn signed_neq_proof_end_to_end() {
     assert!(valid, "signed NEQ proof should verify");
 }
 
-#[test]
+#[tokio::test]
 #[ignore = "requires compiled Circom circuit artifacts"]
-fn signed_set_member_proof_end_to_end() {
+async fn signed_set_member_proof_end_to_end() {
     let sdjwt = build_signed_sdjwt(serde_json::json!({ "country": "DE" }));
 
     let proof = ZkCredential::from_sdjwt(&sdjwt, CIRCUITS_PATH)
@@ -99,9 +99,9 @@ fn signed_set_member_proof_end_to_end() {
     assert!(valid, "signed set_member proof should verify");
 }
 
-#[test]
+#[tokio::test]
 #[ignore = "requires compiled Circom circuit artifacts"]
-fn signed_range_proof_end_to_end() {
+async fn signed_range_proof_end_to_end() {
     let sdjwt = build_signed_sdjwt(serde_json::json!({ "score": 75 }));
 
     let proof = ZkCredential::from_sdjwt(&sdjwt, CIRCUITS_PATH)
@@ -116,9 +116,9 @@ fn signed_range_proof_end_to_end() {
     assert!(valid, "signed range (GTE) proof should verify");
 }
 
-#[test]
+#[tokio::test]
 #[ignore = "requires compiled Circom circuit artifacts"]
-fn signed_compound_and_proof() {
+async fn signed_compound_and_proof() {
     let sdjwt = build_signed_sdjwt(serde_json::json!({ "age": 25, "score": 80 }));
 
     let proofs = ZkCredential::from_sdjwt(&sdjwt, CIRCUITS_PATH)

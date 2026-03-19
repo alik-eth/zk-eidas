@@ -1,8 +1,8 @@
 use zk_eidas::{age_cutoff_epoch_days_from, Predicate, ZkCredential, ZkVerifier};
 
-#[test]
+#[tokio::test]
 #[ignore = "requires compiled Circom circuit artifacts"]
-fn test_builder_prove_age_gte() {
+async fn test_builder_prove_age_gte() {
     let (sdjwt, _key) = zk_eidas_parser::test_utils::build_ecdsa_signed_sdjwt(
         serde_json::json!({
             "given_name": "John",
@@ -12,7 +12,7 @@ fn test_builder_prove_age_gte() {
         "https://issuer.example.com",
     );
 
-    let proof = ZkCredential::from_sdjwt(&sdjwt, "../../circuits/predicates")
+    let proof = ZkCredential::from_sdjwt(&sdjwt, "../../circuits/build")
         .unwrap()
         .predicate("birthdate", Predicate::gte(18))
         .prove()
@@ -21,9 +21,9 @@ fn test_builder_prove_age_gte() {
     assert!(!proof.proof_bytes().is_empty());
 }
 
-#[test]
+#[tokio::test]
 #[ignore = "requires compiled Circom circuit artifacts"]
-fn test_builder_prove_and_verify() {
+async fn test_builder_prove_and_verify() {
     let (sdjwt, _key) = zk_eidas_parser::test_utils::build_ecdsa_signed_sdjwt(
         serde_json::json!({
             "given_name": "John",
@@ -32,22 +32,22 @@ fn test_builder_prove_and_verify() {
         "https://issuer.example.com",
     );
 
-    let proof = ZkCredential::from_sdjwt(&sdjwt, "../../circuits/predicates")
+    let proof = ZkCredential::from_sdjwt(&sdjwt, "../../circuits/build")
         .unwrap()
         .predicate("birthdate", Predicate::gte(18))
         .prove()
         .unwrap();
 
-    let result = ZkVerifier::new("../../circuits/predicates")
+    let result = ZkVerifier::new("../../circuits/build")
         .verify(&proof)
         .unwrap();
 
     assert!(result);
 }
 
-#[test]
+#[tokio::test]
 #[ignore = "requires compiled Circom circuit artifacts"]
-fn test_builder_prove_age_lte() {
+async fn test_builder_prove_age_lte() {
     let (sdjwt, _key) = zk_eidas_parser::test_utils::build_ecdsa_signed_sdjwt(
         serde_json::json!({
             "given_name": "John",
@@ -57,13 +57,13 @@ fn test_builder_prove_age_lte() {
     );
 
     // age <= 65 on a date claim: should succeed (person born in 2000 is ~26, which is <= 65)
-    let proof = ZkCredential::from_sdjwt(&sdjwt, "../../circuits/predicates")
+    let proof = ZkCredential::from_sdjwt(&sdjwt, "../../circuits/build")
         .unwrap()
         .predicate("birthdate", Predicate::lte(65))
         .prove()
         .unwrap();
 
-    let result = ZkVerifier::new("../../circuits/predicates")
+    let result = ZkVerifier::new("../../circuits/build")
         .verify(&proof)
         .unwrap();
 

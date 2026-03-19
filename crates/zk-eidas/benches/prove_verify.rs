@@ -2,7 +2,7 @@ use criterion::{criterion_group, criterion_main, Criterion};
 use zk_eidas::{Predicate, ZkCredential, ZkVerifier};
 use zk_eidas_parser::test_utils::build_ecdsa_signed_sdjwt;
 
-const CIRCUITS: &str = "../../circuits/predicates";
+const CIRCUITS: &str = "../../circuits/build";
 
 fn bench_prove_gte_signed(c: &mut Criterion) {
     let (sdjwt, _key) = build_ecdsa_signed_sdjwt(serde_json::json!({"age": 25}), "bench-issuer");

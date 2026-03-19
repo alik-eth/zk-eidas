@@ -12,7 +12,7 @@ mod synthetic;
 
 use zk_eidas::{Predicate, ZkCredential, ZkVerifier};
 
-const CIRCUITS: &str = "../../circuits/predicates";
+const CIRCUITS: &str = "../../circuits/build";
 
 fn verify_proof(proof: &zk_eidas_types::proof::ZkProof) {
     let valid = ZkVerifier::new(CIRCUITS)
@@ -23,9 +23,9 @@ fn verify_proof(proof: &zk_eidas_types::proof::ZkProof) {
 
 // === Age verification ===
 
-#[test]
+#[tokio::test]
 #[ignore = "requires compiled Circom circuit artifacts"]
-fn pid_age_gte_18() {
+async fn pid_age_gte_18() {
     let sdjwt = synthetic::eudi_pid::eudi_pid_de();
     let proof = ZkCredential::from_sdjwt(&sdjwt, CIRCUITS)
         .unwrap()
@@ -35,9 +35,9 @@ fn pid_age_gte_18() {
     verify_proof(&proof);
 }
 
-#[test]
+#[tokio::test]
 #[ignore = "requires compiled Circom circuit artifacts"]
-fn pid_age_over_18_boolean() {
+async fn pid_age_over_18_boolean() {
     let sdjwt = synthetic::eudi_pid::eudi_pid_de();
     let proof = ZkCredential::from_sdjwt(&sdjwt, CIRCUITS)
         .unwrap()
@@ -47,9 +47,9 @@ fn pid_age_over_18_boolean() {
     verify_proof(&proof);
 }
 
-#[test]
+#[tokio::test]
 #[ignore = "requires compiled Circom circuit artifacts"]
-fn pid_minor_fails_age_check() {
+async fn pid_minor_fails_age_check() {
     let sdjwt = synthetic::eudi_pid::eudi_pid_minor();
     let result = ZkCredential::from_sdjwt(&sdjwt, CIRCUITS)
         .unwrap()
@@ -60,9 +60,9 @@ fn pid_minor_fails_age_check() {
 
 // === Nationality / issuing country ===
 
-#[test]
+#[tokio::test]
 #[ignore = "requires compiled Circom circuit artifacts"]
-fn pid_nationality_set_member() {
+async fn pid_nationality_set_member() {
     let sdjwt = synthetic::eudi_pid::eudi_pid_de();
     let proof = ZkCredential::from_sdjwt(&sdjwt, CIRCUITS)
         .unwrap()
@@ -78,9 +78,9 @@ fn pid_nationality_set_member() {
     verify_proof(&proof);
 }
 
-#[test]
+#[tokio::test]
 #[ignore = "requires compiled Circom circuit artifacts"]
-fn pid_issuing_country_eq() {
+async fn pid_issuing_country_eq() {
     let sdjwt = synthetic::eudi_pid::eudi_pid_de();
     let proof = ZkCredential::from_sdjwt(&sdjwt, CIRCUITS)
         .unwrap()
@@ -90,9 +90,9 @@ fn pid_issuing_country_eq() {
     verify_proof(&proof);
 }
 
-#[test]
+#[tokio::test]
 #[ignore = "requires compiled Circom circuit artifacts"]
-fn pid_issuing_country_neq() {
+async fn pid_issuing_country_neq() {
     let sdjwt = synthetic::eudi_pid::eudi_pid_fr();
     let proof = ZkCredential::from_sdjwt(&sdjwt, CIRCUITS)
         .unwrap()
@@ -104,9 +104,9 @@ fn pid_issuing_country_neq() {
 
 // === Name / gender ===
 
-#[test]
+#[tokio::test]
 #[ignore = "requires compiled Circom circuit artifacts"]
-fn pid_name_eq() {
+async fn pid_name_eq() {
     let sdjwt = synthetic::eudi_pid::eudi_pid_de();
     let proof = ZkCredential::from_sdjwt(&sdjwt, CIRCUITS)
         .unwrap()
@@ -116,9 +116,9 @@ fn pid_name_eq() {
     verify_proof(&proof);
 }
 
-#[test]
+#[tokio::test]
 #[ignore = "requires compiled Circom circuit artifacts"]
-fn pid_gender_eq() {
+async fn pid_gender_eq() {
     let sdjwt = synthetic::eudi_pid::eudi_pid_de();
     let proof = ZkCredential::from_sdjwt(&sdjwt, CIRCUITS)
         .unwrap()
@@ -130,9 +130,9 @@ fn pid_gender_eq() {
 
 // === Residency ===
 
-#[test]
+#[tokio::test]
 #[ignore = "requires compiled Circom circuit artifacts"]
-fn pid_resident_country_set_member() {
+async fn pid_resident_country_set_member() {
     let sdjwt = synthetic::eudi_pid::eudi_pid_fr();
     let proof = ZkCredential::from_sdjwt(&sdjwt, CIRCUITS)
         .unwrap()
@@ -150,9 +150,9 @@ fn pid_resident_country_set_member() {
 
 // === Document validity ===
 
-#[test]
+#[tokio::test]
 #[ignore = "requires compiled Circom circuit artifacts"]
-fn pid_document_not_expired() {
+async fn pid_document_not_expired() {
     let sdjwt = synthetic::eudi_pid::eudi_pid_de();
     let today_epoch_days = {
         let now = std::time::SystemTime::now()
@@ -170,9 +170,9 @@ fn pid_document_not_expired() {
 
 // === Cross-border ===
 
-#[test]
+#[tokio::test]
 #[ignore = "requires compiled Circom circuit artifacts"]
-fn pid_cross_border_fr_to_de() {
+async fn pid_cross_border_fr_to_de() {
     // French citizen verified by a German service — age check
     let sdjwt = synthetic::eudi_pid::eudi_pid_fr();
     let proof = ZkCredential::from_sdjwt(&sdjwt, CIRCUITS)
@@ -185,9 +185,9 @@ fn pid_cross_border_fr_to_de() {
 
 // === UA bridge ===
 
-#[test]
+#[tokio::test]
 #[ignore = "requires compiled Circom circuit artifacts"]
-fn pid_ua_bridge() {
+async fn pid_ua_bridge() {
     // Ukrainian credential accepted in eIDAS context (EU27 + UA set)
     let sdjwt = synthetic::eudi_pid::eudi_pid_ua();
     let proof = ZkCredential::from_sdjwt(&sdjwt, CIRCUITS)

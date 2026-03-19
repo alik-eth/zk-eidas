@@ -6,7 +6,7 @@
 use zk_eidas::{Predicate, ZkCredential, ZkVerifier};
 use zk_eidas_types::predicate::PredicateOp;
 
-const CIRCUITS_PATH: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../../circuits/predicates");
+const CIRCUITS_PATH: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../../circuits/build");
 
 /// Helper: build an ECDSA-signed SD-JWT with the given claims and issuer.
 fn build_signed_sdjwt(claims: serde_json::Value, issuer: &str) -> String {
@@ -14,9 +14,9 @@ fn build_signed_sdjwt(claims: serde_json::Value, issuer: &str) -> String {
     sdjwt
 }
 
-#[test]
+#[tokio::test]
 #[ignore = "requires compiled Circom circuit artifacts"]
-fn multi_credential_holder_binding() {
+async fn multi_credential_holder_binding() {
     // Issue two credentials to the same holder (same personal_identifier)
     let sdjwt_pid = build_signed_sdjwt(
         serde_json::json!({

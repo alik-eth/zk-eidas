@@ -1,0 +1,6 @@
+{
+  "ecdsa_verify_zkey": "https://ruvpd2ka1g.ufs.sh/f/vsKUhXCDRm2gZr48e2G5iXH1GBEpW0o72VmsY98qQkDhIZMz",
+  "ecdsa_verify_cvm": "https://ruvpd2ka1g.ufs.sh/f/vsKUhXCDRm2gpqEwpc41JxEDHKYNISnGPBaXpRQg0FrjyUfO",
+  "ptau21": "https://storage.googleapis.com/zkevm/ptau/powersOfTau28_hez_final_21.ptau",
+  "ptau22": "https://storage.googleapis.com/zkevm/ptau/powersOfTau28_hez_final_22.ptau"
+}
