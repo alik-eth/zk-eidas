@@ -19,9 +19,11 @@ pub struct CircuitArtifacts {
     pub wasm_path: PathBuf,
     pub zkey_path: PathBuf,
     pub vk_json_path: PathBuf,
-    /// Path to CVM witness generator file (if available).
-    /// Only populated for ECDSA circuit when the .cvm file exists.
-    pub cvm_witness_path: Option<PathBuf>,
+    /// Path to native C++ witness generator binary (if available).
+    /// Only populated for ECDSA circuit when the compiled binary exists.
+    pub cpp_witness_bin: Option<PathBuf>,
+    /// Path to the .dat file needed by the C++ witness generator.
+    pub cpp_witness_dat: Option<PathBuf>,
 }
 
 /// Loads compiled Circom circuit artifacts from a base directory.
@@ -97,15 +99,17 @@ impl CircuitLoader {
             return Err(CircuitError::NotFound(vk_json_path));
         }
 
-        // Check for CVM witness generator (ECDSA only, ~6x faster than WASM)
-        // Requires both the .cvm file AND cvm-compile binary to be available
-        let cvm_witness_path = if matches!(op, PredicateOp::Ecdsa) {
-            let cvm_file = self.base_path.join("ecdsa_verify_cvm/ecdsa_verify.cvm");
-            let cvm_bin = std::env::var("CVM_COMPILE_BIN").unwrap_or_else(|_| "cvm-compile".to_string());
-            let bin_exists = std::process::Command::new(&cvm_bin).arg("--help").output().is_ok();
-            if cvm_file.exists() && bin_exists { Some(cvm_file) } else { None }
+        // Check for native C++ witness generator (ECDSA only, much faster than WASM)
+        let (cpp_witness_bin, cpp_witness_dat) = if matches!(op, PredicateOp::Ecdsa) {
+            let cpp_bin = dir.join(format!("{name}_cpp/{name}"));
+            let cpp_dat = dir.join(format!("{name}_cpp/{name}.dat"));
+            if cpp_bin.exists() && cpp_dat.exists() {
+                (Some(cpp_bin), Some(cpp_dat))
+            } else {
+                (None, None)
+            }
         } else {
-            None
+            (None, None)
         };
 
         Ok(CircuitArtifacts {
@@ -113,7 +117,8 @@ impl CircuitLoader {
             wasm_path,
             zkey_path,
             vk_json_path,
-            cvm_witness_path,
+            cpp_witness_bin,
+            cpp_witness_dat,
         })
     }
 }

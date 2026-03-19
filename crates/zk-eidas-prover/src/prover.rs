@@ -110,9 +110,9 @@ impl Prover {
             builder.push_input("pub_key_y", limb.clone());
         }
 
-        // Generate proof: use CVM witness generator if available (~6x faster)
-        let (proof, public_inputs, vk_bytes) = if let Some(cvm_path) = &artifacts.cvm_witness_path {
-            let wtns_bytes = generate_cvm_witness(cvm_path, input)?;
+        // Generate proof: use C++ witness generator if available (much faster than WASM)
+        let (proof, public_inputs, vk_bytes) = if let Some(cpp_bin) = &artifacts.cpp_witness_bin {
+            let wtns_bytes = generate_cpp_witness(cpp_bin, input)?;
             prove_with_wtns(&artifacts, wtns_bytes)?
         } else {
             generate_proof(&artifacts, builder)?
@@ -306,7 +306,6 @@ impl Prover {
     pub fn prove_holder_binding(
         &self,
         claim_value: u64,
-        binding_hash: u64,
         commitment: &EcdsaCommitment,
         sd_array_hash: &[u8],
         message_hash: &[u8],
@@ -319,13 +318,19 @@ impl Prover {
         builder.push_input("sd_array_hash", bytes_to_bigint(sd_array_hash));
         builder.push_input("message_hash", bytes_to_bigint(message_hash));
 
-        // Public inputs
+        // Public input
         builder.push_input("commitment", bytes_to_bigint(commitment.value()));
-        builder.push_input("binding_hash", BigInt::from(binding_hash));
 
         let (proof, public_inputs, vk_bytes) = generate_proof(&artifacts, builder)?;
 
-        let hash_bytes = u64_to_32bytes(binding_hash);
+        // Public outputs order: [0] = binding_hash, [1] = commitment
+        let binding_hash_bytes = public_inputs.first().cloned().unwrap_or_default();
+        let binding_hash_str = String::from_utf8(binding_hash_bytes).unwrap_or_default();
+        let binding_hash_bigint = binding_hash_str.parse::<num_bigint::BigUint>().unwrap_or_default();
+        let mut hash_bytes = [0u8; 32];
+        let be_bytes = binding_hash_bigint.to_bytes_be();
+        let start = 32usize.saturating_sub(be_bytes.len());
+        hash_bytes[start..].copy_from_slice(&be_bytes[..be_bytes.len().min(32)]);
 
         Ok(ZkProof::new(proof, public_inputs, vk_bytes, PredicateOp::HolderBinding)
             .with_binding_hash(hash_bytes))
@@ -503,11 +508,12 @@ fn generate_proof(
     prove_with_wtns(artifacts, wtns_bytes)
 }
 
-/// Generate witness using CVM (circom-witnesscalc) — ~6x faster than WASM for ECDSA.
+/// Generate witness using native C++ binary — much faster than WASM for ECDSA.
 ///
-/// Shells out to `cvm-compile` with the .cvm file and input JSON.
-fn generate_cvm_witness(
-    cvm_file: &Path,
+/// The C++ witness generator is compiled from Circom's `--c` output.
+/// Usage: ./ecdsa_verify <input.json> <witness.wtns>
+fn generate_cpp_witness(
+    cpp_bin: &Path,
     input: &SignedProofInput,
 ) -> Result<Vec<u8>, ProverError> {
     let input_json = build_ecdsa_input_json(input);
@@ -517,23 +523,19 @@ fn generate_cvm_witness(
     let input_path = tmp_dir.path().join("input.json");
     let output_path = tmp_dir.path().join("witness.wtns");
 
-    std::fs::write(&input_path, input_json)
+    std::fs::write(&input_path, &input_json)
         .map_err(|e| ProverError::ProvingFailed(format!("failed to write input.json: {e}")))?;
 
-    let cvm_bin = std::env::var("CVM_COMPILE_BIN").unwrap_or_else(|_| "cvm-compile".to_string());
-    let result = Command::new(&cvm_bin)
-        .arg(cvm_file)
-        .arg("--wtns")
-        .arg(&output_path)
-        .arg("--inputs")
+    let result = Command::new(cpp_bin)
         .arg(&input_path)
+        .arg(&output_path)
         .output()
-        .map_err(|e| ProverError::ProvingFailed(format!("failed to run cvm-compile: {e}")))?;
+        .map_err(|e| ProverError::ProvingFailed(format!("failed to run C++ witness generator: {e}")))?;
 
     if !result.status.success() {
         let stderr = String::from_utf8_lossy(&result.stderr);
         return Err(ProverError::ProvingFailed(format!(
-            "CVM witness generation failed (exit {}): {}",
+            "C++ witness generation failed (exit {}): {}",
             result.status.code().unwrap_or(-1),
             stderr.lines().last().unwrap_or("unknown error")
         )));
@@ -639,7 +641,7 @@ mod tests {
     fn prover_holder_binding_missing_circuits() {
         let prover = Prover::new("/nonexistent");
         let commitment = EcdsaCommitment::new(vec![0u8; 32]);
-        let result = prover.prove_holder_binding(42, 99, &commitment, &[0u8; 32], &[0u8; 32]);
+        let result = prover.prove_holder_binding(42, &commitment, &[0u8; 32], &[0u8; 32]);
         assert!(result.is_err());
     }
 

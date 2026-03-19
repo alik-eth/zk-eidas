@@ -7,7 +7,8 @@ template HolderBinding() {
     signal input sd_array_hash;
     signal input message_hash;
     signal input commitment;
-    signal input binding_hash;
+
+    signal output binding_hash;
 
     // Verify commitment chain
     component comm = Commitment();
@@ -16,9 +17,9 @@ template HolderBinding() {
     comm.message_hash <== message_hash;
     comm.out === commitment;
 
-    // Verify binding_hash = Poseidon(claim_value)
+    // Compute binding_hash = Poseidon(claim_value)
     component bind = Poseidon(1);
     bind.inputs[0] <== claim_value;
-    bind.out === binding_hash;
+    binding_hash <== bind.out;
 }
-component main {public [commitment, binding_hash]} = HolderBinding();
+component main {public [commitment]} = HolderBinding();

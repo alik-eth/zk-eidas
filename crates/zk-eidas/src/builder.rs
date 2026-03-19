@@ -160,20 +160,11 @@ impl ZkCredential {
             .credential
             .claims()
             .get(binding_claim)
-            .ok_or_else(|| ZkError::ClaimNotFound(binding_claim.to_string()))?;
+            .ok_or_else(|| ZkError::ClaimNotFound(binding_claim.to_string()))?
+            .clone();
 
-        // Convert to 32-byte field element (right-aligned / big-endian padding)
-        let field = claim_value.to_field_element().map_err(|_| ZkError::UnsupportedPredicate)?;
-        let mut claim_bytes = [0u8; 32];
-        let len = field.len().min(32);
-        claim_bytes[32 - len..].copy_from_slice(&field[..len]);
-
-        // Compute binding_hash = SHA-256(claim_bytes)
-        let binding_hash: [u8; 32] = Sha256::digest(claim_bytes).into();
-
-        // Convert claim to u64 for circuit
-        let binding_claim_u64 = bytes_to_u64(&claim_bytes);
-        let binding_hash_u64 = bytes_to_u64(&binding_hash);
+        // Convert claim to u64 for circuit (same conversion as ECDSA's claim_value)
+        let binding_claim_u64 = claim_to_u64_or_hash(&claim_value);
 
         // Ensure ECDSA is done for the binding claim
         let (commitment, sd_array_hash, message_hash) = self.ensure_ecdsa(binding_claim)?;
@@ -181,17 +172,20 @@ impl ZkCredential {
         // Generate predicate proofs
         let mut proofs = self.prove_all_inner()?;
 
-        // Generate holder binding proof
+        // Generate holder binding proof — binding_hash is computed by the circuit
         let prover = zk_eidas_prover::Prover::new(&self.circuits_path);
         let binding_proof = prover
             .prove_holder_binding(
                 binding_claim_u64,
-                binding_hash_u64,
                 &commitment,
                 &sd_array_hash,
                 &message_hash,
             )
             .map_err(ZkError::Prover)?;
+
+        let binding_hash = *binding_proof.binding_hash()
+            .ok_or(ZkError::UnsupportedPredicate)?;
+
         proofs.push(binding_proof);
 
         Ok((proofs, binding_hash))

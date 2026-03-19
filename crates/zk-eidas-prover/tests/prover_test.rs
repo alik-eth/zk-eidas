@@ -91,5 +91,5 @@ fn test_prover_all_predicates_fail_with_missing_circuits() {
     assert!(prover.prove_range(5, 1, 10, &commitment, &hash, &hash).is_err());
     assert!(prover.prove_set_member(1, &[0u64; 16], 1, &commitment, &hash, &hash).is_err());
     assert!(prover.prove_nullifier(1, 2, 3, 4, &commitment, &hash, &hash).is_err());
-    assert!(prover.prove_holder_binding(1, 2, &commitment, &hash, &hash).is_err());
+    assert!(prover.prove_holder_binding(1, &commitment, &hash, &hash).is_err());
 }
