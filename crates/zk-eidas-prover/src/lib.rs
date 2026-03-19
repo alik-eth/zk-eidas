@@ -15,5 +15,5 @@ pub mod prover;
 mod signed_input;
 
 pub use circuit::{CircuitArtifacts, CircuitError, CircuitLoader};
-pub use prover::{Prover, ProverError};
+pub use prover::{build_ecdsa_input_json, Prover, ProverError};
 pub use signed_input::SignedProofInput;

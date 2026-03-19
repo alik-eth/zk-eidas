@@ -105,6 +105,19 @@ impl ZkCredential {
         })
     }
 
+    /// Build the ECDSA circuit input JSON for browser-side proving.
+    ///
+    /// Returns the input JSON string for the `ecdsa_verify` circuit and the
+    /// claim value as u64 (needed for predicate circuit inputs).
+    /// Returns `None` if the credential lacks ECDSA signature data or
+    /// the required claim disclosure.
+    pub fn ecdsa_input_json(&self, claim_name: &str) -> Option<(String, u64)> {
+        let signed_input = build_signed_input(&self.credential, claim_name)?;
+        let claim_u64 = signed_input.claim_value;
+        let json = zk_eidas_prover::build_ecdsa_input_json(&signed_input);
+        Some((json, claim_u64))
+    }
+
     /// Set a nullifier scope for double-spend prevention.
     pub fn nullifier_scope(mut self, scope: &str) -> Self {
         self.nullifier_scope = Some(scope.to_string());

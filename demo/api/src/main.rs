@@ -1301,6 +1301,97 @@ async fn serve_circuit_artifact(
     }
 }
 
+// === Prepare Inputs (for browser-side proving) ===
+
+#[derive(Deserialize)]
+struct PrepareInputsRequest {
+    credential: String,
+    format: String,
+    predicates: Vec<PredicateRequest>,
+}
+
+#[derive(Serialize)]
+struct PrepareInputsResponse {
+    ecdsa_inputs: serde_json::Value,
+    claim_value: String,
+    predicates: Vec<PredicateInputSpec>,
+}
+
+#[derive(Serialize)]
+struct PredicateInputSpec {
+    circuit: String,
+    claim_value: String,
+    #[serde(flatten)]
+    extra: serde_json::Value,
+}
+
+async fn prepare_inputs(
+    State(state): State<Arc<AppState>>,
+    Json(req): Json<PrepareInputsRequest>,
+) -> Result<Json<PrepareInputsResponse>, (StatusCode, String)> {
+    let builder = if req.format == "mdoc" {
+        let (mdoc_bytes, pub_key_x, pub_key_y) = parse_mdoc_token(&req.credential)
+            .map_err(|e| (StatusCode::BAD_REQUEST, format!("mdoc token: {e}")))?;
+        let credential =
+            zk_eidas_mdoc::MdocParser::parse_with_issuer_key(&mdoc_bytes, pub_key_x, pub_key_y)
+                .map_err(|e| (StatusCode::BAD_REQUEST, format!("mdoc parse: {e}")))?;
+        zk_eidas::ZkCredential::from_credential(credential, &state.circuits_path)
+    } else {
+        zk_eidas::ZkCredential::from_sdjwt(&req.credential, &state.circuits_path)
+            .map_err(|e| (StatusCode::BAD_REQUEST, format!("parse error: {e}")))?
+    };
+
+    // Use the first predicate's claim for ECDSA input (all predicates share the same ECDSA proof)
+    let first_claim = req.predicates.first()
+        .map(|p| p.claim.as_str())
+        .ok_or_else(|| (StatusCode::BAD_REQUEST, "no predicates".to_string()))?;
+
+    let (ecdsa_json, claim_u64) = builder.ecdsa_input_json(first_claim)
+        .ok_or_else(|| (StatusCode::BAD_REQUEST, "credential lacks ECDSA data or claim disclosure".to_string()))?;
+
+    let ecdsa_inputs: serde_json::Value = serde_json::from_str(&ecdsa_json)
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("input JSON error: {e}")))?;
+
+    let mut predicates = Vec::new();
+    for pred in &req.predicates {
+        let circuit = match pred.op.as_str() {
+            "gte" => {
+                // Date claims invert: gte(age) → lte(birthdate)
+                let claim_val = builder.credential().claims().get(&pred.claim);
+                if claim_val.map(|v| matches!(v, zk_eidas_types::credential::ClaimValue::Date { .. })).unwrap_or(false) {
+                    "lte"
+                } else {
+                    "gte"
+                }
+            }
+            "lte" => {
+                let claim_val = builder.credential().claims().get(&pred.claim);
+                if claim_val.map(|v| matches!(v, zk_eidas_types::credential::ClaimValue::Date { .. })).unwrap_or(false) {
+                    "gte"
+                } else {
+                    "lte"
+                }
+            }
+            other => other,
+        };
+        predicates.push(PredicateInputSpec {
+            circuit: circuit.to_string(),
+            claim_value: claim_u64.to_string(),
+            extra: serde_json::json!({
+                "op": pred.op,
+                "claim": pred.claim,
+                "value": pred.value,
+            }),
+        });
+    }
+
+    Ok(Json(PrepareInputsResponse {
+        ecdsa_inputs,
+        claim_value: claim_u64.to_string(),
+        predicates,
+    }))
+}
+
 // === App Builder ===
 
 fn build_cors_layer() -> CorsLayer {
@@ -1347,6 +1438,7 @@ pub fn build_app(circuits_path: &str) -> Router {
         .route("/issuer/revoke", post(revoke_credential))
         .route("/issuer/revocation-status", get(revocation_status))
         .route("/issuer/revocation-root", get(revocation_status))  // backward compat alias
+        .route("/holder/prepare-inputs", post(prepare_inputs))
         .route("/circuits/{name}/{file}", get(serve_circuit_artifact))
         .route("/verifier/presentation-request", post(presentation_request))
         .layer(build_cors_layer())

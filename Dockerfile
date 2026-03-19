@@ -35,7 +35,14 @@ RUN npm install
 COPY demo/web/ ./
 RUN npm run build
 
-# Stage 3: Runtime
+# Stage 3: Compile C++ witness generator for ECDSA circuit (native speed)
+FROM ubuntu:24.04 AS cpp-builder
+RUN apt-get update && apt-get install -y build-essential nasm libgmp-dev nlohmann-json3-dev && rm -rf /var/lib/apt/lists/*
+COPY circuits/build/ecdsa_verify/ecdsa_verify_cpp/ /build/
+WORKDIR /build
+RUN make -j$(nproc)
+
+# Stage 4: Runtime
 FROM ubuntu:24.04
 RUN apt-get update && apt-get install -y nginx supervisor curl libstdc++6 libgmp10 ca-certificates gnupg && \
     mkdir -p /etc/apt/keyrings && \
@@ -56,6 +63,10 @@ RUN ldconfig
 
 # Copy compiled circuits
 COPY circuits/build/ /app/circuits/build/
+
+# Copy C++ witness generator binary + data file
+COPY --from=cpp-builder /build/ecdsa_verify /app/circuits/build/ecdsa_verify/ecdsa_verify_cpp/ecdsa_verify
+COPY --from=cpp-builder /build/ecdsa_verify.dat /app/circuits/build/ecdsa_verify/ecdsa_verify_cpp/ecdsa_verify.dat
 
 # Copy pre-built proof cache (generated locally via pre-warm binary)
 COPY demo/api/proof-cache.json /app/proof-cache.json

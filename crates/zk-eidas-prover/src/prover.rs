@@ -545,8 +545,8 @@ fn generate_cpp_witness(
         .map_err(|e| ProverError::ProvingFailed(format!("failed to read witness output: {e}")))
 }
 
-/// Build the input JSON for the ECDSA circuit's C++ witness generator.
-fn build_ecdsa_input_json(input: &SignedProofInput) -> String {
+/// Build the input JSON for the ECDSA circuit (used by C++ witness gen and browser proving).
+pub fn build_ecdsa_input_json(input: &SignedProofInput) -> String {
     let r_limbs = SignedProofInput::to_43bit_limbs(&input.signature_r);
     let s_limbs = SignedProofInput::to_43bit_limbs(&input.signature_s);
     let msg_limbs = SignedProofInput::to_43bit_limbs(&input.message_hash);
