@@ -61,8 +61,12 @@ COPY --from=rust-builder /app/target/release/pre-warm /app/pre-warm
 COPY --from=rust-builder /app/target/release/build/rust-rapidsnark-*/out/rapidsnark/x86_64/librapidsnark.so /usr/local/lib/
 RUN ldconfig
 
-# Copy compiled circuits
+# Copy compiled circuits (zkey excluded from context via .dockerignore, downloaded below)
 COPY circuits/build/ /app/circuits/build/
+
+# Download the 1.2GB ECDSA zkey from UploadThing (not in Docker context to speed up builds)
+RUN curl -L -o /app/circuits/build/ecdsa_verify/ecdsa_verify.zkey \
+    "https://ruvpd2ka1g.ufs.sh/f/vsKUhXCDRm2gNVLwvum9EROnsC6LBwY0z83lumTkxKGvgDpb"
 
 # Copy C++ witness generator binary + data file
 COPY --from=cpp-builder /build/ecdsa_verify /app/circuits/build/ecdsa_verify/ecdsa_verify_cpp/ecdsa_verify

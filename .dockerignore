@@ -4,6 +4,7 @@ target/
 circuits/node_modules/
 circuits/pot21.ptau
 circuits/pot22.ptau
+circuits/build/ecdsa_verify/ecdsa_verify.zkey
 demo/web/node_modules/
 demo/web/.vinxi/
 scripts/node_modules/
