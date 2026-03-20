@@ -317,7 +317,12 @@ function HolderStep({ state, setState, t }: { state: WizardState; setState: Reac
     _setBrowserResult(null)
     const timer = setInterval(() => setElapsed(prev => prev + 1), 1000)
     try {
-      const userPredicates = resolvedPredicates.filter(p => selected[p.id]).map(p => p.predicate)
+      const basePredicates = resolvedPredicates.filter(p => selected[p.id]).map(p => p.predicate)
+      // Inject document_number eq predicate when disclosed (same as server flow)
+      const docNumberPredicate = discloseDocNumber && docNumberField
+        ? [{ claim: docNumberField.name, op: 'eq', value: state.fields.find(f => f.name === docNumberField.name)?.value ?? '' }]
+        : []
+      const userPredicates = [...basePredicates, ...docNumberPredicate]
 
       const result = await proveCompoundInBrowser(
         state.credential!,
@@ -348,6 +353,36 @@ function HolderStep({ state, setState, t }: { state: WizardState; setState: Reac
       setLoading(false)
       setProved(true)
       setBrowserProgress(`Done in ${(result.totalTimeMs / 1000).toFixed(1)}s — all proofs verified locally`)
+      // Build compound proof JSON compatible with server format
+      const compoundProof = {
+        proofs: result.predicateProofs.map((p, i) => ({
+          proof_bytes: Array.from(new TextEncoder().encode(JSON.stringify(p.proof))),
+          public_inputs: p.publicSignals.map(s => Array.from(new TextEncoder().encode(s))),
+          verification_key: [],
+          predicate_op: userPredicates[i]?.op === 'gte' ? 'Gte' :
+            userPredicates[i]?.op === 'lte' ? 'Lte' :
+            userPredicates[i]?.op === 'eq' ? 'Eq' :
+            userPredicates[i]?.op === 'neq' ? 'Neq' :
+            userPredicates[i]?.op === 'set_member' ? 'SetMember' :
+            userPredicates[i]?.op === 'range' ? 'Range' : 'Gte',
+          nullifier: null,
+          claim_name: userPredicates[i]?.claim ?? null,
+        })),
+        op: effectiveMode === 'or' ? 'Or' : 'And',
+        ecdsa_proofs: Object.fromEntries(
+          [...new Set(userPredicates.map(p => p.claim))].map(claim => {
+            const ecdsaForClaim = result.ecdsaProof; // simplified — uses first ECDSA
+            return [claim, {
+              proof_bytes: Array.from(new TextEncoder().encode(JSON.stringify(ecdsaForClaim.proof))),
+              public_inputs: ecdsaForClaim.publicSignals.map(s => Array.from(new TextEncoder().encode(s))),
+              verification_key: [],
+              predicate_op: 'Ecdsa',
+              nullifier: null,
+            }];
+          })
+        ),
+      };
+
       setTimeout(() => {
         setState(prev => ({
           ...prev,
@@ -355,8 +390,8 @@ function HolderStep({ state, setState, t }: { state: WizardState; setState: Reac
           proofs,
           hiddenFields: userPredicates.map(p => p.claim),
           nullifier: null,
-          compoundProofJson: null,
-          compoundOp: null,
+          compoundProofJson: JSON.stringify(compoundProof),
+          compoundOp: effectiveMode === 'or' ? 'Or' : 'And',
           selectedPredicateIds: Object.entries(selected).filter(([, v]) => v).map(([k]) => k),
         }))
       }, 800)

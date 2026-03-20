@@ -1358,8 +1358,12 @@ async fn prepare_inputs(
         let claim_val = builder.credential().claims().get(&pred.claim);
         let is_date = claim_val.map(|v| matches!(v, zk_eidas_types::credential::ClaimValue::Date { .. })).unwrap_or(false);
 
+        // Date claims with small values (< 200) are age thresholds → invert gte↔lte
+        // Date claims with large values (epoch days) are direct comparisons → pass through
+        let is_age_threshold = is_date && pred.value.as_u64().unwrap_or(0) < 200;
+
         let (circuit, threshold) = match pred.op.as_str() {
-            "gte" if is_date => {
+            "gte" if is_age_threshold => {
                 // gte(age) on date → lte(birthdate, cutoff_epoch_days)
                 let age = pred.value.as_u64().unwrap_or(0) as u32;
                 let cutoff = zk_eidas::age_cutoff_epoch_days_from(age, today_year(), today_month(), today_day())
@@ -1367,7 +1371,7 @@ async fn prepare_inputs(
                 ("lte", serde_json::Value::from(cutoff))
             }
             "gte" => ("gte", pred.value.clone()),
-            "lte" if is_date => {
+            "lte" if is_age_threshold => {
                 // lte(age) on date → gte(birthdate, cutoff_epoch_days)
                 let age = pred.value.as_u64().unwrap_or(0) as u32;
                 let cutoff = zk_eidas::age_cutoff_epoch_days_from(age, today_year(), today_month(), today_day())

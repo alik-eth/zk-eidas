@@ -135,19 +135,26 @@ export async function proveCompoundInBrowser(
     const sdArrayHash = ecdsa.publicSignals[1];
     const msgHashField = ecdsa.publicSignals[2];
 
-    // Determine circuit and threshold (date claims invert gte↔lte)
+    // Determine circuit and threshold
+    // Date claims with small values (< 200) are age thresholds → invert gte↔lte and compute cutoff
+    // Date claims with large values (epoch days) are direct comparisons → pass through
     const isDateClaim = typeof pred.value === "number" &&
       (pred.claim.includes("birth") || pred.claim.includes("date"));
+    const isAgeThreshold = isDateClaim && (pred.value as number) < 200;
     let circuit = pred.op;
     let threshold = pred.value;
 
-    if (pred.op === "gte" && isDateClaim) {
-      circuit = "lte";
-      threshold = ageCutoffEpochDays(pred.value as number);
-    } else if (pred.op === "lte" && isDateClaim) {
-      circuit = "gte";
-      threshold = ageCutoffEpochDays(pred.value as number);
+    if (isAgeThreshold) {
+      // Age on a date field: gte(age) → lte(birthdate, cutoff), lte(age) → gte(birthdate, cutoff)
+      if (pred.op === "gte") {
+        circuit = "lte";
+        threshold = ageCutoffEpochDays(pred.value as number);
+      } else if (pred.op === "lte") {
+        circuit = "gte";
+        threshold = ageCutoffEpochDays(pred.value as number);
+      }
     }
+    // Non-age date comparisons (expiry_date >= epochDays) pass through as-is
 
     onProgress?.("predicate", `Predicate ${i + 1}/${predicates.length}: ${pred.claim} ${pred.op}...`);
 
