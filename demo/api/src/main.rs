@@ -2143,4 +2143,227 @@ mod tests {
         assert_ne!(k1, k3, "gte and lte keys should differ");
         assert_ne!(k1, k5, "gte and eq keys should differ");
     }
+
+    // === prepare-inputs endpoint tests ===
+
+    static LIGHT_SERVER: OnceLock<String> = OnceLock::new();
+
+    /// Lightweight server setup — no proof generation, just starts the API.
+    async fn light_setup() -> &'static str {
+        if let Some(url) = LIGHT_SERVER.get() {
+            return url;
+        }
+        let (tx, rx) = std::sync::mpsc::channel::<String>();
+        std::thread::spawn(move || {
+            let rt = tokio::runtime::Builder::new_multi_thread()
+                .enable_all()
+                .build()
+                .unwrap();
+            rt.block_on(async {
+                let app = build_app(&circuits_path());
+                let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+                let addr = listener.local_addr().unwrap();
+                tx.send(format!("http://{addr}")).unwrap();
+                axum::serve(listener, app).await.unwrap();
+            });
+        });
+        let url = rx.recv().unwrap();
+        let client = reqwest::Client::new();
+        for _ in 0..50 {
+            if client.get(format!("{url}/issuer/revocation-status")).send().await.is_ok() { break; }
+            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+        }
+        LIGHT_SERVER.get_or_init(|| url)
+    }
+
+    /// Helper: issue a credential and return (base_url, credential_string)
+    async fn issue_test_credential(claims: serde_json::Value) -> (&'static str, String) {
+        let url = light_setup().await;
+        let client = reqwest::Client::new();
+        let res: serde_json::Value = client
+            .post(format!("{url}/issuer/issue"))
+            .json(&serde_json::json!({
+                "credential_type": "pid",
+                "claims": claims,
+                "issuer": "https://test.example.com"
+            }))
+            .send().await.unwrap()
+            .json().await.unwrap();
+        let cred = res["credential"].as_str().unwrap().to_string();
+        (url, cred)
+    }
+
+    /// Helper: call prepare-inputs and return the response JSON
+    async fn prepare(base_url: &str, credential: &str, predicates: serde_json::Value) -> serde_json::Value {
+        let client = reqwest::Client::new();
+        let res = client
+            .post(format!("{base_url}/holder/prepare-inputs"))
+            .json(&serde_json::json!({
+                "credential": credential,
+                "format": "sdjwt",
+                "predicates": predicates,
+            }))
+            .send().await.unwrap();
+        assert_eq!(res.status().as_u16(), 200, "prepare-inputs failed: {}", res.text().await.unwrap_or_default());
+        res.json().await.unwrap()
+    }
+
+    #[tokio::test]
+    #[serial]
+    async fn prepare_inputs_age_gte_returns_lte_circuit() {
+        let (url, cred) = issue_test_credential(serde_json::json!({
+            "given_name": "Test", "birth_date": "1998-05-14"
+        })).await;
+        let data = prepare(url, &cred, serde_json::json!([
+            { "claim": "birth_date", "op": "gte", "value": 18 }
+        ])).await;
+
+        // Age gte on date → lte circuit (inverted)
+        assert_eq!(data["predicates"][0]["circuit"], "lte");
+        // Threshold should be epoch days cutoff, not 18
+        let threshold = data["predicates"][0]["value"].as_u64().unwrap();
+        assert!(threshold > 10000, "threshold should be epoch days, got {threshold}");
+        // Claim value should be epoch days for 1998-05-14
+        let cv = data["claim_value"].as_str().unwrap().parse::<u64>().unwrap();
+        assert!(cv > 10000 && cv < 30000, "claim_value should be epoch days, got {cv}");
+    }
+
+    #[tokio::test]
+    #[serial]
+    async fn prepare_inputs_age_lte_returns_gte_circuit() {
+        let (url, cred) = issue_test_credential(serde_json::json!({
+            "given_name": "Test", "birth_date": "1998-05-14"
+        })).await;
+        let data = prepare(url, &cred, serde_json::json!([
+            { "claim": "birth_date", "op": "lte", "value": 65 }
+        ])).await;
+
+        // Age lte on date → gte circuit (inverted)
+        assert_eq!(data["predicates"][0]["circuit"], "gte");
+    }
+
+    #[tokio::test]
+    #[serial]
+    async fn prepare_inputs_expiry_date_gte_passes_through() {
+        let (url, cred) = issue_test_credential(serde_json::json!({
+            "given_name": "Test", "birth_date": "1998-05-14", "expiry_date": "2035-05-14"
+        })).await;
+        let epoch_today = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH).unwrap().as_secs() / 86400;
+        let data = prepare(url, &cred, serde_json::json!([
+            { "claim": "expiry_date", "op": "gte", "value": epoch_today }
+        ])).await;
+
+        // Expiry date with large value → gte passes through (no inversion)
+        assert_eq!(data["predicates"][0]["circuit"], "gte");
+        let threshold = data["predicates"][0]["value"].as_u64().unwrap();
+        assert_eq!(threshold, epoch_today, "threshold should pass through as epoch days");
+    }
+
+    #[tokio::test]
+    #[serial]
+    async fn prepare_inputs_eq_string() {
+        let (url, cred) = issue_test_credential(serde_json::json!({
+            "given_name": "Test", "birth_date": "1998-05-14", "document_number": "UA-123"
+        })).await;
+        let data = prepare(url, &cred, serde_json::json!([
+            { "claim": "document_number", "op": "eq", "value": "UA-123" }
+        ])).await;
+
+        assert_eq!(data["predicates"][0]["circuit"], "eq");
+        assert_eq!(data["predicates"][0]["value"], "UA-123");
+    }
+
+    #[tokio::test]
+    #[serial]
+    async fn prepare_inputs_set_member() {
+        let (url, cred) = issue_test_credential(serde_json::json!({
+            "given_name": "Test", "birth_date": "1998-05-14", "nationality": "UA"
+        })).await;
+        let data = prepare(url, &cred, serde_json::json!([
+            { "claim": "nationality", "op": "set_member", "value": ["UA", "DE", "FR"] }
+        ])).await;
+
+        assert_eq!(data["predicates"][0]["circuit"], "set_member");
+        let set = data["predicates"][0]["value"].as_array().unwrap();
+        assert_eq!(set.len(), 3);
+    }
+
+    #[tokio::test]
+    #[serial]
+    async fn prepare_inputs_neq() {
+        let (url, cred) = issue_test_credential(serde_json::json!({
+            "given_name": "Test", "birth_date": "1998-05-14", "document_number": "UA-123"
+        })).await;
+        let data = prepare(url, &cred, serde_json::json!([
+            { "claim": "document_number", "op": "neq", "value": "REVOKED" }
+        ])).await;
+
+        assert_eq!(data["predicates"][0]["circuit"], "neq");
+    }
+
+    #[tokio::test]
+    #[serial]
+    async fn prepare_inputs_ecdsa_inputs_have_required_fields() {
+        let (url, cred) = issue_test_credential(serde_json::json!({
+            "given_name": "Test", "birth_date": "1998-05-14"
+        })).await;
+        let data = prepare(url, &cred, serde_json::json!([
+            { "claim": "birth_date", "op": "gte", "value": 18 }
+        ])).await;
+
+        let ecdsa = &data["ecdsa_inputs"];
+        // All required ECDSA circuit inputs present
+        assert!(ecdsa["signature_r"].is_array(), "missing signature_r");
+        assert!(ecdsa["signature_s"].is_array(), "missing signature_s");
+        assert!(ecdsa["message_hash"].is_array(), "missing message_hash");
+        assert!(ecdsa["pub_key_x"].is_array(), "missing pub_key_x");
+        assert!(ecdsa["pub_key_y"].is_array(), "missing pub_key_y");
+        assert!(ecdsa["claim_value"].is_string(), "missing claim_value");
+        assert!(ecdsa["disclosure_hash"].is_string(), "missing disclosure_hash");
+        assert!(ecdsa["sd_array"].is_array(), "missing sd_array");
+
+        // Limb arrays should have 6 elements (k=6 for P-256)
+        assert_eq!(ecdsa["signature_r"].as_array().unwrap().len(), 6);
+        assert_eq!(ecdsa["pub_key_x"].as_array().unwrap().len(), 6);
+
+        // sd_array should have 16 elements
+        assert_eq!(ecdsa["sd_array"].as_array().unwrap().len(), 16);
+    }
+
+    #[tokio::test]
+    #[serial]
+    async fn prepare_inputs_missing_claim_returns_400() {
+        let (url, cred) = issue_test_credential(serde_json::json!({
+            "given_name": "Test", "birth_date": "1998-05-14"
+        })).await;
+        let client = reqwest::Client::new();
+        let res = client
+            .post(format!("{url}/holder/prepare-inputs"))
+            .json(&serde_json::json!({
+                "credential": cred,
+                "format": "sdjwt",
+                "predicates": [{ "claim": "nonexistent", "op": "gte", "value": 18 }],
+            }))
+            .send().await.unwrap();
+        assert_eq!(res.status().as_u16(), 400);
+    }
+
+    #[tokio::test]
+    #[serial]
+    async fn prepare_inputs_no_predicates_returns_400() {
+        let (url, cred) = issue_test_credential(serde_json::json!({
+            "given_name": "Test", "birth_date": "1998-05-14"
+        })).await;
+        let client = reqwest::Client::new();
+        let res = client
+            .post(format!("{url}/holder/prepare-inputs"))
+            .json(&serde_json::json!({
+                "credential": cred,
+                "format": "sdjwt",
+                "predicates": [],
+            }))
+            .send().await.unwrap();
+        assert_eq!(res.status().as_u16(), 400);
+    }
 }
