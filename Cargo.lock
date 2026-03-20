@@ -5621,12 +5621,16 @@ name = "zk-eidas-wasm"
 version = "0.1.0"
 dependencies = [
  "hex",
+ "num-bigint",
  "serde",
  "serde-wasm-bindgen 0.6.5",
  "serde_json",
+ "sha2",
  "wasm-bindgen",
  "wasm-bindgen-test",
+ "zk-eidas-parser",
  "zk-eidas-types",
+ "zk-eidas-utils",
 ]
 
 [[package]]

@@ -1,6 +1,3 @@
-// @ts-expect-error snarkjs doesn't have type declarations
-import * as snarkjs from "snarkjs";
-
 export interface BrowserProofResult {
   proof: unknown;
   publicSignals: string[];
@@ -19,72 +16,46 @@ type ProgressCallback = (stage: string, detail: string) => void;
 
 const ARTIFACT_CACHE_NAME = "zk-eidas-circuits-v1";
 
-/** Fetch a circuit artifact with Cache API caching. */
-async function fetchCached(url: string, onProgress?: ProgressCallback): Promise<Uint8Array> {
-  const cache = await caches.open(ARTIFACT_CACHE_NAME);
-  const cached = await cache.match(url);
-  if (cached) {
-    onProgress?.("cache", `Using cached ${url.split("/").pop()}`);
-    return new Uint8Array(await cached.arrayBuffer());
-  }
-
-  onProgress?.("download", `Downloading ${url.split("/").pop()}...`);
-  const resp = await fetch(url);
-  if (!resp.ok) throw new Error(`Failed to fetch ${url}: ${resp.status}`);
-
-  // Clone before consuming — one for cache, one for us
-  const clone = resp.clone();
-  await cache.put(url, clone);
-
-  return new Uint8Array(await resp.arrayBuffer());
-}
-
-/** Load circuit artifacts (wasm + zkey + vk) with caching. */
-async function loadCircuit(
-  circuitName: string,
-  apiBaseUrl: string,
-  onProgress?: ProgressCallback,
-) {
-  const wasmUrl = `${apiBaseUrl}/circuits/${circuitName}/${circuitName}_js/${circuitName}.wasm`;
-  const zkeyUrl = `${apiBaseUrl}/circuits/${circuitName}/${circuitName}.zkey`;
-  const vkUrl = `${apiBaseUrl}/circuits/${circuitName}/vk.json`;
-
-  onProgress?.("loading", `Loading ${circuitName} circuit artifacts...`);
-
-  const [wasmBuffer, zkeyBuffer] = await Promise.all([
-    fetchCached(wasmUrl, onProgress),
-    fetchCached(zkeyUrl, onProgress),
-  ]);
-
-  const vk = await (await fetch(vkUrl)).json();
-
-  return { wasmBuffer, zkeyBuffer, vk };
-}
-
-/** Prove a single circuit in-browser. */
-export async function proveInBrowser(
+/** Prove a single circuit in a Web Worker (keeps UI responsive). */
+export function proveInBrowser(
   circuitName: string,
   inputs: Record<string, string | string[]>,
   apiBaseUrl: string,
   onProgress?: ProgressCallback,
 ): Promise<BrowserProofResult> {
-  const { wasmBuffer, zkeyBuffer, vk } = await loadCircuit(circuitName, apiBaseUrl, onProgress);
+  return new Promise((resolve, reject) => {
+    const worker = new Worker("/prove-worker.js");
 
-  onProgress?.("proving", `Generating ${circuitName} proof...`);
-  const proveStart = performance.now();
-  const { proof, publicSignals } = await snarkjs.groth16.fullProve(
-    inputs,
-    wasmBuffer,
-    zkeyBuffer
-  );
-  const provingTimeMs = performance.now() - proveStart;
+    worker.onmessage = (e) => {
+      const msg = e.data;
+      if (msg.type === "progress") {
+        onProgress?.("worker", msg.detail);
+      } else if (msg.type === "result") {
+        worker.terminate();
+        resolve({
+          proof: msg.proof,
+          publicSignals: msg.publicSignals,
+          provingTimeMs: msg.provingTimeMs,
+          verified: msg.verified,
+          verificationTimeMs: msg.verificationTimeMs,
+        });
+      } else if (msg.type === "error") {
+        worker.terminate();
+        reject(new Error(msg.message));
+      }
+    };
 
-  onProgress?.("verifying", `Verifying ${circuitName} proof...`);
-  const verifyStart = performance.now();
-  const verified = await snarkjs.groth16.verify(vk, publicSignals, proof);
-  const verificationTimeMs = performance.now() - verifyStart;
+    worker.onerror = (e) => {
+      worker.terminate();
+      reject(new Error(e.message || "Worker error"));
+    };
 
-  return { proof, publicSignals, provingTimeMs, verified, verificationTimeMs };
+    const wasmUrl = `${apiBaseUrl}/circuits/${circuitName}/${circuitName}_js/${circuitName}.wasm`;
+    const zkeyUrl = `${apiBaseUrl}/circuits/${circuitName}/${circuitName}.zkey`;
+    const vkUrl = `${apiBaseUrl}/circuits/${circuitName}/vk.json`;
+
+    worker.postMessage({ type: "prove", circuitName, inputs, wasmUrl, zkeyUrl, vkUrl });
+  });
 }
 
 /**
@@ -211,6 +182,8 @@ export async function verifyInBrowser(
   publicSignals: string[],
   apiBaseUrl: string
 ): Promise<{ verified: boolean; timeMs: number }> {
+  // @ts-expect-error snarkjs doesn't have type declarations
+  const snarkjs = await import("snarkjs");
   const vkUrl = `${apiBaseUrl}/circuits/${circuitName}/vk.json`;
   const vk = await (await fetch(vkUrl)).json();
 

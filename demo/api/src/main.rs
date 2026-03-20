@@ -1277,9 +1277,10 @@ fn load_proof_cache(api_dir: &str) -> LoadedCache {
 
 async fn serve_circuit_artifact(
     State(state): State<Arc<AppState>>,
-    AxumPath((name, file)): AxumPath<(String, String)>,
+    AxumPath(rest): AxumPath<String>,
 ) -> impl axum::response::IntoResponse {
-    let path = std::path::PathBuf::from(&state.circuits_path).join(&name).join(&file);
+    let file = rest.split('/').last().unwrap_or("");
+    let path = std::path::PathBuf::from(&state.circuits_path).join(&rest);
     match tokio::fs::read(&path).await {
         Ok(data) => {
             let content_type = if file.ends_with(".wasm") {
@@ -1354,33 +1355,36 @@ async fn prepare_inputs(
 
     let mut predicates = Vec::new();
     for pred in &req.predicates {
-        let circuit = match pred.op.as_str() {
-            "gte" => {
-                // Date claims invert: gte(age) → lte(birthdate)
-                let claim_val = builder.credential().claims().get(&pred.claim);
-                if claim_val.map(|v| matches!(v, zk_eidas_types::credential::ClaimValue::Date { .. })).unwrap_or(false) {
-                    "lte"
-                } else {
-                    "gte"
-                }
+        let claim_val = builder.credential().claims().get(&pred.claim);
+        let is_date = claim_val.map(|v| matches!(v, zk_eidas_types::credential::ClaimValue::Date { .. })).unwrap_or(false);
+
+        let (circuit, threshold) = match pred.op.as_str() {
+            "gte" if is_date => {
+                // gte(age) on date → lte(birthdate, cutoff_epoch_days)
+                let age = pred.value.as_u64().unwrap_or(0) as u32;
+                let cutoff = zk_eidas::age_cutoff_epoch_days_from(age, today_year(), today_month(), today_day())
+                    as u64;
+                ("lte", serde_json::Value::from(cutoff))
             }
-            "lte" => {
-                let claim_val = builder.credential().claims().get(&pred.claim);
-                if claim_val.map(|v| matches!(v, zk_eidas_types::credential::ClaimValue::Date { .. })).unwrap_or(false) {
-                    "gte"
-                } else {
-                    "lte"
-                }
+            "gte" => ("gte", pred.value.clone()),
+            "lte" if is_date => {
+                // lte(age) on date → gte(birthdate, cutoff_epoch_days)
+                let age = pred.value.as_u64().unwrap_or(0) as u32;
+                let cutoff = zk_eidas::age_cutoff_epoch_days_from(age, today_year(), today_month(), today_day())
+                    as u64;
+                ("gte", serde_json::Value::from(cutoff))
             }
-            other => other,
+            "lte" => ("lte", pred.value.clone()),
+            other => (other, pred.value.clone()),
         };
+
         predicates.push(PredicateInputSpec {
             circuit: circuit.to_string(),
             claim_value: claim_u64.to_string(),
             extra: serde_json::json!({
                 "op": pred.op,
                 "claim": pred.claim,
-                "value": pred.value,
+                "value": threshold,
             }),
         });
     }
@@ -1390,6 +1394,37 @@ async fn prepare_inputs(
         claim_value: claim_u64.to_string(),
         predicates,
     }))
+}
+
+fn today_year() -> u32 {
+    let days = (std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs() / 86400) as i64;
+    let z = days + 719468;
+    let era = z.div_euclid(146097);
+    let doe = z.rem_euclid(146097) as u64;
+    let yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;
+    (yoe as i64 + era * 400) as u32
+}
+
+fn today_month() -> u32 {
+    let days = (std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs() / 86400) as i64;
+    let z = days + 719468;
+    let doe = z.rem_euclid(146097) as u64;
+    let yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let m = if mp < 10 { mp + 3 } else { mp - 9 };
+    m as u32
+}
+
+fn today_day() -> u32 {
+    let days = (std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs() / 86400) as i64;
+    let z = days + 719468;
+    let doe = z.rem_euclid(146097) as u64;
+    let yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let d = doy - (153 * mp + 2) / 5 + 1;
+    d as u32
 }
 
 // === App Builder ===
@@ -1439,7 +1474,7 @@ pub fn build_app(circuits_path: &str) -> Router {
         .route("/issuer/revocation-status", get(revocation_status))
         .route("/issuer/revocation-root", get(revocation_status))  // backward compat alias
         .route("/holder/prepare-inputs", post(prepare_inputs))
-        .route("/circuits/{name}/{file}", get(serve_circuit_artifact))
+        .route("/circuits/{*rest}", get(serve_circuit_artifact))
         .route("/verifier/presentation-request", post(presentation_request))
         .layer(build_cors_layer())
         .with_state(state)
