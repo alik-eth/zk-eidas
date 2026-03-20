@@ -16,6 +16,22 @@ type ProgressCallback = (stage: string, detail: string) => void;
 
 const ARTIFACT_CACHE_NAME = "zk-eidas-circuits-v1";
 
+/** SHA-256 hash a string and return first 8 bytes as a decimal string (matches Rust bytes_to_u64). */
+async function hashToU64(value: string): Promise<string> {
+  const encoded = new TextEncoder().encode(value);
+  const hash = await crypto.subtle.digest("SHA-256", encoded);
+  const view = new DataView(hash);
+  return view.getBigUint64(0).toString();
+}
+
+/** Compute epoch days cutoff for an age threshold (e.g. 18 → epoch days of date 18 years ago). */
+function ageCutoffEpochDays(minAge: number): number {
+  const now = new Date();
+  const cutoffYear = now.getFullYear() - minAge;
+  const cutoff = new Date(cutoffYear, now.getMonth(), now.getDate());
+  return Math.floor(cutoff.getTime() / 86400000);
+}
+
 /** Prove a single circuit in a Web Worker (keeps UI responsive). */
 export function proveInBrowser(
   circuitName: string,
@@ -68,88 +84,118 @@ export function proveInBrowser(
  */
 export async function proveCompoundInBrowser(
   credential: string,
-  format: string,
+  _format: string,
   predicates: Array<{ claim: string; op: string; value: unknown }>,
   apiBaseUrl: string,
   onProgress?: ProgressCallback,
 ): Promise<BrowserCompoundResult> {
   const totalStart = performance.now();
+  if (!predicates.length) throw new Error("No predicates specified");
 
-  // Step 1: Get circuit inputs from server
-  onProgress?.("preparing", "Preparing circuit inputs...");
-  const prepResp = await fetch(`${apiBaseUrl}/holder/prepare-inputs`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ credential, format, predicates }),
-  });
-  if (!prepResp.ok) {
-    const err = await prepResp.text();
-    throw new Error(`Failed to prepare inputs: ${err}`);
+  // Step 1: Load WASM for on-device credential parsing
+  onProgress?.("preparing", "Loading WASM module...");
+  const { default: init, prepare_inputs } = await import("../../pkg/zk-eidas-wasm.js");
+  await init();
+
+  // Step 2: Group predicates by claim and generate one ECDSA proof per unique claim
+  const uniqueClaims = [...new Set(predicates.map(p => p.claim))];
+  const ecdsaCache = new Map<string, { result: BrowserProofResult; claimValue: string }>();
+
+  for (let c = 0; c < uniqueClaims.length; c++) {
+    const claim = uniqueClaims[c];
+    onProgress?.("ecdsa", `[${c + 1}/${uniqueClaims.length}] Parsing claim "${claim}" on device...`);
+
+    const prepRaw = prepare_inputs(credential, claim);
+    const prepData = JSON.parse(prepRaw);
+
+    onProgress?.("ecdsa", `[${c + 1}/${uniqueClaims.length}] ECDSA proof for "${claim}" (1.2 GB download on first run)...`);
+    const ecdsaResult = await proveInBrowser(
+      "ecdsa_verify",
+      prepData.ecdsa_inputs,
+      apiBaseUrl,
+      (_stage, detail) => onProgress?.("ecdsa", `[${c + 1}/${uniqueClaims.length}] ${detail}`),
+    );
+
+    if (!ecdsaResult.verified) {
+      throw new Error(`ECDSA proof for "${claim}" failed verification`);
+    }
+
+    ecdsaCache.set(claim, { result: ecdsaResult, claimValue: prepData.claim_value });
   }
-  const prepData = await prepResp.json();
 
-  // Step 2: Prove ECDSA circuit (heavy)
-  onProgress?.("ecdsa", "Downloading ECDSA circuit (1.2 GB on first run, cached after)...");
-  const ecdsaResult = await proveInBrowser(
-    "ecdsa_verify",
-    prepData.ecdsa_inputs,
-    apiBaseUrl,
-    (stage, detail) => onProgress?.(`ecdsa-${stage}`, detail),
-  );
-
-  if (!ecdsaResult.verified) {
-    throw new Error("ECDSA proof failed verification");
-  }
-
-  // Extract public outputs: [0]=commitment, [1]=sd_array_hash, [2]=msg_hash_field
-  const commitment = ecdsaResult.publicSignals[0];
-  const sdArrayHash = ecdsaResult.publicSignals[1];
-  const msgHashField = ecdsaResult.publicSignals[2];
-
-  // Step 3: Prove each predicate circuit (fast)
+  // Step 3: Prove each predicate circuit (fast, <1s each)
   const predicateProofs: BrowserProofResult[] = [];
-  for (let i = 0; i < prepData.predicates.length; i++) {
-    const pred = prepData.predicates[i];
-    onProgress?.("predicate", `Proving predicate ${i + 1}/${prepData.predicates.length}: ${pred.claim} ${pred.op}...`);
+  for (let i = 0; i < predicates.length; i++) {
+    const pred = predicates[i];
+    const cached = ecdsaCache.get(pred.claim)!;
+    const { result: ecdsa, claimValue } = cached;
 
-    const predicateInputs: Record<string, string> = {
-      claim_value: prepData.claim_value,
+    // ECDSA public outputs: [0]=commitment, [1]=sd_array_hash, [2]=msg_hash_field
+    const commitment = ecdsa.publicSignals[0];
+    const sdArrayHash = ecdsa.publicSignals[1];
+    const msgHashField = ecdsa.publicSignals[2];
+
+    // Determine circuit and threshold (date claims invert gte↔lte)
+    const isDateClaim = typeof pred.value === "number" &&
+      (pred.claim.includes("birth") || pred.claim.includes("date"));
+    let circuit = pred.op;
+    let threshold = pred.value;
+
+    if (pred.op === "gte" && isDateClaim) {
+      circuit = "lte";
+      threshold = ageCutoffEpochDays(pred.value as number);
+    } else if (pred.op === "lte" && isDateClaim) {
+      circuit = "gte";
+      threshold = ageCutoffEpochDays(pred.value as number);
+    }
+
+    onProgress?.("predicate", `Predicate ${i + 1}/${predicates.length}: ${pred.claim} ${pred.op}...`);
+
+    const predicateInputs: Record<string, string | string[]> = {
+      claim_value: claimValue,
       sd_array_hash: sdArrayHash,
       message_hash: msgHashField,
       commitment,
     };
 
-    // Add predicate-specific inputs
-    if (pred.circuit === "gte" || pred.circuit === "lte") {
-      predicateInputs.threshold = String(pred.value);
-    } else if (pred.circuit === "eq" || pred.circuit === "neq") {
-      predicateInputs.expected = String(pred.value);
-    } else if (pred.circuit === "range") {
-      const [low, high] = pred.value as [number, number];
+    if (circuit === "gte" || circuit === "lte") {
+      predicateInputs.threshold = String(threshold);
+    } else if (circuit === "eq" || circuit === "neq") {
+      const val = threshold;
+      if (typeof val === "string" && !/^\d+$/.test(val)) {
+        predicateInputs.expected = await hashToU64(val);
+      } else {
+        predicateInputs.expected = String(val);
+      }
+    } else if (circuit === "range") {
+      const [low, high] = threshold as unknown as [number, number];
       predicateInputs.low = String(low);
       predicateInputs.high = String(high);
-    } else if (pred.circuit === "set_member") {
-      // set_member needs special handling — pad to 16 elements
-      const set = pred.value as string[];
+    } else if (circuit === "set_member") {
+      const set = threshold as unknown as string[];
+      const padded: string[] = [];
       for (let j = 0; j < 16; j++) {
-        predicateInputs[`set[${j}]`] = j < set.length ? set[j] : "0";
+        padded.push(j < set.length ? await hashToU64(set[j]) : "0");
       }
-      predicateInputs.set_size = String(set.length);
+      predicateInputs.set = padded;
+      predicateInputs.set_len = String(set.length);
     }
 
     const predResult = await proveInBrowser(
-      pred.circuit,
+      circuit,
       predicateInputs,
       apiBaseUrl,
-      (stage, detail) => onProgress?.(`pred-${stage}`, detail),
+      (_stage, detail) => onProgress?.("predicate", detail),
     );
     predicateProofs.push(predResult);
   }
 
+  // Return the first ECDSA result (for backward compat)
+  const firstEcdsa = ecdsaCache.values().next().value!;
   const totalTimeMs = performance.now() - totalStart;
   onProgress?.("done", `All proofs generated in ${(totalTimeMs / 1000).toFixed(1)}s`);
 
-  return { ecdsaProof: ecdsaResult, predicateProofs, totalTimeMs };
+  return { ecdsaProof: firstEcdsa.result, predicateProofs, totalTimeMs };
 }
 
 /** Check how much circuit data is cached. */

@@ -628,7 +628,7 @@ function HolderStep({ state, setState, t }: { state: WizardState; setState: Reac
           className="accent-blue-500"
         />
         <span>Prove on device</span>
-        <span className="text-slate-600">(private, ~3 min)</span>
+        <span className="text-slate-600">(private, ~3 min per claim)</span>
       </label>
 
       {/* Progress */}

@@ -8,24 +8,20 @@ self.onmessage = async (e) => {
   if (type !== "prove") return;
 
   try {
-    // Download artifacts
+    // Download WASM into memory (small, ~19MB)
     self.postMessage({ type: "progress", detail: `Downloading ${circuitName} WASM...` });
     const wasmResp = await fetch(wasmUrl);
     if (!wasmResp.ok) throw new Error(`Failed to fetch WASM: ${wasmResp.status}`);
     const wasmBuffer = new Uint8Array(await wasmResp.arrayBuffer());
 
-    self.postMessage({ type: "progress", detail: `Downloading ${circuitName} zkey (may take a moment on first run)...` });
-    const zkeyResp = await fetch(zkeyUrl);
-    if (!zkeyResp.ok) throw new Error(`Failed to fetch zkey: ${zkeyResp.status}`);
-    const zkeyBuffer = new Uint8Array(await zkeyResp.arrayBuffer());
-
-    // Prove
+    // Pass zkey URL as string — snarkjs fetches it internally.
+    // This avoids holding both the fetch response AND the Uint8Array copy in memory.
     self.postMessage({ type: "progress", detail: `Generating ${circuitName} proof...` });
     const proveStart = performance.now();
     const { proof, publicSignals } = await snarkjs.groth16.fullProve(
       inputs,
       wasmBuffer,
-      zkeyBuffer
+      zkeyUrl
     );
     const provingTimeMs = performance.now() - proveStart;
 
