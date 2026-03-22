@@ -27,6 +27,9 @@ pub enum ProverError {
     /// Failed to serialize proof or verification key.
     #[error("serialization failed: {0}")]
     SerializationError(String),
+    /// Witness generation failed or produced unexpected output.
+    #[error("witness generation failed: {0}")]
+    WitnessGenFailed(String),
 }
 
 /// Generates zero-knowledge proofs for Circom circuits using rapidsnark (Groth16).
@@ -261,17 +264,16 @@ impl Prover {
         Ok(ZkProof::new(proof, public_inputs, vk_bytes, PredicateOp::SetMember))
     }
 
-    /// Stage 2: Prove a nullifier for double-spend prevention.
+    /// Stage 2: Prove a court-resolvable nullifier.
     ///
-    /// Proves knowledge of `credential_secret` such that
-    /// `nullifier = Poseidon(credential_secret, scope)`.
-    /// The commitment chain ensures this is bound to a valid ECDSA signature.
+    /// Computes `nullifier = Poseidon(credential_id, contract_hash, salt)` inside the circuit.
+    /// The commitment chain ensures `credential_id` is the issuer-signed document_number.
+    /// The nullifier is extracted from the circuit's public output.
     pub fn prove_nullifier(
         &self,
-        credential_secret: u64,
-        scope: u64,
-        nullifier: u64,
-        claim_value: u64,
+        credential_id: u64,
+        contract_hash: u64,
+        salt: u64,
         commitment: &EcdsaCommitment,
         sd_array_hash: &[u8],
         message_hash: &[u8],
@@ -280,20 +282,27 @@ impl Prover {
         let mut builder = create_builder(&artifacts)?;
 
         // Private inputs
-        builder.push_input("credential_secret", BigInt::from(credential_secret));
+        builder.push_input("credential_id", BigInt::from(credential_id));
         builder.push_input("sd_array_hash", bytes_to_bigint(sd_array_hash));
         builder.push_input("message_hash", bytes_to_bigint(message_hash));
-        builder.push_input("claim_value", BigInt::from(claim_value));
 
         // Public inputs
         builder.push_input("commitment", bytes_to_bigint(commitment.value()));
-        builder.push_input("scope", BigInt::from(scope));
-        builder.push_input("nullifier", BigInt::from(nullifier));
+        builder.push_input("contract_hash", BigInt::from(contract_hash));
+        builder.push_input("salt", BigInt::from(salt));
 
         let (proof, public_inputs, vk_bytes) = generate_proof(&artifacts, builder)?;
 
-        // Serialize nullifier to 32 bytes for the ZkProof metadata
-        let nullifier_bytes = u64_to_32bytes(nullifier);
+        // Public output [0] = nullifier (circuit output)
+        let nullifier_str = public_inputs.first()
+            .and_then(|b| String::from_utf8(b.clone()).ok())
+            .ok_or_else(|| ProverError::WitnessGenFailed("nullifier output missing".into()))?;
+        let nullifier_bigint = nullifier_str.parse::<num_bigint::BigUint>()
+            .map_err(|e| ProverError::WitnessGenFailed(format!("nullifier parse: {e}")))?;
+        let mut nullifier_bytes = [0u8; 32];
+        let be = nullifier_bigint.to_bytes_be();
+        let start = 32usize.saturating_sub(be.len());
+        nullifier_bytes[start..].copy_from_slice(&be[..be.len().min(32)]);
 
         Ok(ZkProof::new(proof, public_inputs, vk_bytes, PredicateOp::Nullifier)
             .with_nullifier(nullifier_bytes))
@@ -633,7 +642,7 @@ mod tests {
     fn prover_nullifier_missing_circuits() {
         let prover = Prover::new("/nonexistent");
         let commitment = EcdsaCommitment::new(vec![0u8; 32]);
-        let result = prover.prove_nullifier(42, 1, 99, 10, &commitment, &[0u8; 32], &[0u8; 32]);
+        let result = prover.prove_nullifier(42, 100, 200, &commitment, &[0u8; 32], &[0u8; 32]);
         assert!(result.is_err());
     }
 

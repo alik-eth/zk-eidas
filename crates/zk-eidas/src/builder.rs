@@ -251,7 +251,7 @@ impl ZkCredential {
 
             let claim_value = self.credential.claims().get(&first_claim)
                 .ok_or_else(|| ZkError::ClaimNotFound(first_claim.clone()))?;
-            let claim_u64 = claim_to_u64(claim_value).unwrap_or(0);
+            let _claim_u64 = claim_to_u64(claim_value).unwrap_or(0);
 
             // Compute nullifier = hash(secret || scope) for determinism
             let mut h = Sha256::new();
@@ -261,12 +261,12 @@ impl ZkCredential {
             let nullifier_u64 = bytes_to_u64(&nullifier_hash);
 
             let prover = zk_eidas_prover::Prover::new(&self.circuits_path);
+            // TODO(Task 5): replace with new contract_nullifier API
             let nullifier_proof = prover
                 .prove_nullifier(
                     credential_secret,
                     scope_u64,
                     nullifier_u64,
-                    claim_u64,
                     &commitment,
                     &sd_array_hash,
                     &message_hash,
@@ -356,7 +356,7 @@ impl ZkCredential {
 
             let claim_value = self.credential.claims().get(&claim_name)
                 .ok_or_else(|| ZkError::ClaimNotFound(claim_name.clone()))?;
-            let claim_u64 = claim_to_u64(claim_value).unwrap_or(0);
+            let _claim_u64 = claim_to_u64(claim_value).unwrap_or(0);
 
             let mut h = Sha256::new();
             h.update(&credential_secret.to_be_bytes());
@@ -365,12 +365,12 @@ impl ZkCredential {
             let nullifier_u64 = bytes_to_u64(&nullifier_hash);
 
             let prover = zk_eidas_prover::Prover::new(&self.circuits_path);
+            // TODO(Task 5): replace with new contract_nullifier API
             let nullifier_proof = prover
                 .prove_nullifier(
                     credential_secret,
                     scope_u64,
                     nullifier_u64,
-                    claim_u64,
                     &commitment,
                     &sd_array_hash,
                     &message_hash,
