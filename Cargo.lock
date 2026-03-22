@@ -5537,6 +5537,7 @@ dependencies = [
  "zk-eidas",
  "zk-eidas-mdoc",
  "zk-eidas-parser",
+ "zk-eidas-prover",
  "zk-eidas-types",
  "zk-eidas-utils",
 ]
