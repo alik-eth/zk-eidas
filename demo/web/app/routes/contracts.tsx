@@ -1,6 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router'
 import React, { useEffect, useRef, useState } from 'react'
 import { StepWizard } from '../components/StepWizard'
+import { ProveMethodToggle, type ProveMethod } from '../components/ProveMethodToggle'
 import { useT, useLocale, tLang } from '../i18n'
 import { CREDENTIAL_TYPES, type FieldDisplay } from '../lib/credential-types'
 import { CONTRACT_TEMPLATES } from '../lib/contract-templates'
@@ -498,6 +499,7 @@ function ProveStep({ state, setState, t }: { state: ContractWizardState; setStat
   const [error, setError] = useState<string | null>(null)
   const [currentProvingIndex, setCurrentProvingIndex] = useState(-1)
   const [skipCache, setSkipCache] = useState(false)
+  const [proveMethod, setProveMethod] = useState<ProveMethod>('server')
 
   // Reset local state when credentials change
   useEffect(() => {
@@ -773,6 +775,16 @@ function ProveStep({ state, setState, t }: { state: ContractWizardState; setStat
           <button onClick={() => setError(null)} className="text-xs text-red-400 hover:text-red-200 font-medium shrink-0">{t('contracts.dismiss') || 'Dismiss'}</button>
         </div>
       )}
+
+      {/* Prove method toggle */}
+      <div className="flex items-center justify-between mb-2">
+        <span className="text-xs text-slate-500 font-medium uppercase tracking-wider">Proving</span>
+        <ProveMethodToggle
+          value={proveMethod}
+          onChange={setProveMethod}
+          disabled={loading || proved}
+        />
+      </div>
 
       <button
         onClick={() => handleProve()}

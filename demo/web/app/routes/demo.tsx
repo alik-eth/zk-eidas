@@ -2,6 +2,7 @@ import { createFileRoute } from '@tanstack/react-router'
 import React, { useEffect, useRef, useState } from 'react'
 import { Tooltip } from '../components/Tooltip'
 import { StepWizard } from '../components/StepWizard'
+import { ProveMethodToggle, type ProveMethod } from '../components/ProveMethodToggle'
 import { useT, useLocale } from '../i18n'
 import { CREDENTIAL_TYPES, type FieldDisplay } from '../lib/credential-types'
 import { proveCompoundInBrowser, getCacheStats, type BrowserProofResult } from '../lib/snarkjs-prover'
@@ -258,7 +259,8 @@ function HolderStep({ state, setState, t }: { state: WizardState; setState: Reac
   const [presReqLoading, setPresReqLoading] = useState(false)
   const [presReqResult, setPresReqResult] = useState<{ id: string; input_descriptors: { id: string; constraints: { path: string; predicate_op: string; value: string }[] }[] } | null>(null)
   // Browser proving state
-  const [proveOnDevice, setProveOnDevice] = useState(false)
+  const [proveMethod, setProveMethod] = useState<ProveMethod>('server')
+  const proveOnDevice = proveMethod === 'device'
   const [browserProgress, setBrowserProgress] = useState('')
   const [_browserResult, _setBrowserResult] = useState<BrowserProofResult | null>(null)
 
@@ -587,17 +589,15 @@ function HolderStep({ state, setState, t }: { state: WizardState; setState: Reac
         </div>
       )}
 
-      {/* On-device toggle */}
-      <label className="flex items-center gap-2 text-xs text-slate-400 cursor-pointer select-none mb-2">
-        <input
-          type="checkbox"
-          checked={proveOnDevice}
-          onChange={e => setProveOnDevice(e.target.checked)}
-          className="accent-blue-500"
+      {/* Prove method toggle */}
+      <div className="flex items-center justify-between mb-2">
+        <span className="text-xs text-slate-500 font-medium uppercase tracking-wider">Proving</span>
+        <ProveMethodToggle
+          value={proveMethod}
+          onChange={setProveMethod}
+          disabled={loading}
         />
-        <span>Prove on device</span>
-        <span className="text-slate-600">(private, ~3 min per claim)</span>
-      </label>
+      </div>
 
       {/* Progress */}
       {loading && browserProgress && (
@@ -616,7 +616,7 @@ function HolderStep({ state, setState, t }: { state: WizardState; setState: Reac
             ? `${t('demo.generatingShort')} (${elapsed}s)`
             : t('demo.generatingShort')
           : proveOnDevice
-            ? 'Generate proof on device'
+            ? t('demo.generateBrowserBtn')
             : t('demo.generateBtn')}
       </button>
     </div>
