@@ -5,6 +5,7 @@ import { ProveMethodToggle, type ProveMethod } from '../components/ProveMethodTo
 import { useT, useLocale, tLang } from '../i18n'
 import { CREDENTIAL_TYPES, type FieldDisplay } from '../lib/credential-types'
 import { CONTRACT_TEMPLATES } from '../lib/contract-templates'
+import { proveContractInBrowser } from '../lib/snarkjs-prover'
 
 // Types
 
@@ -528,6 +529,111 @@ function ProveStep({ state, setState, t }: { state: ContractWizardState; setStat
       const { encodeProofChunks, LogicalOpFlag } = await import('../lib/qr-chunking')
       const QRCode = (await import('qrcode')).default
       const proofCount = template.credentials.length
+
+      // On-device proving path
+      if (proveMethod === 'device') {
+        // Build credentials array for proveContractInBrowser
+        const credParams = template.credentials.map((req, ci) => {
+          const cred = state.credentials[ci]
+          const config = CREDENTIAL_TYPES.find(ct => ct.id === req.credentialType)
+          if (!config) throw new Error(`Unknown credential type: ${req.credentialType}`)
+          const templatePredicates = req.predicateIds
+            .map(pid => config.predicates.find(p => p.id === pid))
+            .filter((p): p is NonNullable<typeof p> => p !== undefined)
+          const predicates = templatePredicates.map(p => ({
+            claim: p.predicate.claim,
+            op: p.predicate.op,
+            value: p.predicate.value === '__FROM_FORM__'
+              ? (cred.fields.find(f => f.name === p.predicate.claim)?.value ?? '')
+              : p.predicate.value,
+          }))
+          return { credential: cred.credential, format: cred.format as 'sdjwt' | 'mdoc', predicates }
+        })
+
+        // Build bindings array
+        const bindingParams = template.bindings?.map(b => {
+          const credIndexA = template.credentials.findIndex(c => c.role === b.roleA)
+          const credIndexB = template.credentials.findIndex(c => c.role === b.roleB)
+          return { credIndexA, claimA: b.claimA, credIndexB, claimB: b.claimB }
+        })
+
+        const selectedTemplate = CONTRACT_TEMPLATES.find(tpl => tpl.id === state.templateId)!
+        const result = await proveContractInBrowser(
+          {
+            credentials: credParams,
+            contractTerms: JSON.stringify(selectedTemplate),
+            timestamp: new Date().toISOString(),
+            bindings: bindingParams,
+            onProgress: (msg) => { /* future: display progress message */ },
+            onCredentialIndex: (idx) => setCurrentProvingIndex(idx),
+          },
+          API_URL,
+        )
+
+        // Process results — same as server path
+        const updatedDeviceCredentials = [...state.credentials]
+        for (let ci = 0; ci < template.credentials.length; ci++) {
+          const req = template.credentials[ci]
+          const config = CREDENTIAL_TYPES.find(ct => ct.id === req.credentialType)!
+          const templatePredicates = req.predicateIds
+            .map(pid => config.predicates.find(p => p.id === pid))
+            .filter((p): p is NonNullable<typeof p> => p !== undefined)
+          const predicateDescriptions = templatePredicates.map(p => t(p.labelKey))
+
+          // Generate QR codes from envelope bytes
+          const compressed = result.envelopeBytes[ci]
+          totalCompressedSize += compressed.length
+          const proofId = ci + 1
+          const logicalOp = proofCount > 1 ? LogicalOpFlag.And : LogicalOpFlag.Single
+          const chunks = encodeProofChunks(compressed, proofId, ci, proofCount, logicalOp)
+          for (const chunk of chunks) {
+            const url = await QRCode.toDataURL([{ data: chunk, mode: 'byte' as const }], {
+              errorCorrectionLevel: 'L', margin: 1, width: 280,
+            })
+            allQrDataUrls.push(url)
+          }
+
+          updatedDeviceCredentials[ci] = {
+            ...state.credentials[ci],
+            compoundProofJson: result.compoundProofs[ci],
+            compoundOp: 'And',
+            hiddenFields: [],
+            predicateDescriptions,
+          }
+        }
+
+        // Process bindings
+        const bindingResultsData: BindingResult[] = (template.bindings ?? []).map((b, i) => ({
+          labelKey: b.labelKey,
+          bindingHash: result.bindingResults[i]?.bindingHash ?? '',
+          verified: result.bindingResults[i]?.verified ?? false,
+        }))
+
+        nullifierData = result.nullifier ? {
+          nullifier: result.nullifier,
+          contractHash: result.contractHash,
+          salt: result.salt,
+        } : null
+
+        clearInterval(timer)
+        setLoading(false)
+        setProved(true)
+        setTimeout(() => {
+          setState(prev => ({
+            ...prev,
+            step: 4,
+            credentials: updatedDeviceCredentials,
+            bindings: bindingResultsData,
+            qrDataUrls: allQrDataUrls,
+            compressedSize: totalCompressedSize,
+            cached: false,
+            nullifier: nullifierData?.nullifier ?? null,
+            contractHash: nullifierData?.contractHash ?? null,
+            salt: nullifierData?.salt ?? null,
+          }))
+        }, 600)
+        return
+      }
 
       for (let ci = 0; ci < template.credentials.length; ci++) {
         setCurrentProvingIndex(ci)
