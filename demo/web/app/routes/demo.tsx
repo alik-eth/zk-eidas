@@ -253,7 +253,7 @@ function HolderStep({ state, setState, t }: { state: WizardState; setState: Reac
   const [loading, setLoading] = useState(false)
   const [elapsed, setElapsed] = useState(0)
   const [proved, setProved] = useState(false)
-  const [compoundMode, setCompoundMode] = useState<'individual' | 'and' | 'or'>('individual')
+  const [compoundMode, setCompoundMode] = useState<'individual' | 'and' | 'or'>('and')
   const [proveTimeMs, setProveTimeMs] = useState<number | null>(null)
   const [presReqLoading, setPresReqLoading] = useState(false)
   const [presReqResult, setPresReqResult] = useState<{ id: string; input_descriptors: { id: string; constraints: { path: string; predicate_op: string; value: string }[] }[] } | null>(null)
