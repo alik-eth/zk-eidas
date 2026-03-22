@@ -469,21 +469,31 @@ function HolderStep({ state, setState, t }: { state: WizardState; setState: Reac
             <p className="text-sm text-slate-400">{t('demo.selectClaimsSub')}</p>
           </div>
           <div className="p-6 space-y-4">
-            {resolvedPredicates.map(opt => (
-              <label key={opt.id} className={`flex items-start gap-3 p-4 rounded-lg border cursor-pointer transition-colors ${selected[opt.id] ? 'border-blue-500 bg-slate-700/50' : 'border-slate-600 bg-slate-800 hover:border-slate-500'}`}>
-                <input
-                  type="checkbox"
-                  checked={selected[opt.id]}
-                  onChange={e => setSelected(prev => ({ ...prev, [opt.id]: e.target.checked }))}
-                  disabled={loading}
-                  className="mt-0.5 w-4 h-4 rounded border-slate-500 text-blue-600 focus:ring-blue-500 bg-slate-700"
-                />
-                <div className="flex items-center gap-1">
-                  <span className="text-sm font-medium text-white">{t(opt.labelKey)}</span>
-                  <Tooltip text={t(opt.descKey)} />
-                </div>
-              </label>
-            ))}
+            {resolvedPredicates.map(opt => {
+              const isReveal = opt.predicate.op === 'reveal'
+              return (
+                <label key={opt.id} className={`flex items-start gap-3 p-4 rounded-lg border cursor-pointer transition-colors ${
+                  selected[opt.id]
+                    ? isReveal ? 'border-emerald-500 bg-emerald-900/30' : 'border-blue-500 bg-slate-700/50'
+                    : 'border-slate-600 bg-slate-800 hover:border-slate-500'
+                }`}>
+                  <input
+                    type="checkbox"
+                    checked={selected[opt.id]}
+                    onChange={e => setSelected(prev => ({ ...prev, [opt.id]: e.target.checked }))}
+                    disabled={loading}
+                    className={`mt-0.5 w-4 h-4 rounded border-slate-500 focus:ring-blue-500 bg-slate-700 ${
+                      isReveal ? 'text-emerald-600' : 'text-blue-600'
+                    }`}
+                  />
+                  <div className="flex items-center gap-1">
+                    {isReveal && <span className="text-emerald-400 text-xs mr-1" title="Reveal">&#128065;</span>}
+                    <span className="text-sm font-medium text-white">{t(opt.labelKey)}</span>
+                    <Tooltip text={t(opt.descKey)} />
+                  </div>
+                </label>
+              )
+            })}
 
             {/* Compound Mode */}
             {selectedCount >= 2 && (
