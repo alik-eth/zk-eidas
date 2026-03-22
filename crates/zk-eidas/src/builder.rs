@@ -69,7 +69,7 @@ pub struct ZkCredential {
     credential: Credential,
     circuits_path: String,
     predicates: Vec<(String, Predicate)>,
-    contract_nullifier_params: Option<(u64, u64)>,  // (contract_hash, salt)
+    contract_nullifier_params: Option<(String, u64, u64)>,  // (credential_id_field, contract_hash, salt)
     /// Per-claim ECDSA proof cache. Each claim needs its own ECDSA proof because
     /// the commitment binds to the claim_value: Poseidon(claim_value, sd_array_hash, message_hash)
     ecdsa_cache: HashMap<String, (ZkProof, EcdsaCommitment, Vec<u8>, Vec<u8>)>,
@@ -119,8 +119,10 @@ impl ZkCredential {
     }
 
     /// Set contract nullifier parameters for court-resolvable nullifier generation.
-    pub fn contract_nullifier(mut self, contract_hash: u64, salt: u64) -> Self {
-        self.contract_nullifier_params = Some((contract_hash, salt));
+    /// `credential_id_field` is the claim name used as the unique credential identifier
+    /// (e.g. "document_number", "vin", "license_number").
+    pub fn contract_nullifier(mut self, credential_id_field: &str, contract_hash: u64, salt: u64) -> Self {
+        self.contract_nullifier_params = Some((credential_id_field.to_string(), contract_hash, salt));
         self
     }
 
@@ -254,13 +256,14 @@ impl ZkCredential {
             }
         }
 
-        let contract_nullifier = if let Some((contract_hash, salt)) = self.contract_nullifier_params {
-            // Ensure ECDSA proof exists for document_number
-            let (commitment, sd_array_hash, message_hash) = self.ensure_ecdsa("document_number")?;
+        let contract_nullifier = if let Some((ref id_field, contract_hash, salt)) = self.contract_nullifier_params {
+            let id_field = id_field.clone();
+            // Ensure ECDSA proof exists for the credential_id field
+            let (commitment, sd_array_hash, message_hash) = self.ensure_ecdsa(&id_field)?;
 
-            let doc_value = self.credential.claims().get("document_number")
-                .ok_or_else(|| ZkError::ClaimNotFound("document_number".to_string()))?;
-            let credential_id = claim_to_u64_or_hash(doc_value);
+            let id_value = self.credential.claims().get(&id_field)
+                .ok_or_else(|| ZkError::ClaimNotFound(id_field.to_string()))?;
+            let credential_id = claim_to_u64_or_hash(id_value);
 
             let prover = zk_eidas_prover::Prover::new(&self.circuits_path);
             let nullifier_proof = prover
@@ -932,7 +935,7 @@ mod tests {
         let builder = ZkCredential::from_sdjwt(&sdjwt, "/nonexistent")
             .unwrap()
             .predicate("age", Predicate::gte(18))
-            .contract_nullifier(12345, 67890);
+            .contract_nullifier("document_number", 12345, 67890);
 
         // Will fail at circuit loading but proves the API works
         let result = builder.prove_compound();

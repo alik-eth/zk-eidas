@@ -359,7 +359,7 @@ async fn e2e_nullifier_determinism() {
     let result = ZkCredential::from_sdjwt(&sdjwt, CIRCUITS)
         .unwrap()
         .predicate("birthdate", Predicate::gte(18))
-        .contract_nullifier(12345, 67890)
+        .contract_nullifier("document_number", 12345, 67890)
         .prove_compound();
 
     // Will fail without circuit artifacts, but proves the API compiles

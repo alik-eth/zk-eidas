@@ -1156,8 +1156,12 @@ async fn contract_prove(
         builder = builder.predicate(&claim, compound_pred);
     }
 
-    // 5. Set contract nullifier
-    builder = builder.contract_nullifier(contract_hash, salt);
+    // 5. Set contract nullifier — auto-detect credential_id field
+    let id_field_candidates = ["document_number", "license_number", "diploma_number", "vin", "student_number"];
+    let credential_id_field = id_field_candidates.iter()
+        .find(|f| all_field_names.contains(&f.to_string()))
+        .ok_or_else(|| (StatusCode::BAD_REQUEST, "no credential_id field found".to_string()))?;
+    builder = builder.contract_nullifier(credential_id_field, contract_hash, salt);
 
     // 6. Prove
     let _permit = state.prove_semaphore.acquire().await.map_err(|_| {
