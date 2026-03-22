@@ -2493,4 +2493,115 @@ mod tests {
             .send().await.unwrap();
         assert_eq!(res.status().as_u16(), 400);
     }
+
+    // === contract-prove endpoint tests ===
+
+    #[tokio::test]
+    #[serial]
+    async fn contract_prove_returns_nullifier_and_proof() {
+        let (url, cred) = issue_test_credential(serde_json::json!({
+            "given_name": "Test", "birth_date": "1998-05-14", "document_number": "UA-TEST-001"
+        })).await;
+        let client = reqwest::Client::new();
+        let res = client
+            .post(format!("{url}/holder/contract-prove"))
+            .json(&serde_json::json!({
+                "credential": cred,
+                "format": "sdjwt",
+                "predicates": [{ "claim": "birth_date", "op": "gte", "value": 18 }],
+                "contract_terms": "test vehicle sale",
+                "timestamp": "2026-03-22T18:00:00Z",
+            }))
+            .send().await.unwrap();
+        assert_eq!(res.status().as_u16(), 200, "contract-prove failed: {}", res.text().await.unwrap_or_default());
+        let data: serde_json::Value = serde_json::from_str(&res.text().await.unwrap()).unwrap();
+
+        // Must have nullifier, contract_hash, salt
+        assert!(data["nullifier"].as_str().unwrap().starts_with("0x"), "nullifier should be hex");
+        assert!(data["contract_hash"].as_str().unwrap().starts_with("0x"), "contract_hash should be hex");
+        assert!(data["salt"].as_str().unwrap().starts_with("0x"), "salt should be hex");
+        assert!(data["compound_proof_json"].is_string(), "must have compound_proof_json");
+        assert!(data["sub_proofs_count"].as_u64().unwrap() >= 1);
+
+        // Compound proof must have contract_nullifier
+        let compound: serde_json::Value = serde_json::from_str(data["compound_proof_json"].as_str().unwrap()).unwrap();
+        assert!(compound["contract_nullifier"].is_object(), "compound proof must contain contract_nullifier");
+        assert!(!compound["contract_nullifier"]["nullifier"].as_array().unwrap().is_empty());
+
+        // No document_number in any public output
+        let compound_str = data["compound_proof_json"].as_str().unwrap();
+        assert!(!compound_str.contains("UA-TEST-001"), "document_number must NOT appear in proof");
+    }
+
+    #[tokio::test]
+    #[serial]
+    async fn contract_prove_different_salt_different_nullifier() {
+        let (url, cred) = issue_test_credential(serde_json::json!({
+            "given_name": "Test", "birth_date": "1998-05-14", "document_number": "UA-TEST-002"
+        })).await;
+        let client = reqwest::Client::new();
+
+        let res1: serde_json::Value = client
+            .post(format!("{url}/holder/contract-prove"))
+            .json(&serde_json::json!({
+                "credential": cred, "format": "sdjwt",
+                "predicates": [{ "claim": "birth_date", "op": "gte", "value": 18 }],
+                "contract_terms": "contract A", "timestamp": "2026-03-22T18:00:00Z",
+            }))
+            .send().await.unwrap().json().await.unwrap();
+
+        let res2: serde_json::Value = client
+            .post(format!("{url}/holder/contract-prove"))
+            .json(&serde_json::json!({
+                "credential": cred, "format": "sdjwt",
+                "predicates": [{ "claim": "birth_date", "op": "gte", "value": 18 }],
+                "contract_terms": "contract B", "timestamp": "2026-03-22T19:00:00Z",
+            }))
+            .send().await.unwrap().json().await.unwrap();
+
+        let n1 = res1["nullifier"].as_str().unwrap();
+        let n2 = res2["nullifier"].as_str().unwrap();
+        assert_ne!(n1, n2, "different contracts must produce different nullifiers");
+    }
+
+    #[tokio::test]
+    #[serial]
+    async fn contract_prove_no_predicates_returns_error() {
+        let (url, cred) = issue_test_credential(serde_json::json!({
+            "given_name": "Test", "birth_date": "1998-05-14", "document_number": "UA-TEST-003"
+        })).await;
+        let client = reqwest::Client::new();
+        let res = client
+            .post(format!("{url}/holder/contract-prove"))
+            .json(&serde_json::json!({
+                "credential": cred, "format": "sdjwt",
+                "predicates": [],
+                "contract_terms": "test", "timestamp": "2026-03-22",
+            }))
+            .send().await.unwrap();
+        assert_eq!(res.status().as_u16(), 500, "empty predicates should fail");
+    }
+
+    #[tokio::test]
+    #[serial]
+    async fn contract_prove_route_is_reachable() {
+        let url = light_setup().await;
+        let client = reqwest::Client::new();
+        // Just verify the route exists (not a 404/HTML fallback)
+        let res = client
+            .post(format!("{url}/holder/contract-prove"))
+            .json(&serde_json::json!({
+                "credential": "invalid",
+                "format": "sdjwt",
+                "predicates": [{ "claim": "x", "op": "gte", "value": 1 }],
+                "contract_terms": "t",
+                "timestamp": "2026-03-22",
+            }))
+            .send().await.unwrap();
+        let status = res.status().as_u16();
+        let body = res.text().await.unwrap();
+        // Should get a parse error, NOT an HTML page
+        assert!(status == 400 || status == 500, "expected API error, got {status}");
+        assert!(!body.contains("<!DOCTYPE"), "got HTML instead of API response — route not registered");
+    }
 }
