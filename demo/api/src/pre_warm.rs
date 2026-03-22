@@ -405,6 +405,59 @@ async fn main() {
         }
     }
 
+    // Pre-warm ECDSA commitment cache for contract nullifier generation.
+    // This calls /holder/contract-prove which triggers ensure_ecdsa for the
+    // credential_id field and caches the result in the server's runtime memory.
+    // Without this, the first contract-prove call takes ~90s for ECDSA proving.
+    let contract_presets: Vec<(&str, serde_json::Value, serde_json::Value, &str)> = vec![
+        // PID seller/buyer — credential_id = document_number
+        ("pid", presets[0].1.clone(), serde_json::json!([
+            { "claim": "birth_date", "op": "gte", "value": 18 }
+        ]), presets[0].3),
+        // Vehicle — credential_id = vin
+        ("vehicle", presets[3].1.clone(), serde_json::json!([
+            { "claim": "insurance_expiry", "op": "gte", "value": epoch_days_today() },
+            { "claim": "vin", "op": "neq", "value": "REVOKED" }
+        ]), presets[3].3),
+    ];
+
+    for (cred_type, claims, predicates, issuer) in &contract_presets {
+        println!("\n[ecdsa-warm] Pre-warming ECDSA for {cred_type} contract nullifier");
+
+        let issue_res: serde_json::Value = client
+            .post(format!("{base_url}/issuer/issue"))
+            .json(&serde_json::json!({
+                "credential_type": cred_type,
+                "claims": claims,
+                "issuer": issuer,
+            }))
+            .send().await.expect("issue failed")
+            .json().await.expect("parse failed");
+
+        let credential = issue_res["credential"].as_str().unwrap();
+        let format = issue_res["format"].as_str().unwrap();
+
+        let t0 = std::time::Instant::now();
+        let res = client
+            .post(format!("{base_url}/holder/contract-prove"))
+            .json(&serde_json::json!({
+                "credential": credential,
+                "format": format,
+                "predicates": predicates,
+                "contract_terms": "pre-warm",
+                "timestamp": "2026-01-01T00:00:00Z",
+            }))
+            .send().await.expect("contract-prove failed");
+
+        if res.status().is_success() {
+            let data: serde_json::Value = res.json().await.unwrap();
+            println!("  ECDSA cached in {:.1}s — nullifier: {}", t0.elapsed().as_secs_f64(),
+                data["nullifier"].as_str().unwrap_or("?"));
+        } else {
+            eprintln!("  FAILED: {}", res.text().await.unwrap_or_default());
+        }
+    }
+
     // Write cache
     let cache_path = std::env::var("CACHE_OUTPUT")
         .map(std::path::PathBuf::from)
