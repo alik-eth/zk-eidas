@@ -371,7 +371,7 @@ function HolderStep({ state, setState, t }: { state: WizardState; setState: Reac
         op: effectiveMode === 'or' ? 'Or' : 'And',
         ecdsa_proofs: Object.fromEntries(
           [...new Set(userPredicates.map(p => p.claim))].map(claim => {
-            const ecdsaForClaim = result.ecdsaProof; // simplified — uses first ECDSA
+            const ecdsaForClaim = result.ecdsaProofs.get(claim) ?? result.ecdsaProof;
             return [claim, {
               proof_bytes: Array.from(new TextEncoder().encode(JSON.stringify(ecdsaForClaim.proof))),
               public_inputs: ecdsaForClaim.publicSignals.map(s => Array.from(new TextEncoder().encode(s))),

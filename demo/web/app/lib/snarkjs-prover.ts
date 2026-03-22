@@ -8,6 +8,7 @@ export interface BrowserProofResult {
 
 export interface BrowserCompoundResult {
   ecdsaProof: BrowserProofResult;
+  ecdsaProofs: Map<string, BrowserProofResult>;
   predicateProofs: BrowserProofResult[];
   totalTimeMs: number;
 }
@@ -196,12 +197,15 @@ export async function proveCompoundInBrowser(
     predicateProofs.push(predResult);
   }
 
-  // Return the first ECDSA result (for backward compat)
   const firstEcdsa = ecdsaCache.values().next().value!;
+  const ecdsaProofs = new Map<string, BrowserProofResult>();
+  for (const [claim, { result }] of ecdsaCache) {
+    ecdsaProofs.set(claim, result);
+  }
   const totalTimeMs = performance.now() - totalStart;
   onProgress?.("done", `All proofs generated in ${(totalTimeMs / 1000).toFixed(1)}s`);
 
-  return { ecdsaProof: firstEcdsa.result, predicateProofs, totalTimeMs };
+  return { ecdsaProof: firstEcdsa.result, ecdsaProofs, predicateProofs, totalTimeMs };
 }
 
 /** Check how much circuit data is cached. */
