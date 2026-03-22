@@ -1427,6 +1427,7 @@ fn fnv_hash(data: &[u8]) -> u64 {
 struct LoadedCache {
     proofs: HashMap<String, CachedProof>,
     bindings: HashMap<String, CachedBindingProof>,
+    ecdsa_commitments: HashMap<u64, (Vec<u8>, Vec<u8>, Vec<u8>)>,
 }
 
 fn load_proof_cache(api_dir: &str) -> LoadedCache {
@@ -1440,7 +1441,7 @@ fn load_proof_cache(api_dir: &str) -> LoadedCache {
         Some(p) => p.clone(),
         None => {
             eprintln!("[cache] No proof-cache.json found, running without cache");
-            return LoadedCache { proofs: HashMap::new(), bindings: HashMap::new() };
+            return LoadedCache { proofs: HashMap::new(), bindings: HashMap::new(), ecdsa_commitments: HashMap::new() };
         }
     };
     let data = std::fs::read_to_string(&cache_path).unwrap_or_default();
@@ -1448,7 +1449,7 @@ fn load_proof_cache(api_dir: &str) -> LoadedCache {
         Ok(v) => v,
         Err(e) => {
             eprintln!("[cache] Failed to parse proof-cache.json: {e}");
-            return LoadedCache { proofs: HashMap::new(), bindings: HashMap::new() };
+            return LoadedCache { proofs: HashMap::new(), bindings: HashMap::new(), ecdsa_commitments: HashMap::new() };
         }
     };
     let mut proofs = HashMap::new();
@@ -1467,9 +1468,26 @@ fn load_proof_cache(api_dir: &str) -> LoadedCache {
             }
         }
     }
-    eprintln!("[cache] Loaded {} cached proofs + {} bindings from {}",
-        proofs.len(), bindings.len(), cache_path.display());
-    LoadedCache { proofs, bindings }
+    let mut ecdsa_commitments = HashMap::new();
+    if let Some(entries) = parsed["ecdsa_commitments"].as_object() {
+        for (key, entry) in entries {
+            if let (Some(commitment), Some(sd_hash), Some(msg_hash)) = (
+                entry["commitment"].as_array(),
+                entry["sd_array_hash"].as_array(),
+                entry["message_hash"].as_array(),
+            ) {
+                let to_bytes = |arr: &Vec<serde_json::Value>| -> Vec<u8> {
+                    arr.iter().filter_map(|v| v.as_u64().map(|n| n as u8)).collect()
+                };
+                if let Ok(cid) = key.parse::<u64>() {
+                    ecdsa_commitments.insert(cid, (to_bytes(commitment), to_bytes(sd_hash), to_bytes(msg_hash)));
+                }
+            }
+        }
+    }
+    eprintln!("[cache] Loaded {} cached proofs + {} bindings + {} ecdsa commitments from {}",
+        proofs.len(), bindings.len(), ecdsa_commitments.len(), cache_path.display());
+    LoadedCache { proofs, bindings, ecdsa_commitments }
 }
 
 // === Circuit Artifact Serving ===
@@ -1654,7 +1672,7 @@ pub fn build_app(circuits_path: &str) -> Router {
         prove_semaphore: Semaphore::new(1),  // one proof at a time
         proof_cache: loaded.proofs,
         binding_cache: loaded.bindings,
-        ecdsa_cache: Arc::new(std::sync::Mutex::new(HashMap::new())),
+        ecdsa_cache: Arc::new(std::sync::Mutex::new(loaded.ecdsa_commitments)),
     });
 
     Router::new()

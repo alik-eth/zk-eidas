@@ -40,11 +40,20 @@ struct ProofResultEntry {
 }
 
 #[derive(Serialize, Deserialize)]
+struct EcdsaCommitmentEntry {
+    commitment: Vec<u8>,
+    sd_array_hash: Vec<u8>,
+    message_hash: Vec<u8>,
+}
+
+#[derive(Serialize, Deserialize)]
 struct ProofCache {
     generated_at: String,
     entries: HashMap<String, CacheEntry>,
     #[serde(default)]
     binding_entries: HashMap<String, BindingCacheEntry>,
+    #[serde(default)]
+    ecdsa_commitments: HashMap<String, EcdsaCommitmentEntry>,
 }
 
 /// Compute a binding cache key — MUST match compute_binding_cache_key in main.rs
@@ -94,6 +103,7 @@ async fn main() {
         generated_at: chrono_now(),
         entries: HashMap::new(),
         binding_entries: HashMap::new(),
+        ecdsa_commitments: HashMap::new(),
     };
 
     let presets: Vec<(&str, serde_json::Value, serde_json::Value, &str)> = vec![
@@ -449,12 +459,25 @@ async fn main() {
             }))
             .send().await.expect("contract-prove failed");
 
-        if res.status().is_success() {
-            let data: serde_json::Value = res.json().await.unwrap();
-            println!("  ECDSA cached in {:.1}s — nullifier: {}", t0.elapsed().as_secs_f64(),
-                data["nullifier"].as_str().unwrap_or("?"));
-        } else {
+        if !res.status().is_success() {
             eprintln!("  FAILED: {}", res.text().await.unwrap_or_default());
+            continue;
+        }
+
+        let data: serde_json::Value = res.json().await.unwrap();
+        println!("  ECDSA proved in {:.1}s — nullifier: {}", t0.elapsed().as_secs_f64(),
+            data["nullifier"].as_str().unwrap_or("?"));
+
+        // Extract ECDSA commitment from the compound proof and save to cache
+        let id_field = if *cred_type == "vehicle" { "vin" } else { "document_number" };
+        let doc_val = claims[id_field].as_str().unwrap_or("");
+        let cid = credential_id_u64(doc_val);
+
+        if let Some(entry) = extract_ecdsa_commitment(&data, id_field) {
+            println!("  Cached ECDSA commitment for {id_field}={doc_val} (cid={cid})");
+            cache.ecdsa_commitments.insert(cid.to_string(), entry);
+        } else {
+            eprintln!("  WARNING: could not extract ECDSA commitment from response");
         }
     }
 
@@ -464,8 +487,40 @@ async fn main() {
         .unwrap_or_else(|_| std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("proof-cache.json"));
     let json = serde_json::to_string_pretty(&cache).unwrap();
     std::fs::write(&cache_path, &json).unwrap();
-    println!("\n✓ Cache written to {} ({} proof entries + {} binding entries, {:.1} KB)",
-        cache_path.display(), cache.entries.len(), cache.binding_entries.len(), json.len() as f64 / 1024.0);
+    println!("\n✓ Cache written to {} ({} proofs + {} bindings + {} ecdsa, {:.1} KB)",
+        cache_path.display(), cache.entries.len(), cache.binding_entries.len(),
+        cache.ecdsa_commitments.len(), json.len() as f64 / 1024.0);
+}
+
+fn json_array_to_bytes(v: &serde_json::Value) -> Vec<u8> {
+    v.as_array()
+        .map(|a| a.iter().filter_map(|x| x.as_u64().map(|n| n as u8)).collect())
+        .unwrap_or_default()
+}
+
+/// Extract ECDSA commitment data from a contract-prove response.
+/// Returns (commitment, sd_array_hash, message_hash) for caching.
+fn extract_ecdsa_commitment(data: &serde_json::Value, id_field: &str) -> Option<EcdsaCommitmentEntry> {
+    let cpj = data["compound_proof_json"].as_str()?;
+    let compound: serde_json::Value = serde_json::from_str(cpj).ok()?;
+
+    // ECDSA proof for credential_id field has public_inputs:
+    // [commitment, sd_array_hash, msg_hash_field, pub_key_x[6], pub_key_y[6]]
+    let ecdsa_inputs = compound["ecdsa_proofs"][id_field]["public_inputs"].as_array()?;
+    if ecdsa_inputs.len() < 3 { return None; }
+
+    Some(EcdsaCommitmentEntry {
+        commitment: json_array_to_bytes(&ecdsa_inputs[0]),
+        sd_array_hash: json_array_to_bytes(&ecdsa_inputs[1]),
+        message_hash: json_array_to_bytes(&ecdsa_inputs[2]),
+    })
+}
+
+/// Same as claim_to_u64_or_hash in the main crate — SHA256(string) → u64 big-endian.
+fn credential_id_u64(doc_number: &str) -> u64 {
+    use sha2::{Sha256, Digest};
+    let hash = Sha256::digest(doc_number.as_bytes());
+    u64::from_be_bytes(hash[..8].try_into().unwrap())
 }
 
 fn epoch_days_today() -> i64 {
