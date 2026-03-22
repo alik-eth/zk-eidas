@@ -1116,7 +1116,93 @@ async fn contract_prove(
     let hash: [u8; 32] = hasher.finalize().into();
     let contract_hash = u64::from_be_bytes(hash[..8].try_into().unwrap());
 
-    // 3. Parse credential
+    // 3. Check predicate proof cache — same key as prove-compound
+    let cache_preds: Vec<serde_json::Value> = req.predicates.iter().map(|p| {
+        if matches!(p.op.as_str(), "gte" | "lte") {
+            serde_json::json!({"claim": p.claim, "op": p.op})
+        } else {
+            serde_json::json!({"claim": p.claim, "op": p.op, "value": p.value})
+        }
+    }).collect();
+    let cache_key_material = format!("{}|{}", req.format, serde_json::to_string(&cache_preds).unwrap());
+    let cache_key = format!("{:016x}", fnv_hash(cache_key_material.as_bytes()));
+
+    if let Some(cached) = state.proof_cache.get(&cache_key) {
+        eprintln!("[contracts/prove] CACHE HIT for predicates, key {cache_key}");
+        // Cached predicate proof found — just need to generate the nullifier
+        // Parse the cached compound proof, attach nullifier, return
+        let mut compound: zk_eidas_types::proof::CompoundProof =
+            serde_json::from_str(&cached.compound_proof_json)
+                .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("cache parse: {e}")))?;
+
+        // Generate nullifier for the cached proof — need ECDSA for credential_id field
+        let all_field_names_cached = cached.hidden_fields.iter()
+            .chain(req.predicates.iter().map(|p| &p.claim))
+            .cloned()
+            .collect::<std::collections::HashSet<_>>();
+        let id_field_candidates = ["document_number", "license_number", "diploma_number", "vin", "student_number"];
+        let credential_id_field = id_field_candidates.iter()
+            .find(|f| all_field_names_cached.contains(&f.to_string()))
+            .ok_or_else(|| (StatusCode::BAD_REQUEST, "no credential_id field found".to_string()))?;
+
+        // Parse credential just for nullifier generation
+        let mut builder_for_null = if req.format == "mdoc" {
+            let (mdoc_bytes, pub_key_x, pub_key_y) = parse_mdoc_token(&req.credential)
+                .map_err(|e| (StatusCode::BAD_REQUEST, format!("mdoc token: {e}")))?;
+            let credential = zk_eidas_mdoc::MdocParser::parse_with_issuer_key(&mdoc_bytes, pub_key_x, pub_key_y)
+                .map_err(|e| (StatusCode::BAD_REQUEST, format!("mdoc parse: {e}")))?;
+            zk_eidas::ZkCredential::from_credential(credential, &state.circuits_path)
+        } else {
+            zk_eidas::ZkCredential::from_sdjwt(&req.credential, &state.circuits_path)
+                .map_err(|e| (StatusCode::BAD_REQUEST, format!("parse error: {e}")))?
+        };
+
+        // Only need a dummy predicate so prove_compound doesn't reject empty predicates
+        // Actually, we just need ensure_ecdsa + prove_nullifier directly
+        let cid_field = credential_id_field.to_string();
+        let circuits_path = state.circuits_path.clone();
+        let _permit = state.prove_semaphore.acquire().await
+            .map_err(|_| (StatusCode::SERVICE_UNAVAILABLE, "proving unavailable".into()))?;
+
+        let nullifier_proof = tokio::task::spawn_blocking(move || -> Result<_, (StatusCode, String)> {
+            unsafe { libc::nice(10) };
+            let (commitment, sd_array_hash, message_hash) = builder_for_null.ensure_ecdsa_pub(&cid_field)
+                .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("ecdsa: {e}")))?;
+            let doc_value = builder_for_null.credential().claims().get(&cid_field)
+                .ok_or_else(|| (StatusCode::BAD_REQUEST, format!("claim not found: {cid_field}")))?;
+            let credential_id = zk_eidas::claim_to_u64_or_hash_pub(doc_value);
+            let prover = zk_eidas_prover::Prover::new(&circuits_path);
+            let proof = prover.prove_nullifier(credential_id, contract_hash, salt, &commitment, &sd_array_hash, &message_hash)
+                .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("nullifier: {e}")))?;
+            Ok(proof)
+        }).await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("join: {e}")))??;
+
+        let nullifier_bytes = nullifier_proof.nullifier().unwrap_or(&[0u8; 32]).to_vec();
+        let cn = zk_eidas_types::proof::ContractNullifier {
+            nullifier: nullifier_bytes.clone(),
+            contract_hash: contract_hash.to_be_bytes().to_vec(),
+            salt: salt.to_be_bytes().to_vec(),
+            proof: nullifier_proof,
+        };
+        compound = compound.with_contract_nullifier(cn);
+
+        let compound_proof_json = serde_json::to_string(&compound)
+            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("serialize: {e}")))?;
+
+        return Ok(Json(ContractProveResponse {
+            compound_proof_json,
+            op: cached.op.clone(),
+            sub_proofs_count: cached.sub_proofs_count,
+            hidden_fields: cached.hidden_fields.clone(),
+            nullifier: format!("0x{}", hex::encode(&nullifier_bytes)),
+            contract_hash: format!("0x{:016x}", contract_hash),
+            salt: format!("0x{:016x}", salt),
+        }));
+    }
+    eprintln!("[contracts/prove] CACHE MISS for predicates, key {cache_key}");
+
+    // 4. Parse credential (no cache — full proving path)
     let (mut builder, all_field_names) = if req.format == "mdoc" {
         let (mdoc_bytes, pub_key_x, pub_key_y) = parse_mdoc_token(&req.credential)
             .map_err(|e| (StatusCode::BAD_REQUEST, format!("mdoc token: {e}")))?;

@@ -24,6 +24,6 @@
 mod builder;
 pub mod openid4vp;
 pub mod templates;
-pub use builder::{age_cutoff_epoch_days_from, Predicate, ZkCredential, ZkError, ZkVerifier};
+pub use builder::{age_cutoff_epoch_days_from, claim_to_u64_or_hash_pub, Predicate, ZkCredential, ZkError, ZkVerifier};
 pub use zk_eidas_types::envelope::ProofEnvelope;
 pub use zk_eidas_types::proof::{CompoundProof, LogicalOp};

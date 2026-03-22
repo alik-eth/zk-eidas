@@ -135,6 +135,13 @@ impl ZkCredential {
     /// Perform Stage 1 ECDSA proof for a given claim, caching the result.
     ///
     /// Returns `(commitment, sd_array_hash, message_hash)` for use in Stage 2.
+    pub fn ensure_ecdsa_pub(
+        &mut self,
+        claim_name: &str,
+    ) -> Result<(EcdsaCommitment, Vec<u8>, Vec<u8>), ZkError> {
+        self.ensure_ecdsa(claim_name)
+    }
+
     fn ensure_ecdsa(
         &mut self,
         claim_name: &str,
@@ -706,6 +713,10 @@ fn claim_to_u64(value: &ClaimValue) -> Result<u64, ZkError> {
 
 /// Convert a ClaimValue to u64, using a hash for strings/dates.
 /// This is used for eq/neq/set_member where we need to compare arbitrary values.
+pub fn claim_to_u64_or_hash_pub(value: &ClaimValue) -> u64 {
+    claim_to_u64_or_hash(value)
+}
+
 fn claim_to_u64_or_hash(value: &ClaimValue) -> u64 {
     match claim_to_u64(value) {
         Ok(v) => v,
