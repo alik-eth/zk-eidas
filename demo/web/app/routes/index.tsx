@@ -338,10 +338,16 @@ function CredentialShowcase() {
             transform: stampTransform,
           }}
         >
-          <div className="border-2 border-emerald-500/60 rounded-lg px-4 py-1.5">
-            <span className="text-emerald-500/70 text-sm font-black tracking-[0.15em] uppercase whitespace-nowrap">
-              {t("cred.zkVerified")}
-            </span>
+          <div className="border-2 border-emerald-500/60 rounded-lg px-3 py-2 space-y-0.5">
+            <p className="text-emerald-500/80 text-[10px] font-bold tracking-wide whitespace-nowrap">
+              {t("cred.conditions")}
+            </p>
+            <p className="text-slate-400 text-[9px] font-mono whitespace-nowrap">
+              {t("cred.nullifier")}
+            </p>
+            <p className="text-emerald-500/60 text-[9px] font-medium whitespace-nowrap">
+              {t("cred.noPersonalData")}
+            </p>
           </div>
           {/* Revoke button — appears below stamp */}
           <div className="flex justify-center mt-3">
@@ -1216,6 +1222,13 @@ function PaperContractsSection() {
                 {t("paperContracts.noNames")}
               </p>
             </div>
+            <div className="pt-2 border-t border-emerald-900/30 mt-2">
+              {t("paperContracts.courtResolution").split("\n").map((line, i) => (
+                <p key={i} className="text-[10px] text-slate-400 leading-relaxed">
+                  {line}
+                </p>
+              ))}
+            </div>
           </div>
         </div>
       </div>
@@ -1367,8 +1380,11 @@ function Landing() {
               {t("hero.subtitle")}
             </p>
             <p className="text-base text-slate-400 mb-3">{t("hero.tagline")}</p>
-            <p className="text-sm text-slate-500 mb-8 leading-relaxed">
+            <p className="text-sm text-slate-500 mb-4 leading-relaxed">
               {t("hero.description")}
+            </p>
+            <p className="text-sm text-slate-300 font-semibold mb-8">
+              {t("hero.closing")}
             </p>
             <div className="flex items-center gap-3">
               <Link
@@ -1406,8 +1422,19 @@ function Landing() {
 
       <PaperContractsSection />
 
+      {/* Research note */}
+      <div className="max-w-5xl mx-auto px-4 sm:px-8 py-10 border-t border-slate-800 mt-8">
+        <div className="max-w-2xl mx-auto text-center">
+          {t("footer.research").split("\n").map((line, i) => (
+            <p key={i} className={`text-xs leading-relaxed ${line === "" ? "h-3" : i >= 3 ? "text-slate-500 italic" : "text-slate-400"}`}>
+              {line}
+            </p>
+          ))}
+        </div>
+      </div>
+
       {/* Footer */}
-      <footer className="border-t border-slate-800 px-4 sm:px-8 py-8 mt-8">
+      <footer className="border-t border-slate-800 px-4 sm:px-8 py-8">
         <div className="max-w-5xl mx-auto flex items-center justify-between text-sm text-slate-500">
           <span>{t("footer.license")}</span>
           <div className="flex items-center gap-6">

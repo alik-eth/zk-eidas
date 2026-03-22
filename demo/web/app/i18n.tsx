@@ -24,16 +24,20 @@ const translations: Record<string, Record<Locale, string>> = {
 
   // ── Hero ────────────────────────────────────────────────────────────────
   "hero.subtitle": {
-    en: "Privacy-Preserving Credential Verification for eIDAS 2.0",
-    uk: "Приватна верифікація посвідчень для eIDAS 2.0",
+    en: "Civil law documents without personal data",
+    uk: "Цивільні документи без персональних даних",
   },
   "hero.tagline": {
-    en: "Prove who you are without revealing what you are.",
-    uk: "Доведіть, хто ви є, не розкриваючи ваших даних.",
+    en: "Backward compatible with paper.",
+    uk: "Зворотна сумісність з папером.",
   },
   "hero.description": {
-    en: 'An open-source Rust library that generates zero-knowledge proofs over eIDAS 2.0 credentials \u2014 from national IDs and driver\u2019s licenses to university diplomas and vehicle registrations. A citizen proves "I am over 18" or "my license includes category B" and the verifier learns nothing else.',
-    uk: 'Бібліотека з відкритим кодом на Rust для генерації доказів з нульовим розголошенням для eIDAS 2.0 посвідчень \u2014 від національних ID та водійських прав до дипломів та реєстрацій авто. Громадянин доводить "мені більше 18" або "мої права включають категорію B" і верифікатор не дізнається нічого іншого.',
+    en: "An open-source protocol for creating legal documents where every condition is cryptographically proven, zero personal data is exposed, and consent is expressed as a concludent act \u2014 binding a credential to contract terms inside a ZK circuit. Nullifiers enable courts to identify parties through credential issuer subpoena \u2014 and only through judicial process.",
+    uk: "Протокол з відкритим кодом для створення юридичних документів де кожна умова криптографічно доведена, жодних персональних даних не розкрито, а згода виражається як конклюдентна дія \u2014 прив\u2019язка посвідчення до умов договору всередині ZK-схеми. Нуліфікатори дозволяють суду ідентифікувати сторони через запит до видавця \u2014 і тільки через судовий процес.",
+  },
+  "hero.closing": {
+    en: "Privacy by default. Accountability by court order.",
+    uk: "Приватність за замовчуванням. Відповідальність за судовим рішенням.",
   },
   "hero.tryDemo": { en: "Try the Demo", uk: "Спробувати демо" },
   "hero.viewGithub": { en: "View on GitHub", uk: "Переглянути на GitHub" },
@@ -235,20 +239,20 @@ const translations: Record<string, Record<Locale, string>> = {
 
   // ── Capabilities ─────────────────────────────────────────────────────────
   "caps.title": {
-    en: "Beyond Proof Generation",
-    uk: "Більше ніж генерація доказів",
+    en: "Beyond Verification \u2014 A New Type of Document",
+    uk: "Більше ніж верифікація \u2014 новий тип документу",
   },
   "caps.subtitle": {
     en: "Zero-knowledge proofs are just the start. Verify in the browser, print on paper, generate legally-styled documents — all without a server.",
     uk: "Докази з нульовим розголошенням — лише початок. Перевіряйте у браузері, друкуйте на папері, створюйте юридичні документи — без сервера.",
   },
   "caps.wasmTitle": {
-    en: "Client-Side Verification",
-    uk: "Перевірка на стороні клієнта",
+    en: "Consent as Concludent Act",
+    uk: "Згода як конклюдентна дія",
   },
   "caps.wasmDesc": {
-    en: "Verify proofs directly in your browser. Sub-100ms. No server, no round-trips — everything happens on your device.",
-    uk: "Перевіряйте докази прямо у браузері. Менше 100мс. Без сервера, без запитів — все відбувається на вашому пристрої.",
+    en: "Binding a credential to the contract hash inside a ZK circuit. Impossible to forge, impossible to deny, bound to specific terms. Stronger than a signature.",
+    uk: "Прив\u2019язка посвідчення до хешу контракту всередині ZK-схеми. Неможливо підробити, неможливо заперечити, прив\u2019язано до конкретних умов. Сильніше за підпис.",
   },
   "caps.wasmCta": {
     en: "Try it in the playground",
@@ -267,12 +271,12 @@ const translations: Record<string, Record<Locale, string>> = {
     uk: "Спробувати офлайн-перевірку",
   },
   "caps.contractsTitle": {
-    en: "Privacy-Preserving Contracts",
-    uk: "Приватні контракти",
+    en: "Dispute Resolution Through Court",
+    uk: "Вирішення спорів через суд",
   },
   "caps.contractsDesc": {
-    en: "Verify all credentials needed for a contract without putting sensitive data in it. ZK proofs replace personal details — the document proves compliance, not identity.",
-    uk: "Перевірте всі облікові дані для контракту, не вносячи персональних даних. ZK-докази замінюють особисту інформацію — документ підтверджує відповідність, а не особу.",
+    en: "Nullifiers are unique per contract, unlinkable across documents. A court subpoenas the credential issuer \u2014 and only the issuer can identify the party. Privacy by default, accountability by court order.",
+    uk: "Нуліфікатори \u2014 унікальні для кожного контракту, незв\u2019язувані між документами. Суд запитує видавця посвідчень \u2014 і тільки видавець може ідентифікувати сторону. Приватність за замовчуванням, відповідальність за судовим рішенням.",
   },
   "caps.contractsCta": {
     en: "Try the demo",
@@ -371,8 +375,8 @@ const translations: Record<string, Record<Locale, string>> = {
 
   // ── Paper Contracts ───────────────────────────────────────────────────
   "paperContracts.title": {
-    en: "ZK Proofs: Paper Contracts\u2019 Ultimate Upgrade",
-    uk: "ZK-докази: найкраще оновлення паперових контрактів",
+    en: "Bureaucracy 2.0: Contracts Without Personal Data",
+    uk: "Бюрократія 2.0: контракт без персональних даних",
   },
   "paperContracts.subtitle": {
     en: "Today, selling a car means handing over your full name, address, birth date, and ID number to a stranger. ZK proofs change that: every contractual condition is cryptographically proven without revealing any personal data.",
@@ -405,6 +409,10 @@ const translations: Record<string, Record<Locale, string>> = {
   "paperContracts.noNames": {
     en: "Zero personal data disclosed. Every condition machine-verifiable.",
     uk: "Жодних персональних даних. Кожна умова верифікується машиною.",
+  },
+  "paperContracts.courtResolution": {
+    en: "Dispute? Court subpoenas the credential issuer by nullifier.\nThe issuer searches their database \u2014 finds the counterparty.\nIdentification is a judicial act, not a property of the document.",
+    uk: "Спір? Суд запитує видавця посвідчень за нуліфікатором.\nВидавець перебирає свою базу \u2014 знаходить контрагента.\nІдентифікація \u2014 судова дія, а не властивість документу.",
   },
   "paperContracts.qrLabel": {
     en: "Real QR codes embedding compressed ZK proofs — scannable and verifiable offline",
@@ -466,6 +474,10 @@ const translations: Record<string, Record<Locale, string>> = {
   "stats.license": { en: "License", uk: "Ліцензія" },
 
   // ── Footer ──────────────────────────────────────────────────────────────
+  "footer.research": {
+    en: 'A research project at the intersection of cryptography and civil law.\nExtending the "verification dilemmas" framework (Bamberger, Goldwasser, Wexler, 2022) to persistent legal documents.\n\nBuilt in Ukraine during wartime. That\u2019s why \u2014 backward compatible with paper.',
+    uk: "Дослідницький проект на перетині криптографії та цивільного права.\nРозширює рамку \u201Cverification dilemmas\u201D (Bamberger, Goldwasser, Wexler, 2022) на персистентні юридичні документи.\n\nРозроблено в Україні під час війни. Тому \u2014 сумісність з папером.",
+  },
   "footer.license": {
     en: "Apache 2.0 License \u00B7 Open Source",
     uk: "Ліцензія Apache 2.0 \u00B7 Відкритий код",
@@ -990,6 +1002,18 @@ const translations: Record<string, Record<Locale, string>> = {
   "cred.authority": { en: "Authority", uk: "Орган" },
   "cred.hidden": { en: "hidden", uk: "приховано" },
   "cred.zkVerified": { en: "ZK Verified", uk: "ZK Верифіковано" },
+  "cred.conditions": {
+    en: "Conditions: \u2713 age \u2265 18 | \u2713 vehicle owner",
+    uk: "Умови: \u2713 вік \u2265 18 | \u2713 власник ТЗ",
+  },
+  "cred.nullifier": {
+    en: "Nullifier: 0x8a3f\u2026e721",
+    uk: "Нуліфікатор: 0x8a3f\u2026e721",
+  },
+  "cred.noPersonalData": {
+    en: "Personal data: none",
+    uk: "Персональні дані: жодних",
+  },
   "cred.revoke": { en: "Revoke", uk: "Відкликати" },
   "cred.sigLine": { en: "sig: secp256r1 verified in-circuit", uk: "secp256r1 в схемі" },
   "cred.proofSize": { en: "ZK proof: 2.1 KB", uk: "ZK: 2.1 КБ" },
