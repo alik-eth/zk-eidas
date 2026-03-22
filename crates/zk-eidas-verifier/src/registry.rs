@@ -84,7 +84,11 @@ impl RegistryVerifier {
 
     /// Verify a proof using the pre-loaded verification key from the registry.
     pub fn verify(&self, proof: &ZkProof) -> Result<bool, VerifierError> {
-        let vk_json = self.registry.get(proof.predicate_op()).ok_or_else(|| {
+        let op = match proof.predicate_op() {
+            PredicateOp::Reveal => PredicateOp::Eq,
+            other => other,
+        };
+        let vk_json = self.registry.get(op).ok_or_else(|| {
             VerifierError::CircuitLoadFailed(format!(
                 "no trusted circuit for {:?}",
                 proof.predicate_op()

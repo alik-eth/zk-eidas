@@ -45,9 +45,13 @@ impl Verifier {
         op: PredicateOp,
     ) -> Result<bool, VerifierError> {
         // 1. Load circuit artifacts to find the vk.json path
+        let resolved_op = match op {
+            PredicateOp::Reveal => PredicateOp::Eq,
+            other => other,
+        };
         let artifacts = self
             .loader
-            .load(op)
+            .load(resolved_op)
             .map_err(|e| VerifierError::CircuitLoadFailed(e.to_string()))?;
 
         // 2. Read the verification key JSON from the trusted vk.json file
