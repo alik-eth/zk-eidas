@@ -265,6 +265,41 @@ pub fn build_compound_proof(proofs_json: &str, op: &str) -> Result<String, JsErr
     Ok(json)
 }
 
+/// Export a CompoundProof to a CBOR-encoded ProofEnvelope.
+///
+/// Replicates the server's export_compound_proof logic:
+/// 1. Parse CompoundProof from JSON
+/// 2. Extract only compound.proofs() (predicate sub-proofs)
+///    — ECDSA proofs and contract_nullifier are NOT included
+/// 3. Map to EnvelopeProof entries
+/// 4. Create ProofEnvelope with logical_op
+/// 5. Serialize to CBOR, optionally compress with deflate
+#[wasm_bindgen]
+pub fn export_to_envelope(compound_proof_json: &str, compress: bool) -> Result<Vec<u8>, JsError> {
+    use zk_eidas_types::proof::CompoundProof;
+    use zk_eidas_types::envelope::ProofEnvelope;
+
+    let compound: CompoundProof = serde_json::from_str(compound_proof_json)
+        .map_err(|e| JsError::new(&format!("invalid compound proof JSON: {e}")))?;
+
+    let descriptions: Vec<String> = compound
+        .proofs()
+        .iter()
+        .map(|p| format!("{:?}", p.predicate_op()))
+        .collect();
+
+    let mut envelope = ProofEnvelope::from_proofs(compound.proofs(), &descriptions);
+    envelope.set_logical_op(Some(compound.op()));
+
+    if compress {
+        envelope.to_compressed_bytes()
+            .map_err(|e| JsError::new(&format!("compression failed: {e}")))
+    } else {
+        envelope.to_bytes()
+            .map_err(|e| JsError::new(&format!("CBOR encode failed: {e}")))
+    }
+}
+
 #[cfg(all(test, target_arch = "wasm32"))]
 mod wasm_tests {
     use super::*;
@@ -475,6 +510,51 @@ mod tests {
         assert_eq!(parsed["ecdsa_proofs"].as_object().unwrap().len(), 1);
         // Op should be "And"
         assert_eq!(parsed["op"], "And");
+    }
+
+    #[test]
+    fn export_to_envelope_roundtrip() {
+        use zk_eidas_types::proof::{ZkProof, CompoundProof, LogicalOp};
+        use zk_eidas_types::predicate::PredicateOp;
+        use zk_eidas_types::envelope::ProofEnvelope;
+
+        let proof1 = ZkProof::new(
+            b"proof1".to_vec(),
+            vec![b"sig1".to_vec()],
+            b"vk1".to_vec(),
+            PredicateOp::Gte,
+        );
+        let compound = CompoundProof::new(vec![proof1], LogicalOp::And);
+        let compound_json = serde_json::to_string(&compound).unwrap();
+
+        let cbor_bytes = export_to_envelope(&compound_json, false).unwrap();
+
+        let envelope = ProofEnvelope::from_bytes(&cbor_bytes).unwrap();
+        assert_eq!(envelope.proofs().len(), 1);
+        assert_eq!(envelope.logical_op(), Some(LogicalOp::And));
+        assert_eq!(envelope.proofs()[0].op, "Gte");
+    }
+
+    #[test]
+    fn export_to_envelope_compressed() {
+        use zk_eidas_types::proof::{ZkProof, CompoundProof, LogicalOp};
+        use zk_eidas_types::predicate::PredicateOp;
+        use zk_eidas_types::envelope::ProofEnvelope;
+
+        let proof1 = ZkProof::new(
+            b"proof1".to_vec(),
+            vec![b"sig1".to_vec()],
+            b"vk1".to_vec(),
+            PredicateOp::Gte,
+        );
+        let compound = CompoundProof::new(vec![proof1], LogicalOp::And);
+        let compound_json = serde_json::to_string(&compound).unwrap();
+
+        let compressed = export_to_envelope(&compound_json, true).unwrap();
+
+        let envelope = ProofEnvelope::from_compressed_bytes(&compressed).unwrap();
+        assert_eq!(envelope.proofs().len(), 1);
+        assert_eq!(envelope.logical_op(), Some(LogicalOp::And));
     }
 
     #[test]
