@@ -1,0 +1,16 @@
+{
+  "name": "zk-eidas-wasm",
+  "type": "module",
+  "version": "0.1.0",
+  "license": "Apache-2.0",
+  "files": [
+    "zk_eidas_wasm_bg.wasm",
+    "zk_eidas_wasm.js",
+    "zk_eidas_wasm.d.ts"
+  ],
+  "main": "zk_eidas_wasm.js",
+  "types": "zk_eidas_wasm.d.ts",
+  "sideEffects": [
+    "./snippets/*"
+  ]
+}
