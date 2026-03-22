@@ -156,6 +156,7 @@ mod tests {
             (PredicateOp::SetMember, "set_member"),
             (PredicateOp::Nullifier, "nullifier"),
             (PredicateOp::HolderBinding, "holder_binding"),
+            (PredicateOp::Reveal, "eq"),
         ];
 
         for (op, expected_name) in ops_and_names {
