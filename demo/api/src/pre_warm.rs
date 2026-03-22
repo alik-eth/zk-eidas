@@ -243,6 +243,45 @@ async fn main() {
             { "claim": "nationality", "op": "set_member", "value": eu_countries() },
             { "claim": "document_number", "op": "eq", "value": "UA-1234567890" }
         ]), "https://diia.gov.ua"),
+
+        // === Contract-specific predicate combos (no eq disclosure, match contract templates exactly) ===
+
+        // student_transit: student_id with active_student only
+        ("student_id", serde_json::json!({
+            "student_name": "Katarzyna Nowak",
+            "university": "Uniwersytet Warszawski",
+            "faculty": "Informatyka",
+            "enrollment_year": "2022",
+            "valid_until": "2026-09-30",
+            "student_number": "PL-UW-STU-22-31547"
+        }), serde_json::json!([
+            { "claim": "valid_until", "op": "gte", "value": epoch_days_today() }
+        ]), "https://uw.edu.pl"),
+
+        // driver_employment: drivers_license with valid + category_b + experienced
+        ("drivers_license", serde_json::json!({
+            "holder_name": "Kadri Tamm", "category": "A, B, C1",
+            "issue_date": "2019-03-22", "expiry_date": "2034-03-22",
+            "restrictions": "None", "license_number": "EE-DL-49301150123"
+        }), serde_json::json!([
+            { "claim": "expiry_date", "op": "gte", "value": epoch_days_today() },
+            { "claim": "category", "op": "eq", "value": "A, B, C1" },
+            { "claim": "issue_date", "op": "lte", "value": epoch_days_years_ago(2) }
+        ]), "https://ppa.ee"),
+
+        // vehicle_sale: vehicle with insured + vin_active
+        ("vehicle", serde_json::json!({
+            "owner_name": "Maximilian Schneider",
+            "owner_document_number": "UA-1234567890",
+            "plate_number": "B-MS 2847",
+            "make_model": "Volkswagen Golf",
+            "vin": "WVWZZZ1JZYW000001",
+            "insurance_expiry": "2027-01-15",
+            "registration_date": "2021-06-10"
+        }), serde_json::json!([
+            { "claim": "insurance_expiry", "op": "gte", "value": epoch_days_today() },
+            { "claim": "vin", "op": "neq", "value": "REVOKED" }
+        ]), "https://kba.de"),
     ];
 
     for (i, (cred_type, claims, predicates, issuer)) in presets.iter().enumerate() {
