@@ -117,6 +117,19 @@ pub enum LogicalOp {
     Or,
 }
 
+/// Court-resolvable nullifier for contract-bound proofs.
+///
+/// Contains the nullifier value, contract_hash, salt (all printed on paper),
+/// and the Groth16 proof that the nullifier was correctly computed from
+/// the issuer-signed credential_id.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ContractNullifier {
+    pub nullifier: Vec<u8>,
+    pub contract_hash: Vec<u8>,
+    pub salt: Vec<u8>,
+    pub proof: ZkProof,
+}
+
 /// A compound proof wrapping multiple sub-proofs with a logical operator.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct CompoundProof {
@@ -124,12 +137,14 @@ pub struct CompoundProof {
     op: LogicalOp,
     #[serde(default)]
     ecdsa_proofs: HashMap<String, ZkProof>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    contract_nullifier: Option<ContractNullifier>,
 }
 
 impl CompoundProof {
     /// Create a compound proof from sub-proofs joined by a logical operator.
     pub fn new(proofs: Vec<ZkProof>, op: LogicalOp) -> Self {
-        Self { proofs, op, ecdsa_proofs: HashMap::new() }
+        Self { proofs, op, ecdsa_proofs: HashMap::new(), contract_nullifier: None }
     }
 
     /// Create a compound proof with associated ECDSA proofs keyed by claim name.
@@ -138,7 +153,18 @@ impl CompoundProof {
         op: LogicalOp,
         ecdsa_proofs: HashMap<String, ZkProof>,
     ) -> Self {
-        Self { proofs, op, ecdsa_proofs }
+        Self { proofs, op, ecdsa_proofs, contract_nullifier: None }
+    }
+
+    /// Attach a contract nullifier to this compound proof.
+    pub fn with_contract_nullifier(mut self, cn: ContractNullifier) -> Self {
+        self.contract_nullifier = Some(cn);
+        self
+    }
+
+    /// Returns the contract nullifier, if one was attached.
+    pub fn contract_nullifier(&self) -> Option<&ContractNullifier> {
+        self.contract_nullifier.as_ref()
     }
 
     /// Returns the sub-proofs.
@@ -189,5 +215,43 @@ mod tests {
         let json = r#"{"proof_bytes":[],"public_inputs":[],"verification_key":[],"predicate_op":"Gte","nullifier":null,"version":2}"#;
         let decoded: ZkProof = serde_json::from_str(json).unwrap();
         assert_eq!(decoded.claim_name(), None);
+    }
+
+    #[test]
+    fn contract_nullifier_serde_roundtrip() {
+        let cn = ContractNullifier {
+            nullifier: vec![1, 2, 3],
+            contract_hash: vec![4, 5, 6],
+            salt: vec![7, 8, 9],
+            proof: ZkProof::new(vec![10], vec![vec![11]], vec![], PredicateOp::Nullifier),
+        };
+        let json = serde_json::to_string(&cn).unwrap();
+        let decoded: ContractNullifier = serde_json::from_str(&json).unwrap();
+        assert_eq!(decoded.nullifier, vec![1, 2, 3]);
+        assert_eq!(decoded.contract_hash, vec![4, 5, 6]);
+        assert_eq!(decoded.salt, vec![7, 8, 9]);
+    }
+
+    #[test]
+    fn compound_proof_with_contract_nullifier_serde() {
+        let cn = ContractNullifier {
+            nullifier: vec![1],
+            contract_hash: vec![2],
+            salt: vec![3],
+            proof: ZkProof::new(vec![], vec![], vec![], PredicateOp::Nullifier),
+        };
+        let compound = CompoundProof::with_ecdsa_proofs(vec![], LogicalOp::And, HashMap::new())
+            .with_contract_nullifier(cn);
+        let json = serde_json::to_string(&compound).unwrap();
+        let decoded: CompoundProof = serde_json::from_str(&json).unwrap();
+        assert!(decoded.contract_nullifier().is_some());
+        assert_eq!(decoded.contract_nullifier().unwrap().nullifier, vec![1]);
+    }
+
+    #[test]
+    fn compound_proof_without_contract_nullifier_backward_compat() {
+        let json = r#"{"proofs":[],"op":"And"}"#;
+        let decoded: CompoundProof = serde_json::from_str(json).unwrap();
+        assert!(decoded.contract_nullifier().is_none());
     }
 }
