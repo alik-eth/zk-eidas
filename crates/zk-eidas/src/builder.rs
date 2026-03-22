@@ -23,6 +23,8 @@ pub enum Predicate {
     And(Vec<Predicate>),
     /// Logical OR over multiple sub-predicates.
     Or(Vec<Predicate>),
+    /// Reveal the actual claim value (uses eq circuit internally).
+    Reveal,
 }
 
 impl Predicate {
@@ -445,6 +447,14 @@ impl ZkCredential {
                 prover
                     .prove_eq(claim_u64, expected_u64, &commitment, &sd_array_hash, &message_hash)
                     .map_err(ZkError::from)
+            }
+            Predicate::Reveal => {
+                let claim_u64 = claim_value.to_circuit_u64();
+                let mut proof = prover
+                    .prove_eq(claim_u64, claim_u64, &commitment, &sd_array_hash, &message_hash)
+                    .map_err(ZkError::from)?;
+                proof.set_predicate_op(zk_eidas_types::predicate::PredicateOp::Reveal);
+                Ok(proof)
             }
             Predicate::Neq(expected) => {
                 let claim_u64 = claim_value.to_circuit_u64();

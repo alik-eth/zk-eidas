@@ -106,6 +106,11 @@ impl ZkProof {
     pub fn predicate_op(&self) -> PredicateOp {
         self.predicate_op
     }
+
+    /// Override the predicate operation (used by Reveal to tag eq proofs).
+    pub fn set_predicate_op(&mut self, op: PredicateOp) {
+        self.predicate_op = op;
+    }
 }
 
 /// Logical operator for compound proofs.

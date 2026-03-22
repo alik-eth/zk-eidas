@@ -88,6 +88,25 @@ fn parse_invalid_sdjwt_returns_error() {
 }
 
 #[test]
+fn prove_reveal_with_missing_claim_returns_error() {
+    let (sdjwt, _key) = zk_eidas_parser::test_utils::build_ecdsa_signed_sdjwt(
+        serde_json::json!({"age": 25}),
+        "test-issuer",
+    );
+
+    let result = ZkCredential::from_sdjwt(&sdjwt, CIRCUITS)
+        .unwrap()
+        .predicate("nonexistent", Predicate::Reveal)
+        .prove();
+
+    assert!(result.is_err());
+    assert!(
+        matches!(result.unwrap_err(), ZkError::ClaimNotFound(ref name) if name == "nonexistent"),
+        "expected ClaimNotFound for reveal on missing claim"
+    );
+}
+
+#[test]
 fn prove_all_with_no_predicates_returns_empty() {
     let (sdjwt, _key) = zk_eidas_parser::test_utils::build_ecdsa_signed_sdjwt(
         serde_json::json!({"age": 25}),
