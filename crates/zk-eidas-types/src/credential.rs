@@ -1,4 +1,6 @@
+use num_bigint::BigInt;
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
 
 /// A typed claim value extracted from a credential.
@@ -50,6 +52,41 @@ impl ClaimValue {
         Ok(ClaimValue::Date { year, month, day })
     }
 
+    /// Parse a "YYYY-MM-DD" string into a validated `Date` claim value.
+    ///
+    /// Returns an error if the string is not in the expected format or if the
+    /// date components are out of range.
+    pub fn from_date_str(s: &str) -> Result<Self, &'static str> {
+        let parts: Vec<&str> = s.split('-').collect();
+        if parts.len() != 3 {
+            return Err("expected YYYY-MM-DD format");
+        }
+        let year: u16 = parts[0].parse().map_err(|_| "invalid year")?;
+        let month: u8 = parts[1].parse().map_err(|_| "invalid month")?;
+        let day: u8 = parts[2].parse().map_err(|_| "invalid day")?;
+        ClaimValue::date(year, month, day)
+    }
+
+    /// Convert a claim value to u64 for circuit input.
+    ///
+    /// Integers/booleans/dates map directly to u64. Strings are hashed via
+    /// SHA-256 and the first 8 bytes are used as a big-endian u64.
+    /// Negative integers are clamped to 0 for unsigned circuit compatibility.
+    pub fn to_circuit_u64(&self) -> u64 {
+        match self {
+            ClaimValue::Integer(n) => (*n).max(0) as u64,
+            ClaimValue::Boolean(b) => *b as u64,
+            ClaimValue::Date { year, month, day } => {
+                zk_eidas_utils::date_to_epoch_days(*year as u32, *month as u32, *day as u32)
+                    .max(0) as u64
+            }
+            ClaimValue::String(s) => {
+                let hash: [u8; 32] = Sha256::digest(s.as_bytes()).into();
+                bytes_to_u64(&hash)
+            }
+        }
+    }
+
     /// Convert claim value to a byte vector suitable for circuit witness.
     /// Integers/booleans/dates -> 8 bytes (u64 big-endian).
     /// Strings -> 32 bytes (SHA-256 hash).
@@ -78,6 +115,47 @@ impl ClaimValue {
             }
         }
     }
+}
+
+/// Convert the first 8 bytes of a 32-byte array to u64 (big-endian).
+pub fn bytes_to_u64(bytes: &[u8; 32]) -> u64 {
+    u64::from_be_bytes(bytes[..8].try_into().unwrap())
+}
+
+/// Convert the first 8 bytes of a byte slice to u64 (big-endian).
+///
+/// If the slice is shorter than 8 bytes, it is right-aligned (zero-padded on the left).
+pub fn bytes_to_u64_from_slice(bytes: &[u8]) -> u64 {
+    if bytes.len() >= 8 {
+        u64::from_be_bytes(bytes[..8].try_into().unwrap())
+    } else {
+        let mut buf = [0u8; 8];
+        let start = 8 - bytes.len();
+        buf[start..].copy_from_slice(bytes);
+        u64::from_be_bytes(buf)
+    }
+}
+
+/// Convert a 32-byte big-endian scalar into 6 limbs of 43 bits each.
+///
+/// The ECDSA circuit uses k=6, n=43 encoding: each P-256 scalar is split
+/// into 6 limbs where limb\[i\] contains bits \[43*i .. 43*(i+1)).
+/// Limbs are little-endian (limb\[0\] is the least significant).
+pub fn to_43bit_limbs(bytes: &[u8; 32]) -> [BigInt; 6] {
+    let value = BigInt::from_bytes_be(num_bigint::Sign::Plus, bytes);
+    let mask = (BigInt::from(1) << 43) - 1;
+    let mut limbs = [
+        BigInt::from(0),
+        BigInt::from(0),
+        BigInt::from(0),
+        BigInt::from(0),
+        BigInt::from(0),
+        BigInt::from(0),
+    ];
+    for (i, limb) in limbs.iter_mut().enumerate() {
+        *limb = (&value >> (43 * i)) & &mask;
+    }
+    limbs
 }
 
 /// Error converting a claim value to a field element.

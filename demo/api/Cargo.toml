@@ -9,7 +9,6 @@ zk-eidas-parser = { path = "../../crates/zk-eidas-parser" }
 zk-eidas-types = { path = "../../crates/zk-eidas-types" }
 zk-eidas-mdoc = { path = "../../crates/zk-eidas-mdoc" }
 zk-eidas-utils = { path = "../../crates/zk-eidas-utils" }
-zk-eidas-prover = { path = "../../crates/zk-eidas-prover" }
 axum = "0.8"
 tokio = { version = "1", features = ["full"] }
 serde = { version = "1", features = ["derive"] }

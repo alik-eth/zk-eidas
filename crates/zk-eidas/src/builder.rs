@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use sha2::{Digest, Sha256};
 use zk_eidas_prover::SignedProofInput;
 use zk_eidas_types::commitment::EcdsaCommitment;
-use zk_eidas_types::credential::{ClaimValue, Credential};
+use zk_eidas_types::credential::{bytes_to_u64, ClaimValue, Credential};
 use zk_eidas_types::proof::{CompoundProof, ContractNullifier, LogicalOp, ZkProof};
 
 /// High-level predicate for the builder API.
@@ -126,6 +126,48 @@ impl ZkCredential {
         self
     }
 
+    /// Generate a contract nullifier proof for the given credential ID field.
+    ///
+    /// This is useful when you already have a cached `CompoundProof` and only need
+    /// to attach a new nullifier (e.g. for a different contract). Handles ECDSA
+    /// commitment generation internally.
+    ///
+    /// Returns a `ContractNullifier` that can be attached to a `CompoundProof`
+    /// via [`CompoundProof::with_contract_nullifier`].
+    pub fn generate_nullifier(
+        &mut self,
+        credential_id_field: &str,
+        contract_hash: u64,
+        salt: u64,
+    ) -> Result<ContractNullifier, ZkError> {
+        let (commitment, sd_array_hash, message_hash) =
+            self.ensure_ecdsa(credential_id_field)?;
+
+        let id_value = self
+            .credential
+            .claims()
+            .get(credential_id_field)
+            .ok_or_else(|| ZkError::ClaimNotFound(credential_id_field.to_string()))?;
+        let credential_id = id_value.to_circuit_u64();
+
+        let prover = zk_eidas_prover::Prover::new(&self.circuits_path);
+        let nullifier_proof = prover
+            .prove_nullifier(credential_id, contract_hash, salt, &commitment, &sd_array_hash, &message_hash)
+            .map_err(ZkError::from)?;
+
+        let nullifier_bytes = nullifier_proof
+            .nullifier()
+            .ok_or(ZkError::MissingProofOutput)?
+            .to_vec();
+
+        Ok(ContractNullifier {
+            nullifier: nullifier_bytes,
+            contract_hash: contract_hash.to_be_bytes().to_vec(),
+            salt: salt.to_be_bytes().to_vec(),
+            proof: nullifier_proof,
+        })
+    }
+
     /// Add a predicate to prove about the given claim.
     pub fn predicate(mut self, claim_name: &str, predicate: Predicate) -> Self {
         self.predicates.push((claim_name.to_string(), predicate));
@@ -186,7 +228,7 @@ impl ZkCredential {
             .clone();
 
         // Convert claim to u64 for circuit (same conversion as ECDSA's claim_value)
-        let binding_claim_u64 = claim_to_u64_or_hash(&claim_value);
+        let binding_claim_u64 = claim_value.to_circuit_u64();
 
         // Ensure ECDSA is done for the binding claim
         let (commitment, sd_array_hash, message_hash) = self.ensure_ecdsa(binding_claim)?;
@@ -206,7 +248,7 @@ impl ZkCredential {
             .map_err(ZkError::Prover)?;
 
         let binding_hash = *binding_proof.binding_hash()
-            .ok_or(ZkError::UnsupportedPredicate)?;
+            .ok_or(ZkError::MissingProofOutput)?;
 
         proofs.push(binding_proof);
 
@@ -241,7 +283,7 @@ impl ZkCredential {
     /// Generate a compound proof with a logical operator over multiple predicates on the same claim.
     pub fn prove_compound(mut self) -> Result<CompoundProof, ZkError> {
         if self.predicates.is_empty() {
-            return Err(ZkError::UnsupportedPredicate);
+            return Err(ZkError::EmptyPredicates);
         }
 
         let predicates: Vec<_> = std::mem::take(&mut self.predicates);
@@ -270,7 +312,7 @@ impl ZkCredential {
 
             let id_value = self.credential.claims().get(&id_field)
                 .ok_or_else(|| ZkError::ClaimNotFound(id_field.to_string()))?;
-            let credential_id = claim_to_u64_or_hash(id_value);
+            let credential_id = id_value.to_circuit_u64();
 
             let prover = zk_eidas_prover::Prover::new(&self.circuits_path);
             let nullifier_proof = prover
@@ -278,7 +320,7 @@ impl ZkCredential {
                 .map_err(ZkError::from)?;
 
             let nullifier_bytes = nullifier_proof.nullifier()
-                .ok_or(ZkError::UnsupportedPredicate)?
+                .ok_or(ZkError::MissingProofOutput)?
                 .to_vec();
 
             Some(ContractNullifier {
@@ -322,7 +364,7 @@ impl ZkCredential {
         let claim_name = self
             .predicates
             .first()
-            .ok_or(ZkError::UnsupportedPredicate)?
+            .ok_or(ZkError::EmptyPredicates)?
             .0
             .clone();
         let predicate = std::mem::take(&mut self.predicates).into_iter().next().unwrap().1;
@@ -379,14 +421,8 @@ impl ZkCredential {
                     let now = std::time::SystemTime::now()
                         .duration_since(std::time::UNIX_EPOCH)
                         .map_err(|_| ZkError::SystemClockError)?;
-                    let today_year = {
-                        let total_days = (now.as_secs() / 86400) as i64;
-                        let z = total_days + 719468;
-                        let era = z.div_euclid(146097);
-                        let doe = z.rem_euclid(146097) as u64;
-                        let yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;
-                        (yoe as i64 + era * 400) as u32
-                    };
+                    let total_days = (now.as_secs() / 86400) as i64;
+                    let (today_year, _, _) = zk_eidas_utils::epoch_days_to_ymd(total_days);
                     let cutoff = if today_year > threshold as u32 + 1970 {
                         age_cutoff_epoch_days(threshold as u32)?
                     } else {
@@ -403,17 +439,17 @@ impl ZkCredential {
                 }
             }
             Predicate::Eq(expected) => {
-                let claim_u64 = claim_to_u64_or_hash(&claim_value);
+                let claim_u64 = claim_value.to_circuit_u64();
                 let expected_cv = string_to_claim_value(&expected, &claim_value);
-                let expected_u64 = claim_to_u64_or_hash(&expected_cv);
+                let expected_u64 = expected_cv.to_circuit_u64();
                 prover
                     .prove_eq(claim_u64, expected_u64, &commitment, &sd_array_hash, &message_hash)
                     .map_err(ZkError::from)
             }
             Predicate::Neq(expected) => {
-                let claim_u64 = claim_to_u64_or_hash(&claim_value);
+                let claim_u64 = claim_value.to_circuit_u64();
                 let expected_cv = string_to_claim_value(&expected, &claim_value);
-                let expected_u64 = claim_to_u64_or_hash(&expected_cv);
+                let expected_u64 = expected_cv.to_circuit_u64();
                 prover
                     .prove_neq(claim_u64, expected_u64, &commitment, &sd_array_hash, &message_hash)
                     .map_err(ZkError::from)
@@ -434,7 +470,7 @@ impl ZkCredential {
                 }
             }
             Predicate::SetMember(values) => {
-                let claim_u64 = claim_to_u64_or_hash(&claim_value);
+                let claim_u64 = claim_value.to_circuit_u64();
                 let mut set = [0u64; 16];
                 let set_len = values.len().min(16) as u64;
                 for (i, v) in values.iter().take(16).enumerate() {
@@ -445,7 +481,7 @@ impl ZkCredential {
                     .prove_set_member(claim_u64, &set, set_len, &commitment, &sd_array_hash, &message_hash)
                     .map_err(ZkError::from)
             }
-            Predicate::And(_) | Predicate::Or(_) => Err(ZkError::UnsupportedPredicate),
+            Predicate::And(_) | Predicate::Or(_) => Err(ZkError::NestedLogicalPredicate),
         }?;
 
         Ok(proof.with_claim_name(claim_name.to_string()))
@@ -531,7 +567,7 @@ impl ZkVerifier {
 
         match (binding_a, binding_b) {
             (Some(a), Some(b)) => Ok(a == b),
-            _ => Err(ZkError::UnsupportedPredicate),
+            _ => Err(ZkError::MissingProofOutput),
         }
     }
 
@@ -614,7 +650,7 @@ fn build_signed_input(credential: &Credential, claim_name: &str) -> Option<Signe
 
             // Get claim value as u64
             let claim_value = credential.claims().get(claim_name)?;
-            let claim_u64 = claim_to_u64_or_hash(claim_value);
+            let claim_u64 = claim_value.to_circuit_u64();
 
             // Compute disclosure hash
             let disclosure_bytes = credential.disclosures().get(claim_name)?;
@@ -666,34 +702,19 @@ fn string_to_claim_value(s: &str, reference: &ClaimValue) -> ClaimValue {
         }
         ClaimValue::String(_) => ClaimValue::String(s.to_string()),
         ClaimValue::Date { .. } => {
-            // Try to parse as a date (YYYY-MM-DD) with validation
-            let parts: Vec<&str> = s.split('-').collect();
-            if parts.len() == 3 {
-                if let (Ok(y), Ok(m), Ok(d)) = (
-                    parts[0].parse::<u16>(),
-                    parts[1].parse::<u8>(),
-                    parts[2].parse::<u8>(),
-                ) {
-                    if (1..=12).contains(&m) && (1..=31).contains(&d) {
-                        return ClaimValue::Date {
-                            year: y,
-                            month: m,
-                            day: d,
-                        };
-                    }
-                }
-            }
-            ClaimValue::String(s.to_string())
+            ClaimValue::from_date_str(s).unwrap_or_else(|_| ClaimValue::String(s.to_string()))
         }
     }
 }
 
-/// Convert a ClaimValue to u64 for circuit input.
+/// Convert a ClaimValue to u64 for circuit input (numeric/date/bool only).
+///
+/// Returns an error for negative integers and strings.
 fn claim_to_u64(value: &ClaimValue) -> Result<u64, ZkError> {
     match value {
         ClaimValue::Integer(n) => {
             if *n < 0 {
-                return Err(ZkError::UnsupportedPredicate);
+                return Err(ZkError::NegativeClaimValue(*n));
             }
             Ok(*n as u64)
         }
@@ -703,45 +724,10 @@ fn claim_to_u64(value: &ClaimValue) -> Result<u64, ZkError> {
                 *month as u32,
                 *day as u32,
             );
-            // Circuits use unsigned values; clamp negative epoch days to 0
             Ok(days.max(0) as u64)
         }
         ClaimValue::Boolean(b) => Ok(*b as u64),
-        ClaimValue::String(_) => Err(ZkError::UnsupportedPredicate),
-    }
-}
-
-/// Convert a ClaimValue to u64, using a hash for strings/dates.
-/// This is used for eq/neq/set_member where we need to compare arbitrary values.
-pub fn claim_to_u64_or_hash_pub(value: &ClaimValue) -> u64 {
-    claim_to_u64_or_hash(value)
-}
-
-fn claim_to_u64_or_hash(value: &ClaimValue) -> u64 {
-    match claim_to_u64(value) {
-        Ok(v) => v,
-        Err(_) => {
-            // For strings, use SHA-256 hash truncated to u64
-            let field = value.to_field_element().unwrap_or_default();
-            bytes_to_u64_from_slice(&field)
-        }
-    }
-}
-
-/// Convert a 32-byte array to u64 (first 8 bytes, big-endian).
-fn bytes_to_u64(bytes: &[u8; 32]) -> u64 {
-    u64::from_be_bytes(bytes[..8].try_into().unwrap())
-}
-
-/// Convert a byte slice to u64 (first 8 bytes, big-endian).
-fn bytes_to_u64_from_slice(bytes: &[u8]) -> u64 {
-    if bytes.len() >= 8 {
-        u64::from_be_bytes(bytes[..8].try_into().unwrap())
-    } else {
-        let mut buf = [0u8; 8];
-        let start = 8 - bytes.len();
-        buf[start..].copy_from_slice(bytes);
-        u64::from_be_bytes(buf)
+        ClaimValue::String(_) => Err(ZkError::IncompatibleClaimType),
     }
 }
 
@@ -761,25 +747,12 @@ pub fn age_cutoff_epoch_days_from(min_age: u32, year: u32, month: u32, day: u32)
 /// Returns the epoch-days value for (today - `min_age` years). A birthdate
 /// must be <= this value for the person to be at least `min_age` years old.
 fn age_cutoff_epoch_days(min_age: u32) -> Result<u64, ZkError> {
-    // Get today's date components from system time
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map_err(|_| ZkError::SystemClockError)?;
     let total_days = (now.as_secs() / 86400) as i64;
-
-    // Convert epoch days to y/m/d using the inverse of the civil_from_days algorithm
-    let z = total_days + 719468;
-    let era = z.div_euclid(146097);
-    let doe = z.rem_euclid(146097) as u64;
-    let yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;
-    let y = yoe as i64 + era * 400;
-    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
-    let mp = (5 * doy + 2) / 153;
-    let d = doy - (153 * mp + 2) / 5 + 1;
-    let m = if mp < 10 { mp + 3 } else { mp - 9 };
-    let y = if m <= 2 { y + 1 } else { y };
-
-    Ok(age_cutoff_epoch_days_from(min_age, y as u32, m as u32, d as u32))
+    let (y, m, d) = zk_eidas_utils::epoch_days_to_ymd(total_days);
+    Ok(age_cutoff_epoch_days_from(min_age, y, m, d))
 }
 
 /// Unified error type for the facade crate.
@@ -797,9 +770,22 @@ pub enum ZkError {
     /// The requested claim was not found in the credential.
     #[error("claim not found: {0}")]
     ClaimNotFound(String),
-    /// The predicate type is not supported for the claim's value type.
-    #[error("unsupported predicate for claim type")]
-    UnsupportedPredicate,
+    /// A negative integer was passed where an unsigned value is required.
+    #[error("negative claim value {0} cannot be used in unsigned circuit")]
+    NegativeClaimValue(i64),
+    /// The claim type is incompatible with the requested predicate
+    /// (e.g. a string claim used with a numeric comparison).
+    #[error("incompatible claim type for predicate")]
+    IncompatibleClaimType,
+    /// No predicates were added before calling prove/prove_compound.
+    #[error("no predicates to prove")]
+    EmptyPredicates,
+    /// And/Or predicates cannot be nested inside prove_single.
+    #[error("nested logical predicates are not supported in prove_single")]
+    NestedLogicalPredicate,
+    /// A required binding hash or nullifier was missing from a proof.
+    #[error("expected proof output (binding_hash or nullifier) is missing")]
+    MissingProofOutput,
     /// The credential lacks ECDSA signature data or a disclosure for the claim.
     /// All proofs require in-circuit ECDSA verification — unsigned circuits
     /// have been removed.

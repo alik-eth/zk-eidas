@@ -5537,7 +5537,6 @@ dependencies = [
  "zk-eidas",
  "zk-eidas-mdoc",
  "zk-eidas-parser",
- "zk-eidas-prover",
  "zk-eidas-types",
  "zk-eidas-utils",
 ]
@@ -5596,6 +5595,7 @@ version = "0.1.0"
 dependencies = [
  "ciborium",
  "flate2",
+ "num-bigint",
  "serde",
  "serde_json",
  "sha2",

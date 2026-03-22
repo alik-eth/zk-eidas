@@ -257,23 +257,8 @@ fn cbor_to_claim_value(identifier: &str, value: &ciborium::Value) -> Result<Clai
 
 /// Parse a "YYYY-MM-DD" string into ClaimValue::Date.
 fn parse_date(s: &str) -> Result<ClaimValue, MdocError> {
-    let parts: Vec<&str> = s.split('-').collect();
-    if parts.len() != 3 {
-        return Err(MdocError::InvalidStructure(format!(
-            "invalid date format: {s}"
-        )));
-    }
-    let year: u16 = parts[0]
-        .parse()
-        .map_err(|_| MdocError::InvalidStructure(format!("invalid year in date: {s}")))?;
-    let month: u8 = parts[1]
-        .parse()
-        .map_err(|_| MdocError::InvalidStructure(format!("invalid month in date: {s}")))?;
-    let day: u8 = parts[2]
-        .parse()
-        .map_err(|_| MdocError::InvalidStructure(format!("invalid day in date: {s}")))?;
-
-    Ok(ClaimValue::Date { year, month, day })
+    ClaimValue::from_date_str(s)
+        .map_err(|e| MdocError::InvalidStructure(format!("invalid date '{s}': {e}")))
 }
 
 #[cfg(test)]

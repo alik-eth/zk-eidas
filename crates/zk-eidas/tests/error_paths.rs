@@ -13,8 +13,8 @@ fn prove_with_no_predicates_returns_error() {
 
     assert!(result.is_err());
     assert!(
-        matches!(result.unwrap_err(), ZkError::UnsupportedPredicate),
-        "expected UnsupportedPredicate when no predicates are added"
+        matches!(result.unwrap_err(), ZkError::EmptyPredicates),
+        "expected EmptyPredicates when no predicates are added"
     );
 }
 
@@ -51,8 +51,8 @@ fn prove_string_claim_with_gte_returns_error() {
 
     assert!(result.is_err());
     assert!(
-        matches!(result.unwrap_err(), ZkError::UnsupportedPredicate),
-        "expected UnsupportedPredicate when applying gte to a string claim"
+        matches!(result.unwrap_err(), ZkError::IncompatibleClaimType),
+        "expected IncompatibleClaimType when applying gte to a string claim"
     );
 }
 

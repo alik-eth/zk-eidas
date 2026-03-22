@@ -53,21 +53,10 @@ impl SignedProofInput {
     /// The ECDSA circuit uses k=6, n=43 encoding: each P-256 scalar is split
     /// into 6 limbs where limb[i] contains bits [43*i .. 43*(i+1)).
     /// Limbs are little-endian (limb[0] is the least significant).
+    ///
+    /// Delegates to [`zk_eidas_types::to_43bit_limbs`].
     pub fn to_43bit_limbs(bytes: &[u8; 32]) -> [BigInt; 6] {
-        let value = BigInt::from_bytes_be(num_bigint::Sign::Plus, bytes);
-        let mask = (BigInt::from(1) << 43) - 1;
-        let mut limbs = [
-            BigInt::from(0),
-            BigInt::from(0),
-            BigInt::from(0),
-            BigInt::from(0),
-            BigInt::from(0),
-            BigInt::from(0),
-        ];
-        for (i, limb) in limbs.iter_mut().enumerate() {
-            *limb = (&value >> (43 * i)) & &mask;
-        }
-        limbs
+        zk_eidas_types::to_43bit_limbs(bytes)
     }
 }
 

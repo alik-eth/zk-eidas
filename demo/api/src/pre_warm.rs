@@ -456,6 +456,7 @@ async fn main() {
                 "predicates": predicates,
                 "contract_terms": "pre-warm",
                 "timestamp": "2026-01-01T00:00:00Z",
+                "skip_cache": true,
             }))
             .send().await.expect("contract-prove failed");
 

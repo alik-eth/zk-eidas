@@ -9,6 +9,7 @@ zk-eidas-utils = { workspace = true }
 serde.workspace = true
 serde_json.workspace = true
 sha2 = "0.10"
+num-bigint = "0.4"
 thiserror = { workspace = true }
 ciborium = "0.2"
 flate2 = { version = "1", default-features = false, features = ["rust_backend"] }

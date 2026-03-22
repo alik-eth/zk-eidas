@@ -18,9 +18,6 @@ struct AppState {
     prove_semaphore: Semaphore,  // limit concurrent proof generation
     proof_cache: HashMap<String, CachedProof>,
     binding_cache: HashMap<String, CachedBindingProof>,
-    /// Cache ECDSA commitment data for contract nullifier generation.
-    /// Key: credential_id u64 value. Value: (commitment_bytes, sd_array_hash, message_hash).
-    ecdsa_cache: Arc<std::sync::Mutex<HashMap<u64, (Vec<u8>, Vec<u8>, Vec<u8>)>>>,
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -224,14 +221,8 @@ fn looks_like_date(s: &str) -> bool {
 
 /// Parse "YYYY-MM-DD" into ClaimValue::Date.
 fn parse_date_claim(s: &str) -> Result<zk_eidas_types::credential::ClaimValue, String> {
-    let parts: Vec<&str> = s.split('-').collect();
-    if parts.len() != 3 {
-        return Err(format!("expected YYYY-MM-DD, got {s}"));
-    }
-    let year: u16 = parts[0].parse().map_err(|_| "bad year")?;
-    let month: u8 = parts[1].parse().map_err(|_| "bad month")?;
-    let day: u8 = parts[2].parse().map_err(|_| "bad day")?;
-    Ok(zk_eidas_types::credential::ClaimValue::Date { year, month, day })
+    zk_eidas_types::credential::ClaimValue::from_date_str(s)
+        .map_err(|e| e.to_string())
 }
 
 fn json_value_to_claim(
@@ -1090,6 +1081,8 @@ struct ContractProveRequest {
     predicates: Vec<PredicateRequest>,
     contract_terms: String,
     timestamp: String,
+    #[serde(default)]
+    skip_cache: bool,
 }
 
 #[derive(Serialize)]
@@ -1130,6 +1123,7 @@ async fn contract_prove(
     let cache_key_material = format!("{}|{}", req.format, serde_json::to_string(&cache_preds).unwrap());
     let cache_key = format!("{:016x}", fnv_hash(cache_key_material.as_bytes()));
 
+    if !req.skip_cache {
     if let Some(cached) = state.proof_cache.get(&cache_key) {
         eprintln!("[contracts/prove] CACHE HIT for predicates, key {cache_key}");
         // Cached predicate proof found — just need to generate the nullifier
@@ -1138,7 +1132,7 @@ async fn contract_prove(
             serde_json::from_str(&cached.compound_proof_json)
                 .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("cache parse: {e}")))?;
 
-        // Generate nullifier for the cached proof — need ECDSA for credential_id field
+        // Auto-detect credential_id field
         let all_field_names_cached = cached.hidden_fields.iter()
             .chain(req.predicates.iter().map(|p| &p.claim))
             .cloned()
@@ -1148,8 +1142,8 @@ async fn contract_prove(
             .find(|f| all_field_names_cached.contains(&f.to_string()))
             .ok_or_else(|| (StatusCode::BAD_REQUEST, "no credential_id field found".to_string()))?;
 
-        // Parse credential to get credential_id value
-        let builder_for_null = if req.format == "mdoc" {
+        // Parse credential via facade
+        let mut builder = if req.format == "mdoc" {
             let (mdoc_bytes, pub_key_x, pub_key_y) = parse_mdoc_token(&req.credential)
                 .map_err(|e| (StatusCode::BAD_REQUEST, format!("mdoc token: {e}")))?;
             let credential = zk_eidas_mdoc::MdocParser::parse_with_issuer_key(&mdoc_bytes, pub_key_x, pub_key_y)
@@ -1161,52 +1155,19 @@ async fn contract_prove(
         };
 
         let cid_field = credential_id_field.to_string();
-        let doc_value = builder_for_null.credential().claims().get(&cid_field)
-            .ok_or_else(|| (StatusCode::BAD_REQUEST, format!("claim not found: {cid_field}")))?
-            .clone();
-        let credential_id = zk_eidas::claim_to_u64_or_hash_pub(&doc_value);
-
-        // Check ECDSA commitment cache first
-        let cached_ecdsa = state.ecdsa_cache.lock().unwrap().get(&credential_id).cloned();
 
         let _permit = state.prove_semaphore.acquire().await
             .map_err(|_| (StatusCode::SERVICE_UNAVAILABLE, "proving unavailable".into()))?;
 
-        let circuits_path = state.circuits_path.clone();
-        let ecdsa_cache_ref = state.ecdsa_cache.clone();
-
-        let nullifier_proof = tokio::task::spawn_blocking(move || -> Result<_, (StatusCode, String)> {
+        // Generate nullifier via facade (handles ECDSA + nullifier proving internally)
+        let cn = tokio::task::spawn_blocking(move || -> Result<_, (StatusCode, String)> {
             unsafe { libc::nice(10) };
-
-            let (commitment_bytes, sd_array_hash, message_hash) = if let Some(cached) = cached_ecdsa {
-                eprintln!("[contracts/prove] ECDSA CACHE HIT for credential_id {credential_id}");
-                cached
-            } else {
-                eprintln!("[contracts/prove] ECDSA CACHE MISS for credential_id {credential_id} — generating...");
-                let mut builder = builder_for_null;
-                let (commitment, sd_hash, msg_hash) = builder.ensure_ecdsa_pub(&cid_field)
-                    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("ecdsa: {e}")))?;
-                let result = (commitment.value().to_vec(), sd_hash, msg_hash);
-                // Cache for next time
-                ecdsa_cache_ref.lock().unwrap().insert(credential_id, result.clone());
-                result
-            };
-
-            let commitment = zk_eidas_types::commitment::EcdsaCommitment::new(commitment_bytes);
-            let prover = zk_eidas_prover::Prover::new(&circuits_path);
-            let proof = prover.prove_nullifier(credential_id, contract_hash, salt, &commitment, &sd_array_hash, &message_hash)
-                .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("nullifier: {e}")))?;
-            Ok(proof)
+            builder.generate_nullifier(&cid_field, contract_hash, salt)
+                .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("nullifier: {e}")))
         }).await
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("join: {e}")))??;
 
-        let nullifier_bytes = nullifier_proof.nullifier().unwrap_or(&[0u8; 32]).to_vec();
-        let cn = zk_eidas_types::proof::ContractNullifier {
-            nullifier: nullifier_bytes.clone(),
-            contract_hash: contract_hash.to_be_bytes().to_vec(),
-            salt: salt.to_be_bytes().to_vec(),
-            proof: nullifier_proof,
-        };
+        let nullifier_bytes = cn.nullifier.clone();
         compound = compound.with_contract_nullifier(cn);
 
         let compound_proof_json = serde_json::to_string(&compound)
@@ -1222,7 +1183,8 @@ async fn contract_prove(
             salt: format!("0x{:016x}", salt),
         }));
     }
-    eprintln!("[contracts/prove] CACHE MISS for predicates, key {cache_key}");
+    } // skip_cache
+    eprintln!("[contracts/prove] {} for predicates, key {cache_key}", if req.skip_cache { "CACHE SKIPPED" } else { "CACHE MISS" });
 
     // 4. Parse credential (no cache — full proving path)
     let (mut builder, all_field_names) = if req.format == "mdoc" {
@@ -1271,6 +1233,7 @@ async fn contract_prove(
         .ok_or_else(|| (StatusCode::BAD_REQUEST, "no credential_id field found".to_string()))?;
     builder = builder.contract_nullifier(credential_id_field, contract_hash, salt);
 
+    // Compute credential_id for ECDSA caching
     // 6. Prove
     let _permit = state.prove_semaphore.acquire().await.map_err(|_| {
         (StatusCode::SERVICE_UNAVAILABLE, "proving unavailable".to_string())
@@ -1427,7 +1390,6 @@ fn fnv_hash(data: &[u8]) -> u64 {
 struct LoadedCache {
     proofs: HashMap<String, CachedProof>,
     bindings: HashMap<String, CachedBindingProof>,
-    ecdsa_commitments: HashMap<u64, (Vec<u8>, Vec<u8>, Vec<u8>)>,
 }
 
 fn load_proof_cache(api_dir: &str) -> LoadedCache {
@@ -1441,7 +1403,7 @@ fn load_proof_cache(api_dir: &str) -> LoadedCache {
         Some(p) => p.clone(),
         None => {
             eprintln!("[cache] No proof-cache.json found, running without cache");
-            return LoadedCache { proofs: HashMap::new(), bindings: HashMap::new(), ecdsa_commitments: HashMap::new() };
+            return LoadedCache { proofs: HashMap::new(), bindings: HashMap::new() };
         }
     };
     let data = std::fs::read_to_string(&cache_path).unwrap_or_default();
@@ -1449,7 +1411,7 @@ fn load_proof_cache(api_dir: &str) -> LoadedCache {
         Ok(v) => v,
         Err(e) => {
             eprintln!("[cache] Failed to parse proof-cache.json: {e}");
-            return LoadedCache { proofs: HashMap::new(), bindings: HashMap::new(), ecdsa_commitments: HashMap::new() };
+            return LoadedCache { proofs: HashMap::new(), bindings: HashMap::new() };
         }
     };
     let mut proofs = HashMap::new();
@@ -1468,26 +1430,9 @@ fn load_proof_cache(api_dir: &str) -> LoadedCache {
             }
         }
     }
-    let mut ecdsa_commitments = HashMap::new();
-    if let Some(entries) = parsed["ecdsa_commitments"].as_object() {
-        for (key, entry) in entries {
-            if let (Some(commitment), Some(sd_hash), Some(msg_hash)) = (
-                entry["commitment"].as_array(),
-                entry["sd_array_hash"].as_array(),
-                entry["message_hash"].as_array(),
-            ) {
-                let to_bytes = |arr: &Vec<serde_json::Value>| -> Vec<u8> {
-                    arr.iter().filter_map(|v| v.as_u64().map(|n| n as u8)).collect()
-                };
-                if let Ok(cid) = key.parse::<u64>() {
-                    ecdsa_commitments.insert(cid, (to_bytes(commitment), to_bytes(sd_hash), to_bytes(msg_hash)));
-                }
-            }
-        }
-    }
-    eprintln!("[cache] Loaded {} cached proofs + {} bindings + {} ecdsa commitments from {}",
-        proofs.len(), bindings.len(), ecdsa_commitments.len(), cache_path.display());
-    LoadedCache { proofs, bindings, ecdsa_commitments }
+    eprintln!("[cache] Loaded {} cached proofs + {} bindings from {}",
+        proofs.len(), bindings.len(), cache_path.display());
+    LoadedCache { proofs, bindings }
 }
 
 // === Circuit Artifact Serving ===
@@ -1633,16 +1578,7 @@ async fn prepare_inputs(
 
 fn today_ymd() -> (u32, u32, u32) {
     let days = (std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs() / 86400) as i64;
-    let z = days + 719468;
-    let era = z.div_euclid(146097);
-    let doe = z.rem_euclid(146097) as u64;
-    let yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;
-    let year = (yoe as i64 + era * 400) as u32;
-    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
-    let mp = (5 * doy + 2) / 153;
-    let month = if mp < 10 { mp + 3 } else { mp - 9 } as u32;
-    let day = (doy - (153 * mp + 2) / 5 + 1) as u32;
-    (year, month, day)
+    zk_eidas_utils::epoch_days_to_ymd(days)
 }
 
 // === App Builder ===
@@ -1672,7 +1608,6 @@ pub fn build_app(circuits_path: &str) -> Router {
         prove_semaphore: Semaphore::new(1),  // one proof at a time
         proof_cache: loaded.proofs,
         binding_cache: loaded.bindings,
-        ecdsa_cache: Arc::new(std::sync::Mutex::new(loaded.ecdsa_commitments)),
     });
 
     Router::new()

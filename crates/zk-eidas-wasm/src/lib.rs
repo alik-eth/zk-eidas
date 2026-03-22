@@ -5,8 +5,8 @@
 
 use wasm_bindgen::prelude::*;
 use zk_eidas_types::proof::ZkProof;
-use zk_eidas_types::credential::ClaimValue;
-use num_bigint::BigInt;
+use zk_eidas_types::credential::bytes_to_u64;
+use zk_eidas_types::to_43bit_limbs;
 use sha2::{Sha256, Digest};
 
 /// Parse a ZK proof from JSON and return proof metadata as JSON.
@@ -105,7 +105,7 @@ pub fn prepare_inputs(sdjwt: &str, claim_name: &str) -> Result<String, JsError> 
         .ok_or_else(|| JsError::new(&format!("no disclosure for claim '{claim_name}'")))?;
 
     // Convert claim to u64
-    let claim_u64 = claim_to_u64_or_hash(claim_value);
+    let claim_u64 = claim_value.to_circuit_u64();
 
     // Compute disclosure hash
     let disclosure_hash_bytes: [u8; 32] = Sha256::digest(disclosure).into();
@@ -130,7 +130,7 @@ pub fn prepare_inputs(sdjwt: &str, claim_name: &str) -> Result<String, JsError> 
     let pkx_limbs = to_43bit_limbs(pub_key_x);
     let pky_limbs = to_43bit_limbs(pub_key_y);
 
-    let to_strings = |limbs: &[BigInt; 6]| -> Vec<String> {
+    let to_strings = |limbs: &[num_bigint::BigInt; 6]| -> Vec<String> {
         limbs.iter().map(|l| l.to_string()).collect()
     };
 
@@ -153,39 +153,6 @@ pub fn prepare_inputs(sdjwt: &str, claim_name: &str) -> Result<String, JsError> 
     Ok(result.to_string())
 }
 
-/// Convert 32-byte big-endian scalar into 6 limbs of 43 bits each (k=6, n=43).
-fn to_43bit_limbs(bytes: &[u8; 32]) -> [BigInt; 6] {
-    let value = BigInt::from_bytes_be(num_bigint::Sign::Plus, bytes);
-    let mask = (BigInt::from(1) << 43) - 1;
-    let mut limbs = [
-        BigInt::from(0), BigInt::from(0), BigInt::from(0),
-        BigInt::from(0), BigInt::from(0), BigInt::from(0),
-    ];
-    for (i, limb) in limbs.iter_mut().enumerate() {
-        *limb = (&value >> (43 * i)) & &mask;
-    }
-    limbs
-}
-
-/// Convert claim value to u64 (integers/dates directly, strings via SHA-256 hash).
-fn claim_to_u64_or_hash(value: &ClaimValue) -> u64 {
-    match value {
-        ClaimValue::Integer(n) => (*n).max(0) as u64,
-        ClaimValue::Boolean(b) => *b as u64,
-        ClaimValue::Date { year, month, day } => {
-            zk_eidas_utils::date_to_epoch_days(*year as u32, *month as u32, *day as u32).max(0) as u64
-        }
-        ClaimValue::String(s) => {
-            let hash: [u8; 32] = Sha256::digest(s.as_bytes()).into();
-            bytes_to_u64(&hash)
-        }
-    }
-}
-
-/// First 8 bytes of a 32-byte array as big-endian u64.
-fn bytes_to_u64(bytes: &[u8; 32]) -> u64 {
-    u64::from_be_bytes(bytes[..8].try_into().unwrap())
-}
 
 #[cfg(all(test, target_arch = "wasm32"))]
 mod wasm_tests {
