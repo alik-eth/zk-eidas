@@ -253,10 +253,8 @@ function HolderStep({ state, setState, t }: { state: WizardState; setState: Reac
   const [loading, setLoading] = useState(false)
   const [elapsed, setElapsed] = useState(0)
   const [proved, setProved] = useState(false)
-  const [nullifierScope, setNullifierScope] = useState('')
   const [compoundMode, setCompoundMode] = useState<'individual' | 'and' | 'or'>('individual')
   const [proveTimeMs, setProveTimeMs] = useState<number | null>(null)
-  const [discloseDocNumber, setDiscloseDocNumber] = useState(true)
   const [presReqLoading, setPresReqLoading] = useState(false)
   const [presReqResult, setPresReqResult] = useState<{ id: string; input_descriptors: { id: string; constraints: { path: string; predicate_op: string; value: string }[] }[] } | null>(null)
   // Browser proving state
@@ -273,15 +271,6 @@ function HolderStep({ state, setState, t }: { state: WizardState; setState: Reac
   }, [state.step])
 
   const selectedCount = Object.values(selected).filter(Boolean).length
-
-  const docNumberField = config.fields.find(f => ['document_number', 'license_number', 'diploma_number', 'vin'].includes(f.name))
-  const provenClaimNames = [
-    ...resolvedPredicates.filter(p => selected[p.id]).map(p => p.predicate.claim),
-    ...(discloseDocNumber && docNumberField ? [docNumberField.name] : []),
-  ]
-
-  // When document number is disclosed, force AND compound mode
-  const effectiveMode = discloseDocNumber && docNumberField ? 'and' : compoundMode
 
   const handlePresentationRequest = async () => {
     const reqs = resolvedPredicates.filter(p => selected[p.id]).map(p => ({
@@ -317,12 +306,7 @@ function HolderStep({ state, setState, t }: { state: WizardState; setState: Reac
     _setBrowserResult(null)
     const timer = setInterval(() => setElapsed(prev => prev + 1), 1000)
     try {
-      const basePredicates = resolvedPredicates.filter(p => selected[p.id]).map(p => p.predicate)
-      // Inject document_number eq predicate when disclosed (same as server flow)
-      const docNumberPredicate = discloseDocNumber && docNumberField
-        ? [{ claim: docNumberField.name, op: 'eq', value: state.fields.find(f => f.name === docNumberField.name)?.value ?? '' }]
-        : []
-      const userPredicates = [...basePredicates, ...docNumberPredicate]
+      const userPredicates = resolvedPredicates.filter(p => selected[p.id]).map(p => p.predicate)
 
       const result = await proveCompoundInBrowser(
         state.credential!,
@@ -368,7 +352,7 @@ function HolderStep({ state, setState, t }: { state: WizardState; setState: Reac
           nullifier: null,
           claim_name: userPredicates[i]?.claim ?? null,
         })),
-        op: effectiveMode === 'or' ? 'Or' : 'And',
+        op: compoundMode === 'or' ? 'Or' : 'And',
         ecdsa_proofs: Object.fromEntries(
           [...new Set(userPredicates.map(p => p.claim))].map(claim => {
             const ecdsaForClaim = result.ecdsaProofs.get(claim) ?? result.ecdsaProof;
@@ -391,7 +375,7 @@ function HolderStep({ state, setState, t }: { state: WizardState; setState: Reac
           hiddenFields: userPredicates.map(p => p.claim),
           nullifier: null,
           compoundProofJson: JSON.stringify(compoundProof),
-          compoundOp: effectiveMode === 'or' ? 'Or' : 'And',
+          compoundOp: compoundMode === 'or' ? 'Or' : 'And',
           selectedPredicateIds: Object.entries(selected).filter(([, v]) => v).map(([k]) => k),
         }))
       }, 800)
@@ -408,17 +392,11 @@ function HolderStep({ state, setState, t }: { state: WizardState; setState: Reac
     setElapsed(0)
     const timer = setInterval(() => setElapsed(prev => prev + 1), 1000)
     try {
-      const userPredicates = resolvedPredicates.filter(p => selected[p.id]).map(p => p.predicate)
-      // Inject document_number eq predicate when disclosed
-      const docNumberPredicate = discloseDocNumber && docNumberField
-        ? [{ claim: docNumberField.name, op: 'eq', value: state.fields.find(f => f.name === docNumberField.name)?.value ?? '' }]
-        : []
-      const predicates = [...userPredicates, ...docNumberPredicate]
+      const predicates = resolvedPredicates.filter(p => selected[p.id]).map(p => p.predicate)
       const t0 = performance.now()
 
-      if (effectiveMode === 'individual') {
+      if (compoundMode === 'individual') {
         const body: Record<string, unknown> = { credential: state.credential, format: state.format, predicates }
-        if (nullifierScope.trim()) body.nullifier_scope = nullifierScope.trim()
         const res = await fetch(`${API_URL}/holder/prove`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -447,7 +425,7 @@ function HolderStep({ state, setState, t }: { state: WizardState; setState: Reac
         const res = await fetch(`${API_URL}/holder/prove-compound`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ credential: state.credential, format: state.format, predicates, op: effectiveMode }),
+          body: JSON.stringify({ credential: state.credential, format: state.format, predicates, op: compoundMode }),
         })
         if (!res.ok) throw new Error(await res.text())
         const data = await res.json()
@@ -505,34 +483,8 @@ function HolderStep({ state, setState, t }: { state: WizardState; setState: Reac
               </label>
             ))}
 
-            {/* Disclose Document Number */}
-            {docNumberField && (
-              <div className="mt-2 pt-4 border-t border-slate-600">
-                <label className={`flex items-start gap-3 p-4 rounded-lg border cursor-pointer transition-colors ${discloseDocNumber ? 'border-amber-500/50 bg-amber-950/20' : 'border-red-500/50 bg-red-950/20'}`}>
-                  <input
-                    type="checkbox"
-                    checked={discloseDocNumber}
-                    onChange={e => setDiscloseDocNumber(e.target.checked)}
-                    disabled={loading}
-                    className="mt-0.5 w-4 h-4 rounded border-slate-500 text-amber-600 focus:ring-amber-500 bg-slate-700"
-                  />
-                  <div>
-                    <div className="flex items-center gap-1">
-                      <span className="text-sm font-medium text-amber-300">{t('demo.discloseDocNumber')}</span>
-                      <Tooltip text={t('demo.discloseDocNumberDesc')} />
-                    </div>
-                    {!discloseDocNumber && (
-                      <p className="text-xs text-red-400 mt-2 leading-relaxed">
-                        {t('demo.docNumberWarning')}
-                      </p>
-                    )}
-                  </div>
-                </label>
-              </div>
-            )}
-
-            {/* Compound Mode — hidden when doc number is actually disclosed (has field AND checked) */}
-            {!(discloseDocNumber && docNumberField) && selectedCount >= 2 && (
+            {/* Compound Mode */}
+            {selectedCount >= 2 && (
               <div className="mt-4 pt-4 border-t border-slate-600">
                 <label className="block text-sm font-medium text-slate-300 mb-2">
                   <Tooltip text={t('demo.proofModeTooltip')}>
@@ -567,25 +519,6 @@ function HolderStep({ state, setState, t }: { state: WizardState; setState: Reac
               </div>
             )}
 
-            {/* Nullifier Scope */}
-            <details className="mt-4 pt-4 border-t border-slate-600">
-              <summary className="cursor-pointer text-sm font-medium text-slate-400 hover:text-slate-300 transition-colors select-none">
-                {t('demo.nullifierScope')} <span className="text-slate-500 font-normal">{t('demo.optional')}</span>
-              </summary>
-              <div className="mt-3 space-y-2">
-                <input
-                  type="text"
-                  value={nullifierScope}
-                  onChange={e => setNullifierScope(e.target.value)}
-                  placeholder="e.g. bar-kyiv:2026-03"
-                  disabled={loading}
-                  className="w-full bg-slate-700 border border-slate-600 rounded px-3 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-blue-500"
-                />
-                <p className="text-xs text-slate-500">
-                  {t('demo.nullifierDesc')}
-                </p>
-              </div>
-            </details>
 
           </div>
         </div>
@@ -700,8 +633,6 @@ function VerifierStep({ state, setState, t }: { state: WizardState; setState: Re
   const [error, setError] = useState<string | null>(null)
   const [exportData, setExportData] = useState<{ cbor_base64: string; cbor_size_bytes: number } | null>(null)
   const [exportLoading, setExportLoading] = useState(false)
-  const [nullifierResult, setNullifierResult] = useState<{ seen_before: boolean; registry_size: number } | null>(null)
-  const [nullifierChecking, setNullifierChecking] = useState(false)
   const [verificationPath, setVerificationPath] = useState<'server' | 'wasm' | null>(null)
   const [wasmAvailable, setWasmAvailable] = useState<boolean | null>(null)
   const [verifyTimeMs, setVerifyTimeMs] = useState<number | null>(null)
@@ -842,22 +773,6 @@ function VerifierStep({ state, setState, t }: { state: WizardState; setState: Re
         setVerifyTimeMs(performance.now() - t0)
       }
 
-      // Auto-check nullifier if present
-      if (state.nullifier) {
-        setNullifierChecking(true)
-        try {
-          const nRes = await fetch(`${API_URL}/verifier/check-nullifier`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ nullifier: state.nullifier }),
-          })
-          if (nRes.ok) {
-            setNullifierResult(await nRes.json())
-          }
-        } finally {
-          setNullifierChecking(false)
-        }
-      }
     } catch (e: any) {
       setError(`Server verification failed: ${e.message}`)
     } finally {
@@ -945,7 +860,6 @@ function VerifierStep({ state, setState, t }: { state: WizardState; setState: Re
       let proofs: PrintProofItem[]
       const predicates: PrintPredicate[] = []
       const config = CREDENTIAL_TYPES.find(c => c.id === state.credentialType)
-      const docField = config?.fields.find(f => ['document_number', 'license_number', 'diploma_number', 'vin'].includes(f.name))
       const opSymbol = (op: string) => ({ gte: '\u2265', lte: '\u2264', eq: '=', neq: '\u2260', range: '\u2208', set_member: '\u2208' }[op] || op)
       const resolveValue = (pred: { claim: string; op: string; value: string | number | string[] | number[] }) => {
         if (pred.value === '__FROM_FORM__') return state.fields.find(f => f.name === pred.claim)?.value ?? ''
@@ -955,24 +869,8 @@ function VerifierStep({ state, setState, t }: { state: WizardState; setState: Re
       if (state.compoundProofJson) {
         const compound = (() => { try { return JSON.parse(state.compoundProofJson) } catch { return null } })() as { proofs?: { predicate_op?: string }[] } | null
         if (compound?.proofs && config) {
-          // The doc number eq predicate is always the LAST sub-proof (auto-injected)
-          const docNumIndex = docField ? compound.proofs.length - 1 : -1
+          const selectedPreds = config.predicates.filter(p => state.selectedPredicateIds.includes(p.id))
           for (let pi = 0; pi < compound.proofs.length; pi++) {
-            const sub = compound.proofs[pi]
-            if (pi === docNumIndex) {
-              // Auto-injected document number eq predicate
-              const fieldConfig = config.fields.find(f => f.name === docField!.name)
-              predicates.push({
-                claim: fieldConfig ? t(fieldConfig.labelKey) : docField!.name,
-                claimKey: fieldConfig?.labelKey,
-                op: '=',
-                publicValue: state.fields.find(f => f.name === docField!.name)?.value ?? '',
-                disclosed: true,
-              })
-              continue
-            }
-            // Sub-proofs are in same order as selected predicates (doc number last)
-            const selectedPreds = config.predicates.filter(p => state.selectedPredicateIds.includes(p.id))
             const matched = selectedPreds[pi]
             if (matched) {
               const fieldConfig = config.fields.find(f => f.name === matched.predicate.claim)
@@ -1044,33 +942,6 @@ function VerifierStep({ state, setState, t }: { state: WizardState; setState: Re
       {verified && (
         <div className="space-y-4">
 
-          {/* Nullifier Result */}
-          {state.nullifier && (
-            <div className={`flex items-center gap-3 rounded-lg px-4 py-3 border ${
-              nullifierResult === null ? 'bg-slate-700/30 border-slate-600'
-                : nullifierResult.seen_before ? 'bg-red-900/20 border-red-700/40'
-                : 'bg-green-900/20 border-green-700/40'
-            }`}>
-              <span className="text-xl">
-                {nullifierChecking ? '\u23F3' : nullifierResult?.seen_before ? '\u26A0' : '\u2713'}
-              </span>
-              <div className="flex-1">
-                <p className={`font-semibold text-sm ${nullifierResult?.seen_before ? 'text-red-300' : 'text-green-300'}`}>
-                  {nullifierChecking ? t('demo.nullifierChecking')
-                    : nullifierResult === null ? t('demo.verifyingShort')
-                    : nullifierResult.seen_before ? t('demo.doubleSpend')
-                    : t('demo.firstUse')}
-                </p>
-                <p className="text-xs text-slate-500 font-mono mt-1 break-all">{state.nullifier}</p>
-                {nullifierResult && (
-                  <p className="text-xs text-slate-500 mt-1">
-                    Registry: {nullifierResult.registry_size} nullifier{nullifierResult.registry_size !== 1 ? 's' : ''} {t('demo.registryCount')}
-                  </p>
-                )}
-              </div>
-            </div>
-          )}
-
           {/* Zero-Knowledge Explainer — 3 step visual story */}
           {(() => {
             // Build list of individual predicates with human descriptions
@@ -1092,11 +963,9 @@ function VerifierStep({ state, setState, t }: { state: WizardState; setState: Re
                     return ops.includes(sub.predicate_op || '') && !predicateDescriptions.some(d => d.claim === p.predicate.claim)
                   })
                   const resolveVal = (v: unknown) => v === '__FROM_FORM__' && matchedConfig ? (state.fields.find(f => f.name === matchedConfig.predicate.claim)?.value ?? v) : v
-                  const docField = config.fields.find(f => ['document_number', 'license_number', 'diploma_number', 'vin'].includes(f.name))
-                  const isDocNumberEq = !matchedConfig && sub.predicate_op === 'Eq' && docField
                   const label = matchedConfig
                     ? `${matchedConfig.predicate.claim} ${matchedConfig.predicate.op === 'set_member' ? 'in allowed set' : matchedConfig.predicate.op === 'gte' ? '>= ' + resolveVal(matchedConfig.predicate.value) : matchedConfig.predicate.op === 'lte' ? '<= ' + resolveVal(matchedConfig.predicate.value) : matchedConfig.predicate.op === 'eq' ? '= ' + resolveVal(matchedConfig.predicate.value) : matchedConfig.predicate.op + ' ' + resolveVal(matchedConfig.predicate.value)}`
-                    : isDocNumberEq ? `${docField.name} = ${state.fields.find(f => f.name === docField.name)?.value ?? ''}` : sub.predicate_op || '?'
+                    : sub.predicate_op || '?'
                   predicateDescriptions.push({ claim: matchedConfig?.predicate.claim || '', description: label, proofSize: sub.proof_bytes?.length || 0 })
                 }
               }
@@ -1121,14 +990,6 @@ function VerifierStep({ state, setState, t }: { state: WizardState; setState: Re
                 return c === fn || ((fn === 'birthdate' || fn === 'birth_date') && (c === 'birthdate' || c === 'birth_date')) || (fn === 'nationality' && c === 'nationality') || (fn === 'expiry_date' && c === 'expiry_date') || (fn === 'field_of_study' && c === 'field_of_study') || (fn === 'category' && c === 'category') || (fn === 'issue_date' && c === 'issue_date') || (fn === 'graduation_year' && c === 'graduation_year')
               })
               return fromDesc?.description || null
-            }
-
-            const isDisclosedField = (fieldName: string) => {
-              const fn = fieldName.toLowerCase()
-              const isDocField = fn === 'document_number' || fn === 'license_number' || fn === 'diploma_number' || fn === 'vin'
-              if (!isDocField) return false
-              // Only show as disclosed if it was actually proven (NOT in hiddenFields)
-              return !state.hiddenFields.some(h => h.toLowerCase() === fn)
             }
 
             return (
@@ -1209,14 +1070,11 @@ function VerifierStep({ state, setState, t }: { state: WizardState; setState: Re
                       <div className="rounded-lg border border-green-800/30 bg-green-950/10 overflow-hidden">
                         {state.fields.map((field, i) => {
                           const matched = fieldMatchesPredicate(field.name)
-                          const disclosed = !matched && isDisclosedField(field.name)
                           return (
                             <div key={field.name} className={`flex items-center justify-between px-4 py-2 ${i > 0 ? 'border-t border-slate-700/30' : ''}`}>
-                              <span className={`shrink-0 ${(matched || disclosed) ? 'text-slate-300 text-xs' : 'text-slate-600 text-xs'}`}>{field.label || field.name}</span>
+                              <span className={`shrink-0 ${matched ? 'text-slate-300 text-xs' : 'text-slate-600 text-xs'}`}>{field.label || field.name}</span>
                               {matched ? (
                                 <span className="text-green-400 text-xs font-semibold text-right truncate ml-4">&#10003; {matched}</span>
-                              ) : disclosed ? (
-                                <span className="text-blue-400 text-xs font-semibold text-right truncate ml-4">{field.value} <span className="text-blue-500/60">({t('demo.disclosed')})</span></span>
                               ) : (
                                 <span className="font-mono text-xs text-slate-700 select-none tracking-widest" aria-hidden="true">{'\u2588'.repeat(6)}</span>
                               )}
