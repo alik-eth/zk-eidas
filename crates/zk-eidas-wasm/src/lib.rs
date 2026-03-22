@@ -154,6 +154,117 @@ pub fn prepare_inputs(sdjwt: &str, claim_name: &str) -> Result<String, JsError> 
 }
 
 
+/// Build a CompoundProof from snarkjs proof results.
+///
+/// Takes a JSON object with `proofs` array (each entry has circuitName, proof,
+/// publicSignals, vk) and `op` string ("And" or "Or").
+///
+/// snarkjs proofs are stored as UTF-8 JSON bytes in proof_bytes.
+/// Public signals (decimal strings) are stored as UTF-8 bytes in public_inputs.
+/// Verification keys are stored as UTF-8 JSON bytes.
+///
+/// ECDSA proofs (circuitName == "ecdsa_verify") go into ecdsa_proofs HashMap.
+/// Nullifier proofs (circuitName == "nullifier") are separated for contract_nullifier.
+/// All other circuits go into the predicate proofs vec.
+#[wasm_bindgen]
+pub fn build_compound_proof(proofs_json: &str, op: &str) -> Result<String, JsError> {
+    use zk_eidas_types::proof::{CompoundProof, ContractNullifier, LogicalOp};
+    use zk_eidas_types::predicate::PredicateOp;
+    use std::collections::HashMap;
+
+    let input: serde_json::Value = serde_json::from_str(proofs_json)
+        .map_err(|e| JsError::new(&format!("invalid JSON: {e}")))?;
+
+    let logical_op = match op {
+        "And" => LogicalOp::And,
+        "Or" => LogicalOp::Or,
+        _ => return Err(JsError::new(&format!("invalid op: {op}, expected And or Or"))),
+    };
+
+    let proofs_arr = input["proofs"].as_array()
+        .ok_or_else(|| JsError::new("missing 'proofs' array"))?;
+
+    let mut predicate_proofs = Vec::new();
+    let mut ecdsa_proofs = HashMap::new();
+    let mut nullifier_proof: Option<ZkProof> = None;
+    let mut nullifier_entry: Option<&serde_json::Value> = None;
+
+    for entry in proofs_arr {
+        let circuit_name = entry["circuitName"].as_str()
+            .ok_or_else(|| JsError::new("missing circuitName"))?;
+
+        let proof_bytes = serde_json::to_vec(&entry["proof"])
+            .map_err(|e| JsError::new(&format!("proof serialize: {e}")))?;
+
+        let signals = entry["publicSignals"].as_array()
+            .ok_or_else(|| JsError::new("missing publicSignals"))?;
+        let public_inputs: Vec<Vec<u8>> = signals.iter()
+            .filter_map(|s| s.as_str().map(|v| v.as_bytes().to_vec()))
+            .collect();
+
+        let vk_bytes = serde_json::to_vec(&entry["vk"])
+            .map_err(|e| JsError::new(&format!("vk serialize: {e}")))?;
+
+        let predicate_op = match circuit_name {
+            "ecdsa_verify" => PredicateOp::Ecdsa,
+            "nullifier" => PredicateOp::Nullifier,
+            "holder_binding" => PredicateOp::HolderBinding,
+            "gte" => PredicateOp::Gte,
+            "lte" => PredicateOp::Lte,
+            "eq" => PredicateOp::Eq,
+            "neq" => PredicateOp::Neq,
+            "range" => PredicateOp::Range,
+            "set_member" => PredicateOp::SetMember,
+            "reveal" => PredicateOp::Reveal,
+            other => return Err(JsError::new(&format!("unknown circuit: {other}"))),
+        };
+
+        let zk_proof = ZkProof::new(proof_bytes, public_inputs, vk_bytes, predicate_op);
+
+        match circuit_name {
+            "ecdsa_verify" => {
+                let key = entry["claimName"].as_str()
+                    .unwrap_or("default")
+                    .to_string();
+                ecdsa_proofs.insert(key, zk_proof);
+            }
+            "nullifier" => {
+                nullifier_entry = Some(entry);
+                nullifier_proof = Some(zk_proof);
+            }
+            _ => {
+                predicate_proofs.push(zk_proof);
+            }
+        }
+    }
+
+    let mut compound = CompoundProof::with_ecdsa_proofs(predicate_proofs, logical_op, ecdsa_proofs);
+
+    if let Some(np) = nullifier_proof {
+        let entry = nullifier_entry.unwrap();
+        let nullifier_hex = entry["nullifierHex"].as_str().unwrap_or("");
+        let contract_hash_hex = entry["contractHashHex"].as_str().unwrap_or("");
+        let salt_hex = entry["saltHex"].as_str().unwrap_or("");
+
+        let nullifier_bytes = hex::decode(nullifier_hex.trim_start_matches("0x")).unwrap_or_default();
+        let contract_hash_bytes = hex::decode(contract_hash_hex.trim_start_matches("0x")).unwrap_or_default();
+        let salt_bytes = hex::decode(salt_hex.trim_start_matches("0x")).unwrap_or_default();
+
+        let cn = ContractNullifier {
+            nullifier: nullifier_bytes,
+            contract_hash: contract_hash_bytes,
+            salt: salt_bytes,
+            proof: np,
+        };
+        compound = compound.with_contract_nullifier(cn);
+    }
+
+    let json = serde_json::to_string(&compound)
+        .map_err(|e| JsError::new(&format!("serialize compound: {e}")))?;
+
+    Ok(json)
+}
+
 #[cfg(all(test, target_arch = "wasm32"))]
 mod wasm_tests {
     use super::*;
@@ -333,5 +444,74 @@ mod tests {
         assert_eq!(parsed["version"], 1);
         assert_eq!(parsed["proofs"].as_array().unwrap().len(), 1);
         assert_eq!(parsed["proofs"][0]["op"], "Gte");
+    }
+
+    #[test]
+    fn build_compound_proof_basic() {
+        let input = serde_json::json!({
+            "proofs": [
+                {
+                    "circuitName": "ecdsa_verify",
+                    "proof": { "pi_a": [1,2,3], "pi_b": [[4,5],[6,7]], "pi_c": [8,9,10] },
+                    "publicSignals": ["111", "222", "333"],
+                    "vk": { "protocol": "groth16", "nPublic": 3 }
+                },
+                {
+                    "circuitName": "gte",
+                    "proof": { "pi_a": [11,12,13], "pi_b": [[14,15],[16,17]], "pi_c": [18,19,20] },
+                    "publicSignals": ["444", "555"],
+                    "vk": { "protocol": "groth16", "nPublic": 2 }
+                }
+            ],
+            "op": "And"
+        });
+
+        let result = build_compound_proof(&input.to_string(), "And").unwrap();
+        let parsed: serde_json::Value = serde_json::from_str(&result).unwrap();
+
+        // Should have 1 predicate proof in "proofs" array
+        assert_eq!(parsed["proofs"].as_array().unwrap().len(), 1);
+        // Should have 1 ECDSA proof in "ecdsa_proofs" map
+        assert_eq!(parsed["ecdsa_proofs"].as_object().unwrap().len(), 1);
+        // Op should be "And"
+        assert_eq!(parsed["op"], "And");
+    }
+
+    #[test]
+    fn build_compound_proof_with_nullifier() {
+        let input = serde_json::json!({
+            "proofs": [
+                {
+                    "circuitName": "ecdsa_verify",
+                    "proof": { "pi_a": [1], "pi_b": [[2]], "pi_c": [3] },
+                    "publicSignals": ["111", "222", "333"],
+                    "vk": {},
+                    "claimName": "birth_date"
+                },
+                {
+                    "circuitName": "gte",
+                    "proof": { "pi_a": [4], "pi_b": [[5]], "pi_c": [6] },
+                    "publicSignals": ["444"],
+                    "vk": {}
+                },
+                {
+                    "circuitName": "nullifier",
+                    "proof": { "pi_a": [7], "pi_b": [[8]], "pi_c": [9] },
+                    "publicSignals": ["999"],
+                    "vk": {},
+                    "nullifierHex": "0xaabb",
+                    "contractHashHex": "0xccdd",
+                    "saltHex": "0xeeff"
+                }
+            ],
+            "op": "And"
+        });
+
+        let result = build_compound_proof(&input.to_string(), "And").unwrap();
+        let parsed: serde_json::Value = serde_json::from_str(&result).unwrap();
+
+        assert!(parsed["contract_nullifier"].is_object());
+        assert_eq!(parsed["contract_nullifier"]["nullifier"].as_array().unwrap().len(), 2); // [0xaa, 0xbb]
+        assert!(parsed["ecdsa_proofs"]["birth_date"].is_object());
     }
 }
