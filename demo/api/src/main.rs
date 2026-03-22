@@ -436,7 +436,8 @@ async fn generate_proof(
     })?;
     let (zk_proofs, proof_descriptions, proven_claims, all_field_names) =
         tokio::task::spawn_blocking(move || -> Result<_, (StatusCode, String)> {
-            unsafe { libc::nice(10); }
+            // SAFETY: nice() only adjusts scheduling priority; safe to call from any thread, cannot cause UB.
+            unsafe { libc::nice(10) };
             let zk_proofs = builder.prove_all().map_err(|e| {
                 (
                     StatusCode::INTERNAL_SERVER_ERROR,
@@ -664,7 +665,8 @@ async fn generate_compound_proof(
     })?;
     let (compound_proof, proven_claims, all_field_names) =
         tokio::task::spawn_blocking(move || -> Result<_, (StatusCode, String)> {
-            unsafe { libc::nice(10); }
+            // SAFETY: nice() only adjusts scheduling priority; safe to call from any thread, cannot cause UB.
+            unsafe { libc::nice(10) };
             let compound_proof = builder.prove_compound().map_err(|e| {
                 (
                     StatusCode::INTERNAL_SERVER_ERROR,
@@ -845,7 +847,8 @@ async fn prove_binding(
     })?;
     let binding_claim_a = req.binding_claim.clone();
     let (zk_proofs_a, binding_hash_a) = tokio::task::spawn_blocking(move || {
-        unsafe { libc::nice(10); }
+        // SAFETY: nice() only adjusts scheduling priority; safe to call from any thread, cannot cause UB.
+        unsafe { libc::nice(10) };
         builder_a.prove_with_binding(&binding_claim_a)
     })
     .await
