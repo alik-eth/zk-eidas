@@ -34,6 +34,36 @@ export function parse_proof(proof_json: string): string;
  */
 export function prepare_inputs(sdjwt: string, claim_name: string): string;
 
+/**
+ * Build a compound proof from individual sub-proofs.
+ *
+ * Takes a JSON string with `{ proofs: [...], op: "And" }` and a composition operator string.
+ * Returns JSON string of the compound proof.
+ */
+export function build_compound_proof(proofs_json: string, op: string): string;
+
+/**
+ * Export a compound proof to a CBOR-encoded ProofEnvelope.
+ *
+ * Takes a compound proof JSON string and a boolean indicating whether to compress.
+ * Returns the CBOR bytes as Uint8Array.
+ */
+export function export_to_envelope(compound_proof_json: string, compress: boolean): Uint8Array;
+
+/**
+ * Generate nullifier circuit inputs from an SD-JWT credential.
+ *
+ * Returns JSON: { "inputs": {...}, "contract_hash_hex": "...", "salt_hex": "..." }
+ */
+export function generate_nullifier_inputs(sdjwt: string, contract_terms: string, timestamp: string, ecdsa_public_signals: string): string;
+
+/**
+ * Generate holder binding circuit inputs from an SD-JWT credential.
+ *
+ * Returns JSON: { "inputs": {...} }
+ */
+export function generate_holder_binding_inputs(sdjwt: string, claim_name: string, ecdsa_public_signals: string): string;
+
 export type InitInput = RequestInfo | URL | Response | BufferSource | WebAssembly.Module;
 
 export interface InitOutput {

@@ -13,6 +13,32 @@ export interface BrowserCompoundResult {
   totalTimeMs: number;
 }
 
+export interface ContractProveParams {
+  credentials: Array<{
+    credential: string
+    format: 'sdjwt' | 'mdoc'
+    predicates: Array<{ claim: string; op: string; value: unknown }>
+  }>
+  contractTerms: string
+  timestamp: string
+  bindings?: Array<{
+    credIndexA: number; claimA: string
+    credIndexB: number; claimB: string
+  }>
+  onProgress?: (msg: string) => void
+  onCredentialIndex?: (index: number) => void
+}
+
+export interface ContractProveResult {
+  compoundProofs: string[]
+  envelopeBytes: Uint8Array[]
+  nullifier: string
+  contractHash: string
+  salt: string
+  bindingResults: Array<{ bindingHash: string; verified: boolean }>
+  totalTimeMs: number
+}
+
 type ProgressCallback = (stage: string, detail: string) => void;
 
 const ARTIFACT_CACHE_NAME = "zk-eidas-circuits-v1";
@@ -206,6 +232,271 @@ export async function proveCompoundInBrowser(
   onProgress?.("done", `All proofs generated in ${(totalTimeMs / 1000).toFixed(1)}s`);
 
   return { ecdsaProof: firstEcdsa.result, ecdsaProofs, predicateProofs, totalTimeMs };
+}
+
+/**
+ * On-device contract proving: multi-credential ECDSA + predicates + nullifier + holder binding.
+ */
+export async function proveContractInBrowser(
+  params: ContractProveParams,
+  apiBaseUrl: string,
+): Promise<ContractProveResult> {
+  const totalStart = performance.now()
+  const { credentials, contractTerms, timestamp, bindings, onProgress, onCredentialIndex } = params
+
+  // Guard: mdoc not supported on-device
+  const mdocCred = credentials.find(c => c.format === 'mdoc')
+  if (mdocCred) {
+    throw new Error('On-device proving is only available for SD-JWT credentials. Please switch to Server mode.')
+  }
+
+  // Load WASM module
+  onProgress?.('Loading WASM module...')
+  const wasm = await import('../../pkg/zk-eidas-wasm.js')
+  await wasm.default()
+
+  const compoundProofs: string[] = []
+  const envelopeBytes: Uint8Array[] = []
+  let nullifierHex = ''
+  let contractHashHex = ''
+  let saltHex = ''
+
+  // Per-credential ECDSA cache: Map<credIndex, Map<claimName, { result, claimValue }>>
+  const ecdsaCachePerCred = new Map<number, Map<string, { result: BrowserProofResult; claimValue: string }>>()
+
+  for (let ci = 0; ci < credentials.length; ci++) {
+    onCredentialIndex?.(ci)
+    const cred = credentials[ci]
+    const uniqueClaims = [...new Set(cred.predicates.map(p => p.claim))]
+
+    // Step 1: ECDSA proofs for this credential
+    const ecdsaCache = new Map<string, { result: BrowserProofResult; claimValue: string }>()
+
+    for (let c = 0; c < uniqueClaims.length; c++) {
+      const claim = uniqueClaims[c]
+      onProgress?.(`[Cred ${ci + 1}/${credentials.length}] ECDSA proof for "${claim}"...`)
+
+      const prepRaw = wasm.prepare_inputs(cred.credential, claim)
+      const prepData = JSON.parse(prepRaw)
+
+      const ecdsaResult = await proveInBrowser(
+        'ecdsa_verify',
+        prepData.ecdsa_inputs,
+        apiBaseUrl,
+      )
+      if (!ecdsaResult.verified) {
+        throw new Error(`ECDSA proof for "${claim}" failed verification`)
+      }
+
+      ecdsaCache.set(claim, { result: ecdsaResult, claimValue: prepData.claim_value })
+    }
+    ecdsaCachePerCred.set(ci, ecdsaCache)
+
+    // Step 2: Predicate proofs
+    const allProofsForCompound: Array<{
+      circuitName: string
+      proof: unknown
+      publicSignals: string[]
+      vk: unknown
+      claimName?: string
+      nullifierHex?: string
+      contractHashHex?: string
+      saltHex?: string
+    }> = []
+
+    // Add ECDSA proofs to compound
+    for (const [claim, { result }] of ecdsaCache) {
+      const vkRes = await fetch(`${apiBaseUrl}/circuits/ecdsa_verify/vk.json`)
+      const vk = await vkRes.json()
+      allProofsForCompound.push({
+        circuitName: 'ecdsa_verify',
+        proof: result.proof,
+        publicSignals: result.publicSignals,
+        vk,
+        claimName: claim,
+      })
+    }
+
+    for (let i = 0; i < cred.predicates.length; i++) {
+      const pred = cred.predicates[i]
+      const cached = ecdsaCache.get(pred.claim)!
+      const { result: ecdsa, claimValue } = cached
+      const commitment = ecdsa.publicSignals[0]
+      const sdArrayHash = ecdsa.publicSignals[1]
+      const msgHashField = ecdsa.publicSignals[2]
+
+      // Handle age/date transformations (same logic as proveCompoundInBrowser)
+      const isDateClaim = typeof pred.value === 'number' &&
+        (pred.claim.includes('birth') || pred.claim.includes('date'))
+      const isAgeThreshold = isDateClaim && (pred.value as number) < 200
+      let circuit = pred.op
+      let threshold = pred.value
+
+      if (isAgeThreshold) {
+        if (pred.op === 'gte') {
+          circuit = 'lte'
+          threshold = ageCutoffEpochDays(pred.value as number)
+        } else if (pred.op === 'lte') {
+          circuit = 'gte'
+          threshold = ageCutoffEpochDays(pred.value as number)
+        }
+      }
+
+      onProgress?.(`[Cred ${ci + 1}] Predicate ${i + 1}/${cred.predicates.length}: ${pred.claim} ${pred.op}...`)
+
+      const predicateInputs: Record<string, string | string[]> = {
+        claim_value: claimValue,
+        sd_array_hash: sdArrayHash,
+        message_hash: msgHashField,
+        commitment,
+      }
+
+      if (circuit === 'gte' || circuit === 'lte') {
+        predicateInputs.threshold = String(threshold)
+      } else if (circuit === 'eq' || circuit === 'neq') {
+        if (typeof threshold === 'string' && !/^\d+$/.test(threshold)) {
+          predicateInputs.expected = await hashToU64(threshold)
+        } else {
+          predicateInputs.expected = String(threshold)
+        }
+      } else if (circuit === 'range') {
+        const [low, high] = threshold as unknown as [number, number]
+        predicateInputs.low = String(low)
+        predicateInputs.high = String(high)
+      } else if (circuit === 'set_member') {
+        const set = threshold as unknown as string[]
+        const padded: string[] = []
+        for (let j = 0; j < 16; j++) {
+          padded.push(j < set.length ? await hashToU64(set[j]) : '0')
+        }
+        predicateInputs.set = padded
+        predicateInputs.set_len = String(set.length)
+      }
+
+      const predResult = await proveInBrowser(circuit, predicateInputs, apiBaseUrl)
+      const vkRes = await fetch(`${apiBaseUrl}/circuits/${circuit}/vk.json`)
+      const vk = await vkRes.json()
+      allProofsForCompound.push({
+        circuitName: circuit,
+        proof: predResult.proof,
+        publicSignals: predResult.publicSignals,
+        vk,
+      })
+    }
+
+    // Step 3: Nullifier proof (first credential only)
+    if (ci === 0) {
+      const firstClaim = uniqueClaims[0]
+      const firstEcdsa = ecdsaCache.get(firstClaim)!.result
+      const ecdsaSignals = JSON.stringify(firstEcdsa.publicSignals.slice(0, 3))
+
+      onProgress?.(`[Cred ${ci + 1}] Generating nullifier...`)
+      const nullifierRaw = wasm.generate_nullifier_inputs(
+        cred.credential, contractTerms, timestamp, ecdsaSignals,
+      )
+      const nullifierData = JSON.parse(nullifierRaw)
+
+      const nullifierResult = await proveInBrowser(
+        'nullifier', nullifierData.inputs, apiBaseUrl,
+      )
+
+      // Extract nullifier from circuit output (publicSignals[0])
+      const nullifierBigInt = BigInt(nullifierResult.publicSignals[0])
+      nullifierHex = '0x' + nullifierBigInt.toString(16).padStart(64, '0')
+      contractHashHex = nullifierData.contract_hash_hex
+      saltHex = nullifierData.salt_hex
+
+      const vkRes = await fetch(`${apiBaseUrl}/circuits/nullifier/vk.json`)
+      const vk = await vkRes.json()
+      allProofsForCompound.push({
+        circuitName: 'nullifier',
+        proof: nullifierResult.proof,
+        publicSignals: nullifierResult.publicSignals,
+        vk,
+        nullifierHex,
+        contractHashHex,
+        saltHex,
+      })
+    }
+
+    // Step 4: Build compound proof via WASM
+    const compoundInput = JSON.stringify({ proofs: allProofsForCompound, op: 'And' })
+    const compoundJson = wasm.build_compound_proof(compoundInput, 'And')
+    compoundProofs.push(compoundJson)
+
+    // Step 5: Export to envelope via WASM
+    const cbor = wasm.export_to_envelope(compoundJson, true)
+    envelopeBytes.push(new Uint8Array(cbor))
+  }
+
+  // Step 6: Holder binding proofs
+  const bindingResults: Array<{ bindingHash: string; verified: boolean }> = []
+
+  if (bindings) {
+    for (const binding of bindings) {
+      onCredentialIndex?.(-2) // signal binding phase
+      onProgress?.('Proving holder binding...')
+
+      const ecdsaCacheA = ecdsaCachePerCred.get(binding.credIndexA)!
+      const ecdsaCacheB = ecdsaCachePerCred.get(binding.credIndexB)!
+
+      // Get or prove ECDSA for binding claims
+      const getOrProveEcdsa = async (
+        credIndex: number,
+        claimName: string,
+        cache: Map<string, { result: BrowserProofResult; claimValue: string }>,
+      ) => {
+        if (cache.has(claimName)) return cache.get(claimName)!
+        const cred = credentials[credIndex]
+        const prepRaw = wasm.prepare_inputs(cred.credential, claimName)
+        const prepData = JSON.parse(prepRaw)
+        const ecdsaResult = await proveInBrowser('ecdsa_verify', prepData.ecdsa_inputs, apiBaseUrl)
+        if (!ecdsaResult.verified) throw new Error(`ECDSA proof for binding claim "${claimName}" failed`)
+        const entry = { result: ecdsaResult, claimValue: prepData.claim_value }
+        cache.set(claimName, entry)
+        return entry
+      }
+
+      const ecdsaA = await getOrProveEcdsa(binding.credIndexA, binding.claimA, ecdsaCacheA)
+      const ecdsaB = await getOrProveEcdsa(binding.credIndexB, binding.claimB, ecdsaCacheB)
+
+      const bindingInputsARaw = wasm.generate_holder_binding_inputs(
+        credentials[binding.credIndexA].credential,
+        binding.claimA,
+        JSON.stringify(ecdsaA.result.publicSignals.slice(0, 3)),
+      )
+      const bindingInputsBRaw = wasm.generate_holder_binding_inputs(
+        credentials[binding.credIndexB].credential,
+        binding.claimB,
+        JSON.stringify(ecdsaB.result.publicSignals.slice(0, 3)),
+      )
+
+      const bindingInputsA = JSON.parse(bindingInputsARaw)
+      const bindingInputsB = JSON.parse(bindingInputsBRaw)
+
+      const bindingResultA = await proveInBrowser('holder_binding', bindingInputsA.inputs, apiBaseUrl)
+      const bindingResultB = await proveInBrowser('holder_binding', bindingInputsB.inputs, apiBaseUrl)
+
+      const hashA = bindingResultA.publicSignals[0]
+      const hashB = bindingResultB.publicSignals[0]
+      const verified = hashA === hashB
+
+      bindingResults.push({ bindingHash: hashA, verified })
+    }
+  }
+
+  const totalTimeMs = performance.now() - totalStart
+  onProgress?.(`All proofs generated in ${(totalTimeMs / 1000).toFixed(1)}s`)
+
+  return {
+    compoundProofs,
+    envelopeBytes,
+    nullifier: nullifierHex,
+    contractHash: contractHashHex,
+    salt: saltHex,
+    bindingResults,
+    totalTimeMs,
+  }
 }
 
 /** Check how much circuit data is cached. */
