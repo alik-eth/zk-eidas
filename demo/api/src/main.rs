@@ -1643,7 +1643,7 @@ pub fn build_app(circuits_path: &str) -> Router {
         .route("/holder/prove-compound", post(generate_compound_proof))
         .route("/holder/prove-binding", post(prove_binding))
         .route("/verifier/verify-compound", post(verify_compound_proof))
-        .route("/contracts/prove", post(contract_prove))
+        .route("/holder/contract-prove", post(contract_prove))
         // NOTE: revocation endpoints are unauthenticated.
         // A production deployment MUST add authorization middleware.
         .route("/issuer/revoke", post(revoke_credential))

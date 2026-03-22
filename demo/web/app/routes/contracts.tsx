@@ -547,9 +547,9 @@ function ProveStep({ state, setState, t }: { state: ContractWizardState; setStat
             : p.predicate.value,
         }))
 
-        // Prove via /contracts/prove (includes nullifier generation)
+        // Prove via /holder/contract-prove (includes nullifier generation)
         const selectedTemplate = CONTRACT_TEMPLATES.find(tpl => tpl.id === state.templateId)
-        const proveRes = await fetch(`${API_URL}/contracts/prove`, {
+        const proveRes = await fetch(`${API_URL}/holder/contract-prove`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
