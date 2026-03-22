@@ -34,9 +34,11 @@ Browser (contracts.tsx)
        │   └─ WASM: export_to_envelope(compound_proof_json, true) → compressed CBOR bytes
        │       └─ decomposes CompoundProof → extracts sub-proofs → ProofEnvelope → CBOR
        ├─ For each holder binding (after all credentials proved):
-       │   ├─ WASM: generate_holder_binding_inputs(credential_a, claim_a, credential_b,
-       │   │        claim_b, ecdsa_signals_a, ecdsa_signals_b) → binding circuit inputs
-       │   └─ snarkjs: proveInBrowser('holder_binding', inputs) → binding proof (<1s)
+       │   ├─ For each side (A and B):
+       │   │   ├─ WASM: generate_holder_binding_inputs(credential, claim,
+       │   │   │        ecdsa_signals) → binding circuit inputs
+       │   │   └─ snarkjs: proveInBrowser('holder_binding', inputs) → binding proof (<1s)
+       │   └─ Verify: binding_hash_A === binding_hash_B
        └─ QR chunking (existing client-side logic) → QR codes
 ```
 
@@ -166,15 +168,16 @@ Returns JSON with:
     "message_hash": "..."
   },
   "credential_id": 12345,
-  "nullifier_hex": "0x...",
   "contract_hash_hex": "0x...",
   "salt_hex": "0x..."
 }
 ```
 
-#### `generate_holder_binding_inputs(credential_a: &str, claim_a: &str, credential_b: &str, claim_b: &str, ecdsa_signals_a: &str, ecdsa_signals_b: &str) -> Result<String, JsError>`
+#### `generate_holder_binding_inputs(sdjwt: &str, claim_name: &str, ecdsa_public_signals: &str) -> Result<String, JsError>`
 
-Parses both SD-JWT credentials, extracts claim values. Takes `ecdsa_signals_a` and `ecdsa_signals_b` as JSON arrays of 3 strings each (commitment, sd_array_hash, message_hash from each credential's ECDSA proof). Returns circuit inputs for `holder_binding` including both commitments and claim values.
+Generates holder binding circuit inputs for **one side** of a binding. Each credential in a binding pair calls this function separately. The circuit proves that `claim_value` is committed under the ECDSA signature and outputs `binding_hash = Poseidon(claim_value)`. Both sides must produce the same `binding_hash` to prove the binding holds.
+
+Takes `ecdsa_public_signals` as a JSON array of 3 strings (commitment, sd_array_hash, message_hash from the credential's ECDSA proof). Returns circuit inputs for `holder_binding`.
 
 ### 2. snarkjs Prover (`demo/web/app/lib/snarkjs-prover.ts`)
 
