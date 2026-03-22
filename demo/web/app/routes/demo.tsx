@@ -1123,7 +1123,10 @@ function VerifierStep({ state, setState, t }: { state: WizardState; setState: Re
 
             const isDisclosedField = (fieldName: string) => {
               const fn = fieldName.toLowerCase()
-              return fn === 'document_number' || fn === 'license_number' || fn === 'diploma_number' || fn === 'vin'
+              const isDocField = fn === 'document_number' || fn === 'license_number' || fn === 'diploma_number' || fn === 'vin'
+              if (!isDocField) return false
+              // Only show as disclosed if it was actually proven (NOT in hiddenFields)
+              return !state.hiddenFields.some(h => h.toLowerCase() === fn)
             }
 
             return (
