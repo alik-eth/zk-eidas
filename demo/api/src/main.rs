@@ -1105,12 +1105,11 @@ async fn contract_prove(
     // 1. Generate salt
     let salt: u64 = rand::random();
 
-    // 2. Compute contract_hash = SHA256(terms || timestamp || salt) → u64
+    // 2. Compute contract_hash = SHA256(terms || timestamp) → u64
     use sha2::{Sha256, Digest};
     let mut hasher = Sha256::new();
     hasher.update(req.contract_terms.as_bytes());
     hasher.update(req.timestamp.as_bytes());
-    hasher.update(&salt.to_be_bytes());
     let hash: [u8; 32] = hasher.finalize().into();
     let contract_hash = u64::from_be_bytes(hash[..8].try_into().unwrap());
 
@@ -2576,10 +2575,10 @@ mod tests {
         assert!(data["compound_proof_json"].is_string(), "must have compound_proof_json");
         assert!(data["sub_proofs_count"].as_u64().unwrap() >= 1);
 
-        // Compound proof must have contract_nullifier
+        // Compound proof must have contract_nullifiers
         let compound: serde_json::Value = serde_json::from_str(data["compound_proof_json"].as_str().unwrap()).unwrap();
-        assert!(compound["contract_nullifier"].is_object(), "compound proof must contain contract_nullifier");
-        assert!(!compound["contract_nullifier"]["nullifier"].as_array().unwrap().is_empty());
+        assert!(compound["contract_nullifiers"].is_array(), "compound proof must contain contract_nullifiers");
+        assert!(!compound["contract_nullifiers"][0]["nullifier"].as_array().unwrap().is_empty());
 
         // No document_number in any public output
         let compound_str = data["compound_proof_json"].as_str().unwrap();
@@ -2633,6 +2632,39 @@ mod tests {
             }))
             .send().await.unwrap();
         assert_eq!(res.status().as_u16(), 500, "empty predicates should fail");
+    }
+
+    #[tokio::test]
+    #[serial]
+    async fn contract_prove_same_terms_same_hash() {
+        let (url, cred) = issue_test_credential(serde_json::json!({
+            "given_name": "Test", "birth_date": "1998-05-14", "document_number": "UA-HASH-001"
+        })).await;
+        let client = reqwest::Client::new();
+
+        let body = serde_json::json!({
+            "credential": cred, "format": "sdjwt",
+            "predicates": [{ "claim": "birth_date", "op": "gte", "value": 18 }],
+            "contract_terms": "same terms", "timestamp": "2026-03-23T10:00:00Z",
+        });
+
+        let res1: serde_json::Value = client
+            .post(format!("{url}/holder/contract-prove"))
+            .json(&body)
+            .send().await.unwrap().json().await.unwrap();
+
+        let res2: serde_json::Value = client
+            .post(format!("{url}/holder/contract-prove"))
+            .json(&body)
+            .send().await.unwrap().json().await.unwrap();
+
+        let h1 = res1["contract_hash"].as_str().unwrap();
+        let h2 = res2["contract_hash"].as_str().unwrap();
+        assert_eq!(h1, h2, "same (terms, timestamp) must produce same contract_hash");
+
+        let n1 = res1["nullifier"].as_str().unwrap();
+        let n2 = res2["nullifier"].as_str().unwrap();
+        assert_ne!(n1, n2, "different salts must produce different nullifiers");
     }
 
     #[tokio::test]
