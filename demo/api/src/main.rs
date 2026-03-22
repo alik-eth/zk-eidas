@@ -770,6 +770,8 @@ struct ProveBindingRequest {
     binding_claim_b: Option<String>,  // if different from binding_claim for credential B
     predicates_a: Vec<PredicateRequest>,
     predicates_b: Vec<PredicateRequest>,
+    #[serde(default)]
+    skip_cache: bool,
 }
 
 #[derive(Serialize)]
@@ -796,6 +798,7 @@ async fn prove_binding(
 ) -> Result<Json<ProveBindingResponse>, (StatusCode, String)> {
     // Check binding cache
     let cache_key = compute_binding_cache_key(&req);
+    if !req.skip_cache {
     if let Some(cached) = state.binding_cache.get(&cache_key) {
         eprintln!("[prove-binding] CACHE HIT for key {cache_key}");
         return Ok(Json(ProveBindingResponse {
@@ -818,7 +821,8 @@ async fn prove_binding(
             cached: true,
         }));
     }
-    eprintln!("[prove-binding] CACHE MISS for key {cache_key}");
+    }
+    eprintln!("[prove-binding] {} for key {cache_key}", if req.skip_cache { "CACHE SKIPPED" } else { "CACHE MISS" });
 
     // Build and prove credential A with binding
     let mut builder_a = zk_eidas::ZkCredential::from_sdjwt(&req.sdjwt_a, &state.circuits_path)
@@ -2080,7 +2084,8 @@ mod tests {
                 "binding_claim": "document_number",
                 "binding_claim_b": "owner_document_number",
                 "predicates_a": [],
-                "predicates_b": []
+                "predicates_b": [],
+                "skip_cache": true
             }))
             .send()
             .await
@@ -2105,14 +2110,15 @@ mod tests {
                 "predicates": [
                     { "claim": "birth_date", "op": "gte", "value": 18 }
                 ],
-                "op": "and"
+                "op": "and",
+                "skip_cache": true
             }))
             .send()
             .await
             .unwrap();
         assert_eq!(res.status(), 200);
         let body: serde_json::Value = res.json().await.unwrap();
-        // Without a cache file, cached should be absent (skip_serializing_if false)
+        // With skip_cache, cached should be absent (skip_serializing_if false)
         assert!(body.get("cached").is_none(), "cached field should be absent when false");
         assert!(!body["compound_proof_json"].as_str().unwrap().is_empty());
     }
