@@ -1092,9 +1092,11 @@ function VerifierStep({ state, setState, t }: { state: WizardState; setState: Re
                     return ops.includes(sub.predicate_op || '') && !predicateDescriptions.some(d => d.claim === p.predicate.claim)
                   })
                   const resolveVal = (v: unknown) => v === '__FROM_FORM__' && matchedConfig ? (state.fields.find(f => f.name === matchedConfig.predicate.claim)?.value ?? v) : v
+                  const docField = config.fields.find(f => ['document_number', 'license_number', 'diploma_number', 'vin'].includes(f.name))
+                  const isDocNumberEq = !matchedConfig && sub.predicate_op === 'Eq' && docField
                   const label = matchedConfig
                     ? `${matchedConfig.predicate.claim} ${matchedConfig.predicate.op === 'set_member' ? 'in allowed set' : matchedConfig.predicate.op === 'gte' ? '>= ' + resolveVal(matchedConfig.predicate.value) : matchedConfig.predicate.op === 'lte' ? '<= ' + resolveVal(matchedConfig.predicate.value) : matchedConfig.predicate.op === 'eq' ? '= ' + resolveVal(matchedConfig.predicate.value) : matchedConfig.predicate.op + ' ' + resolveVal(matchedConfig.predicate.value)}`
-                    : sub.predicate_op || '?'
+                    : isDocNumberEq ? `${docField.name} = ${state.fields.find(f => f.name === docField.name)?.value ?? ''}` : sub.predicate_op || '?'
                   predicateDescriptions.push({ claim: matchedConfig?.predicate.claim || '', description: label, proofSize: sub.proof_bytes?.length || 0 })
                 }
               }

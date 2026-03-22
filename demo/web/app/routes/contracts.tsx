@@ -585,8 +585,11 @@ function ProveStep({ state, setState, t }: { state: ContractWizardState; setStat
           allQrDataUrls.push(url)
         }
 
-        // Build predicate descriptions
-        const predicateDescriptions = templatePredicates.map(p => t(p.labelKey))
+        // Build predicate descriptions (including the auto-injected doc ID eq predicate)
+        const predicateDescriptions = [
+          ...templatePredicates.map(p => t(p.labelKey)),
+          `${t('contracts.documentId')}: ${req.disclosedField} = ${cred.credentialId}`,
+        ]
 
         // Update credential data with proof info
         updatedCredentials[ci] = {
