@@ -1280,8 +1280,21 @@ async fn serve_circuit_artifact(
     AxumPath(rest): AxumPath<String>,
 ) -> impl axum::response::IntoResponse {
     let file = rest.split('/').last().unwrap_or("");
-    let path = std::path::PathBuf::from(&state.circuits_path).join(&rest);
-    match tokio::fs::read(&path).await {
+    let base = std::path::PathBuf::from(&state.circuits_path)
+        .canonicalize()
+        .unwrap_or_else(|_| std::path::PathBuf::from(&state.circuits_path));
+    let path = base.join(&rest);
+    // Prevent path traversal: resolved path must stay within circuits dir
+    let canonical = match path.canonicalize() {
+        Ok(p) if p.starts_with(&base) => p,
+        _ => {
+            return axum::response::Response::builder()
+                .status(404)
+                .body(Body::from("Not found"))
+                .unwrap();
+        }
+    };
+    match tokio::fs::read(&canonical).await {
         Ok(data) => {
             let content_type = if file.ends_with(".wasm") {
                 "application/wasm"
