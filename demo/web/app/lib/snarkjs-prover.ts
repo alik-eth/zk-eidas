@@ -27,9 +27,8 @@ async function hashToU64(value: string): Promise<string> {
 /** Compute epoch days cutoff for an age threshold (e.g. 18 → epoch days of date 18 years ago). */
 function ageCutoffEpochDays(minAge: number): number {
   const now = new Date();
-  const cutoffYear = now.getFullYear() - minAge;
-  const cutoff = new Date(cutoffYear, now.getMonth(), now.getDate());
-  return Math.floor(cutoff.getTime() / 86400000);
+  const cutoff = Date.UTC(now.getUTCFullYear() - minAge, now.getUTCMonth(), now.getUTCDate());
+  return Math.floor(cutoff / 86400000);
 }
 
 /** Prove a single circuit in a Web Worker (keeps UI responsive). */
