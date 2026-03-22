@@ -566,7 +566,15 @@ impl ZkVerifier {
             }
         }
 
-        // Step 3: Check commitment chain
+        // Step 3: Verify contract nullifier if present
+        if let Some(cn) = compound.contract_nullifier() {
+            let valid = verifier.verify(&cn.proof).map_err(ZkError::from)?;
+            if !valid {
+                return Ok(false);
+            }
+        }
+
+        // Step 4: Check commitment chain
         if !check_commitment_chain(compound) {
             return Ok(false);
         }
