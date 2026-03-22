@@ -4,6 +4,7 @@ export interface CredentialRequirement {
   credentialType: string
   predicateIds: string[]
   disclosedField: string
+  nullifierField?: string
 }
 
 export interface HolderBinding {
@@ -40,6 +41,7 @@ export const CONTRACT_TEMPLATES: ContractTemplate[] = [
         credentialType: 'pid',
         predicateIds: ['age'],
         disclosedField: 'document_number',
+        nullifierField: 'document_number',
       },
     ],
   },
@@ -57,6 +59,7 @@ export const CONTRACT_TEMPLATES: ContractTemplate[] = [
         credentialType: 'student_id',
         predicateIds: ['active_student'],
         disclosedField: 'student_number',
+        nullifierField: 'student_number',
       },
     ],
   },
@@ -74,6 +77,7 @@ export const CONTRACT_TEMPLATES: ContractTemplate[] = [
         credentialType: 'drivers_license',
         predicateIds: ['valid', 'category_b', 'experienced'],
         disclosedField: 'license_number',
+        nullifierField: 'license_number',
       },
     ],
   },
@@ -91,6 +95,7 @@ export const CONTRACT_TEMPLATES: ContractTemplate[] = [
         credentialType: 'pid',
         predicateIds: ['age'],
         disclosedField: 'document_number',
+        nullifierField: 'document_number',
       },
       {
         role: 'vehicle',
@@ -105,6 +110,7 @@ export const CONTRACT_TEMPLATES: ContractTemplate[] = [
         credentialType: 'pid',
         predicateIds: ['age'],
         disclosedField: 'document_number',
+        nullifierField: 'document_number',
       },
     ],
     bindings: [

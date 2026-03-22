@@ -27,6 +27,15 @@ interface BindingResult {
   verified: boolean
 }
 
+interface PartyProof {
+  role: string
+  roleLabelKey: string
+  nullifier: string
+  salt: string
+  issuer: string
+  qrDataUrls: string[]
+}
+
 interface ContractWizardState {
   step: 1 | 2 | 3 | 4 | 5
   templateId: string | null
@@ -37,9 +46,8 @@ interface ContractWizardState {
   compressedSize: number
   compressedCborBase64: string | null
   cached: boolean
-  nullifier: string | null
+  partyProofs: PartyProof[]
   contractHash: string | null
-  salt: string | null
 }
 
 const API_URL = typeof window !== 'undefined' && window.location.hostname === 'localhost' ? 'http://localhost:3001' : ''
@@ -54,9 +62,8 @@ const INITIAL_STATE: ContractWizardState = {
   compressedSize: 0,
   compressedCborBase64: null,
   cached: false,
-  nullifier: null,
+  partyProofs: [],
   contractHash: null,
-  salt: null,
 }
 
 export const Route = createFileRoute('/contracts')({
@@ -174,9 +181,8 @@ function Contracts() {
             qrDataUrls: [],
             compressedSize: 0,
             compressedCborBase64: null,
-            nullifier: null,
+            partyProofs: [],
             contractHash: null,
-            salt: null,
           }))
         } else if (step < state.step) {
           setState(prev => ({ ...prev, step: step as ContractWizardState['step'] }))
@@ -523,7 +529,9 @@ function ProveStep({ state, setState, t }: { state: ContractWizardState; setStat
       const allQrDataUrls: string[] = []
       let totalCompressedSize = 0
       let anyCached = false
-      let nullifierData: { nullifier: string; contractHash: string; salt: string } | null = null
+      const partyProofs: PartyProof[] = []
+      let sharedContractHash: string | null = null
+      const timestamp = new Date().toISOString()
 
       const { encodeProofChunks, LogicalOpFlag } = await import('../lib/qr-chunking')
       const QRCode = (await import('qrcode')).default
@@ -559,7 +567,9 @@ function ProveStep({ state, setState, t }: { state: ContractWizardState; setStat
             format: cred.format,
             predicates,
             contract_terms: JSON.stringify(selectedTemplate),
-            timestamp: new Date().toISOString(),
+            timestamp,
+            nullifier_field: req.nullifierField,
+            role: req.role,
             ...(forceSkipCache ? { skip_cache: true } : {}),
           }),
         })
@@ -582,6 +592,7 @@ function ProveStep({ state, setState, t }: { state: ContractWizardState; setStat
         const proofId = ci + 1
         const logicalOp = proofCount > 1 ? LogicalOpFlag.And : LogicalOpFlag.Single
         const chunks = encodeProofChunks(compressed, proofId, ci, proofCount, logicalOp)
+        const qrStartIndex = allQrDataUrls.length
         for (const chunk of chunks) {
           const url = await QRCode.toDataURL([{ data: chunk, mode: 'byte' as const }], {
             errorCorrectionLevel: 'L',
@@ -590,6 +601,7 @@ function ProveStep({ state, setState, t }: { state: ContractWizardState; setStat
           })
           allQrDataUrls.push(url)
         }
+        const qrUrlsForThisCredential = allQrDataUrls.slice(qrStartIndex)
 
         // Build predicate descriptions
         const predicateDescriptions = templatePredicates.map(p => t(p.labelKey))
@@ -603,13 +615,19 @@ function ProveStep({ state, setState, t }: { state: ContractWizardState; setStat
           predicateDescriptions,
         }
 
-        // Store nullifier data from the first credential's response
-        if (ci === 0 && proveData.nullifier) {
-          nullifierData = {
-            nullifier: proveData.nullifier,
-            contractHash: proveData.contract_hash,
-            salt: proveData.salt,
+        // Store per-party nullifier data
+        if (req.nullifierField && proveData.nullifier) {
+          if (!sharedContractHash) {
+            sharedContractHash = proveData.contract_hash
           }
+          partyProofs.push({
+            role: req.role,
+            roleLabelKey: req.roleLabelKey,
+            nullifier: proveData.nullifier,
+            salt: proveData.salt,
+            issuer: config?.issuer ?? '',
+            qrDataUrls: qrUrlsForThisCredential,
+          })
         }
       }
 
@@ -659,9 +677,8 @@ function ProveStep({ state, setState, t }: { state: ContractWizardState; setStat
           qrDataUrls: allQrDataUrls,
           compressedSize: totalCompressedSize,
           cached: anyCached,
-          nullifier: nullifierData?.nullifier ?? null,
-          contractHash: nullifierData?.contractHash ?? null,
-          salt: nullifierData?.salt ?? null,
+          partyProofs,
+          contractHash: sharedContractHash,
         }))
       }, 600)
     } catch (e: unknown) {
@@ -866,23 +883,67 @@ function DocumentStep({ state, setState, t }: { state: ContractWizardState; setS
               <p className="text-sm text-gray-500 italic leading-relaxed">{t(template.bodyKey_uk)}</p>
             </div>
 
-            {/* QR codes */}
-            {state.qrDataUrls.length > 0 && (
-              <div className="mb-5">
-                <div className="grid grid-cols-3 gap-2 justify-items-center">
-                  {state.qrDataUrls.map((url, qi) => (
-                    <div key={qi} className="text-center">
-                      <img
-                        src={url}
-                        alt={`QR ${qi + 1}/${state.qrDataUrls.length}`}
-                        className="w-28 h-28 print:w-[50mm] print:h-[50mm]"
-                      />
-                      <p className="text-[9px] text-gray-400 -mt-0.5">{qi + 1}/{state.qrDataUrls.length}</p>
-                    </div>
-                  ))}
+            {/* Per-party proof blocks */}
+            {state.partyProofs.map((party) => (
+              <div key={party.role} className="mb-5 border border-gray-300 rounded-lg p-4 print:border-black/30">
+                <p className="text-xs font-semibold text-gray-500 mb-3 uppercase tracking-wider">
+                  {t(party.roleLabelKey)}
+                </p>
+                <div className="space-y-1.5">
+                  <div>
+                    <span className="text-[10px] text-gray-400 font-medium">{t('contracts.nullifier')}</span>
+                    <p className="text-xs text-gray-700 font-mono break-all">{party.nullifier}</p>
+                  </div>
+                  <div>
+                    <span className="text-[10px] text-gray-400 font-medium">{t('contracts.salt')}</span>
+                    <p className="text-xs text-gray-700 font-mono break-all">{party.salt}</p>
+                  </div>
+                  <div>
+                    <span className="text-[10px] text-gray-400 font-medium">{t('contracts.issuer')}</span>
+                    <p className="text-xs text-gray-700 font-mono break-all">{party.issuer}</p>
+                  </div>
                 </div>
+                {party.qrDataUrls.length > 0 && (
+                  <div className="mt-3">
+                    <div className="grid grid-cols-3 gap-2 justify-items-center">
+                      {party.qrDataUrls.map((url, qi) => (
+                        <div key={qi} className="text-center">
+                          <img
+                            src={url}
+                            alt={`QR ${qi + 1}/${party.qrDataUrls.length}`}
+                            className="w-28 h-28 print:w-[50mm] print:h-[50mm]"
+                          />
+                          <p className="text-[9px] text-gray-400 -mt-0.5">{qi + 1}/{party.qrDataUrls.length}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
-            )}
+            ))}
+
+            {/* QR codes for credentials WITHOUT nullifiers (e.g. vehicle) */}
+            {(() => {
+              const partyQrCount = state.partyProofs.reduce((sum, p) => sum + p.qrDataUrls.length, 0)
+              const remainingQrs = state.qrDataUrls.slice(partyQrCount)
+              if (remainingQrs.length === 0) return null
+              return (
+                <div className="mb-5">
+                  <div className="grid grid-cols-3 gap-2 justify-items-center">
+                    {remainingQrs.map((url, qi) => (
+                      <div key={qi} className="text-center">
+                        <img
+                          src={url}
+                          alt={`QR ${partyQrCount + qi + 1}/${state.qrDataUrls.length}`}
+                          className="w-28 h-28 print:w-[50mm] print:h-[50mm]"
+                        />
+                        <p className="text-[9px] text-gray-400 -mt-0.5">{partyQrCount + qi + 1}/{state.qrDataUrls.length}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )
+            })()}
 
             {/* Holder bindings */}
             {state.bindings.length > 0 && (
@@ -904,38 +965,39 @@ function DocumentStep({ state, setState, t }: { state: ContractWizardState; setS
               </div>
             )}
 
-            {/* Nullifier / Contract Hash / Salt */}
-            {state.nullifier && (
+            {/* Shared section */}
+            {state.contractHash && (
               <div className="mb-5 border border-gray-300 rounded-lg p-4 print:border-black/30">
-                <p className="text-xs font-semibold text-gray-500 mb-2 uppercase tracking-wider">{t('contracts.nullifier')}</p>
+                <p className="text-xs font-semibold text-gray-500 mb-2 uppercase tracking-wider">{t('contracts.shared')}</p>
                 <div className="space-y-1.5">
                   <div>
-                    <span className="text-[10px] text-gray-400 font-medium">{t('contracts.nullifier')}</span>
-                    <p className="text-xs text-gray-700 font-mono break-all">{state.nullifier}</p>
+                    <span className="text-[10px] text-gray-400 font-medium">{t('contracts.contractHash')}</span>
+                    <p className="text-xs text-gray-700 font-mono break-all">{state.contractHash}</p>
                   </div>
-                  {state.contractHash && (
-                    <div>
-                      <span className="text-[10px] text-gray-400 font-medium">{t('contracts.contractHash')}</span>
-                      <p className="text-xs text-gray-700 font-mono break-all">{state.contractHash}</p>
-                    </div>
-                  )}
-                  {state.salt && (
-                    <div>
-                      <span className="text-[10px] text-gray-400 font-medium">{t('contracts.salt')}</span>
-                      <p className="text-xs text-gray-700 font-mono break-all">{state.salt}</p>
-                    </div>
-                  )}
+                  <div>
+                    <span className="text-[10px] text-gray-400 font-medium">{t('contracts.date')}</span>
+                    <p className="text-xs text-gray-700">{today}</p>
+                  </div>
                 </div>
                 <p className="text-[9px] text-gray-400 mt-2 leading-relaxed italic">{t('contracts.nullifierTooltip')}</p>
               </div>
             )}
 
-            {/* Signature line */}
-            <div className="border-t border-gray-200 pt-4 mt-4">
-              <div className="flex justify-between text-xs text-gray-400">
-                <span>{t('contracts.signatureLine')}: ____________________________</span>
-                <span>{today}</span>
-              </div>
+            {/* Signature lines — one per party */}
+            <div className="border-t border-gray-200 pt-4 mt-4 space-y-3">
+              {state.partyProofs.length > 0 ? (
+                state.partyProofs.map((party) => (
+                  <div key={party.role} className="flex justify-between text-xs text-gray-400">
+                    <span>{t(party.roleLabelKey)} {t('contracts.signatureLine')}: ____________________________</span>
+                    <span>{today}</span>
+                  </div>
+                ))
+              ) : (
+                <div className="flex justify-between text-xs text-gray-400">
+                  <span>{t('contracts.signatureLine')}: ____________________________</span>
+                  <span>{today}</span>
+                </div>
+              )}
             </div>
 
             {/* Footer */}
