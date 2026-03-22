@@ -137,20 +137,67 @@ fn default_role() -> String {
 }
 
 /// A compound proof wrapping multiple sub-proofs with a logical operator.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct CompoundProof {
     proofs: Vec<ZkProof>,
     op: LogicalOp,
-    #[serde(default)]
     ecdsa_proofs: HashMap<String, ZkProof>,
-    #[serde(skip_serializing_if = "Option::is_none", default)]
-    contract_nullifier: Option<ContractNullifier>,
+    contract_nullifiers: Vec<ContractNullifier>,
+}
+
+impl Serialize for CompoundProof {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        use serde::ser::SerializeStruct;
+        let field_count = 2
+            + (!self.ecdsa_proofs.is_empty() as usize)
+            + (!self.contract_nullifiers.is_empty() as usize);
+        let mut s = serializer.serialize_struct("CompoundProof", field_count)?;
+        s.serialize_field("proofs", &self.proofs)?;
+        s.serialize_field("op", &self.op)?;
+        if !self.ecdsa_proofs.is_empty() {
+            s.serialize_field("ecdsa_proofs", &self.ecdsa_proofs)?;
+        }
+        if !self.contract_nullifiers.is_empty() {
+            s.serialize_field("contract_nullifiers", &self.contract_nullifiers)?;
+        }
+        s.end()
+    }
+}
+
+impl<'de> Deserialize<'de> for CompoundProof {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        #[derive(Deserialize)]
+        struct Helper {
+            proofs: Vec<ZkProof>,
+            op: LogicalOp,
+            #[serde(default)]
+            ecdsa_proofs: HashMap<String, ZkProof>,
+            #[serde(default)]
+            contract_nullifiers: Option<Vec<ContractNullifier>>,
+            #[serde(default)]
+            contract_nullifier: Option<ContractNullifier>,
+        }
+        let h = Helper::deserialize(deserializer)?;
+        let contract_nullifiers = if let Some(vec) = h.contract_nullifiers {
+            vec
+        } else if let Some(cn) = h.contract_nullifier {
+            vec![cn]
+        } else {
+            vec![]
+        };
+        Ok(CompoundProof {
+            proofs: h.proofs,
+            op: h.op,
+            ecdsa_proofs: h.ecdsa_proofs,
+            contract_nullifiers,
+        })
+    }
 }
 
 impl CompoundProof {
     /// Create a compound proof from sub-proofs joined by a logical operator.
     pub fn new(proofs: Vec<ZkProof>, op: LogicalOp) -> Self {
-        Self { proofs, op, ecdsa_proofs: HashMap::new(), contract_nullifier: None }
+        Self { proofs, op, ecdsa_proofs: HashMap::new(), contract_nullifiers: Vec::new() }
     }
 
     /// Create a compound proof with associated ECDSA proofs keyed by claim name.
@@ -159,18 +206,35 @@ impl CompoundProof {
         op: LogicalOp,
         ecdsa_proofs: HashMap<String, ZkProof>,
     ) -> Self {
-        Self { proofs, op, ecdsa_proofs, contract_nullifier: None }
+        Self { proofs, op, ecdsa_proofs, contract_nullifiers: Vec::new() }
     }
 
-    /// Attach a contract nullifier to this compound proof.
-    pub fn with_contract_nullifier(mut self, cn: ContractNullifier) -> Self {
-        self.contract_nullifier = Some(cn);
+    /// Add a contract nullifier to this compound proof.
+    pub fn add_contract_nullifier(mut self, cn: ContractNullifier) -> Self {
+        self.contract_nullifiers.push(cn);
         self
     }
 
-    /// Returns the contract nullifier, if one was attached.
+    /// Attach a contract nullifier (backward-compatible alias for add_contract_nullifier).
+    pub fn with_contract_nullifier(self, cn: ContractNullifier) -> Self {
+        self.add_contract_nullifier(cn)
+    }
+
+    /// Set the role on the first contract nullifier.
+    pub fn set_nullifier_role(&mut self, role: &str) {
+        if let Some(cn) = self.contract_nullifiers.first_mut() {
+            cn.role = role.to_string();
+        }
+    }
+
+    /// Returns all contract nullifiers.
+    pub fn contract_nullifiers(&self) -> &[ContractNullifier] {
+        &self.contract_nullifiers
+    }
+
+    /// Returns the first contract nullifier, if any (backward compat).
     pub fn contract_nullifier(&self) -> Option<&ContractNullifier> {
-        self.contract_nullifier.as_ref()
+        self.contract_nullifiers.first()
     }
 
     /// Returns the sub-proofs.
@@ -261,6 +325,7 @@ mod tests {
         let json = r#"{"proofs":[],"op":"And"}"#;
         let decoded: CompoundProof = serde_json::from_str(json).unwrap();
         assert!(decoded.contract_nullifier().is_none());
+        assert!(decoded.contract_nullifiers().is_empty());
     }
 
     #[test]
@@ -276,5 +341,87 @@ mod tests {
         let decoded: ContractNullifier = serde_json::from_str(&json).unwrap();
         assert_eq!(decoded.role, "seller");
         assert_eq!(decoded.nullifier, vec![1, 2, 3]);
+    }
+
+    #[test]
+    fn compound_proof_multiple_nullifiers() {
+        let cn1 = ContractNullifier {
+            role: "seller".to_string(),
+            nullifier: vec![1],
+            contract_hash: vec![2],
+            salt: vec![3],
+            proof: ZkProof::new(vec![], vec![], vec![], PredicateOp::Nullifier),
+        };
+        let cn2 = ContractNullifier {
+            role: "buyer".to_string(),
+            nullifier: vec![4],
+            contract_hash: vec![2],
+            salt: vec![5],
+            proof: ZkProof::new(vec![], vec![], vec![], PredicateOp::Nullifier),
+        };
+        let compound = CompoundProof::new(vec![], LogicalOp::And)
+            .add_contract_nullifier(cn1)
+            .add_contract_nullifier(cn2);
+
+        assert_eq!(compound.contract_nullifiers().len(), 2);
+        assert_eq!(compound.contract_nullifiers()[0].role, "seller");
+        assert_eq!(compound.contract_nullifiers()[1].role, "buyer");
+        assert_eq!(compound.contract_nullifier().unwrap().role, "seller");
+    }
+
+    #[test]
+    fn compound_proof_contract_nullifiers_serde_roundtrip() {
+        let cn = ContractNullifier {
+            role: "seller".to_string(),
+            nullifier: vec![1],
+            contract_hash: vec![2],
+            salt: vec![3],
+            proof: ZkProof::new(vec![], vec![], vec![], PredicateOp::Nullifier),
+        };
+        let compound = CompoundProof::new(vec![], LogicalOp::And)
+            .add_contract_nullifier(cn);
+        let json = serde_json::to_string(&compound).unwrap();
+        assert!(json.contains("contract_nullifiers"), "should serialize as contract_nullifiers");
+        let decoded: CompoundProof = serde_json::from_str(&json).unwrap();
+        assert_eq!(decoded.contract_nullifiers().len(), 1);
+        assert_eq!(decoded.contract_nullifiers()[0].role, "seller");
+    }
+
+    #[test]
+    fn compound_proof_old_format_contract_nullifier_deserialize() {
+        let old_json = r#"{
+            "proofs": [],
+            "op": "And",
+            "contract_nullifier": {
+                "nullifier": [1],
+                "contract_hash": [2],
+                "salt": [3],
+                "proof": {
+                    "proof_bytes": [],
+                    "public_inputs": [],
+                    "verification_key": [],
+                    "predicate_op": "Nullifier",
+                    "nullifier": null,
+                    "version": 2
+                }
+            }
+        }"#;
+        let decoded: CompoundProof = serde_json::from_str(old_json).unwrap();
+        assert_eq!(decoded.contract_nullifiers().len(), 1);
+        assert_eq!(decoded.contract_nullifiers()[0].role, "holder");
+    }
+
+    #[test]
+    fn compound_proof_old_format_null_nullifier_deserialize() {
+        let old_json = r#"{"proofs":[],"op":"And","contract_nullifier":null}"#;
+        let decoded: CompoundProof = serde_json::from_str(old_json).unwrap();
+        assert!(decoded.contract_nullifiers().is_empty());
+    }
+
+    #[test]
+    fn compound_proof_no_nullifier_fields_deserialize() {
+        let json = r#"{"proofs":[],"op":"And"}"#;
+        let decoded: CompoundProof = serde_json::from_str(json).unwrap();
+        assert!(decoded.contract_nullifiers().is_empty());
     }
 }
