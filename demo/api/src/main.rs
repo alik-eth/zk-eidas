@@ -1375,11 +1375,12 @@ async fn prepare_inputs(
         // Date claims with large values (epoch days) are direct comparisons → pass through
         let is_age_threshold = is_date && pred.value.as_u64().unwrap_or(0) < 200;
 
+        let (year, month, day) = today_ymd();
         let (circuit, threshold) = match pred.op.as_str() {
             "gte" if is_age_threshold => {
                 // gte(age) on date → lte(birthdate, cutoff_epoch_days)
                 let age = pred.value.as_u64().unwrap_or(0) as u32;
-                let cutoff = zk_eidas::age_cutoff_epoch_days_from(age, today_year(), today_month(), today_day())
+                let cutoff = zk_eidas::age_cutoff_epoch_days_from(age, year, month, day)
                     as u64;
                 ("lte", serde_json::Value::from(cutoff))
             }
@@ -1387,7 +1388,7 @@ async fn prepare_inputs(
             "lte" if is_age_threshold => {
                 // lte(age) on date → gte(birthdate, cutoff_epoch_days)
                 let age = pred.value.as_u64().unwrap_or(0) as u32;
-                let cutoff = zk_eidas::age_cutoff_epoch_days_from(age, today_year(), today_month(), today_day())
+                let cutoff = zk_eidas::age_cutoff_epoch_days_from(age, year, month, day)
                     as u64;
                 ("gte", serde_json::Value::from(cutoff))
             }
@@ -1413,35 +1414,18 @@ async fn prepare_inputs(
     }))
 }
 
-fn today_year() -> u32 {
+fn today_ymd() -> (u32, u32, u32) {
     let days = (std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs() / 86400) as i64;
     let z = days + 719468;
     let era = z.div_euclid(146097);
     let doe = z.rem_euclid(146097) as u64;
     let yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;
-    (yoe as i64 + era * 400) as u32
-}
-
-fn today_month() -> u32 {
-    let days = (std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs() / 86400) as i64;
-    let z = days + 719468;
-    let doe = z.rem_euclid(146097) as u64;
-    let yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;
+    let year = (yoe as i64 + era * 400) as u32;
     let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
     let mp = (5 * doy + 2) / 153;
-    let m = if mp < 10 { mp + 3 } else { mp - 9 };
-    m as u32
-}
-
-fn today_day() -> u32 {
-    let days = (std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs() / 86400) as i64;
-    let z = days + 719468;
-    let doe = z.rem_euclid(146097) as u64;
-    let yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;
-    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
-    let mp = (5 * doy + 2) / 153;
-    let d = doy - (153 * mp + 2) / 5 + 1;
-    d as u32
+    let month = if mp < 10 { mp + 3 } else { mp - 9 } as u32;
+    let day = (doy - (153 * mp + 2) / 5 + 1) as u32;
+    (year, month, day)
 }
 
 // === App Builder ===
