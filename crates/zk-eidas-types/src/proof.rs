@@ -124,10 +124,16 @@ pub enum LogicalOp {
 /// the issuer-signed credential_id.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ContractNullifier {
+    #[serde(default = "default_role")]
+    pub role: String,
     pub nullifier: Vec<u8>,
     pub contract_hash: Vec<u8>,
     pub salt: Vec<u8>,
     pub proof: ZkProof,
+}
+
+fn default_role() -> String {
+    "holder".to_string()
 }
 
 /// A compound proof wrapping multiple sub-proofs with a logical operator.
@@ -220,6 +226,7 @@ mod tests {
     #[test]
     fn contract_nullifier_serde_roundtrip() {
         let cn = ContractNullifier {
+            role: "holder".to_string(),
             nullifier: vec![1, 2, 3],
             contract_hash: vec![4, 5, 6],
             salt: vec![7, 8, 9],
@@ -235,6 +242,7 @@ mod tests {
     #[test]
     fn compound_proof_with_contract_nullifier_serde() {
         let cn = ContractNullifier {
+            role: "holder".to_string(),
             nullifier: vec![1],
             contract_hash: vec![2],
             salt: vec![3],
@@ -253,5 +261,20 @@ mod tests {
         let json = r#"{"proofs":[],"op":"And"}"#;
         let decoded: CompoundProof = serde_json::from_str(json).unwrap();
         assert!(decoded.contract_nullifier().is_none());
+    }
+
+    #[test]
+    fn contract_nullifier_with_role_serde_roundtrip() {
+        let cn = ContractNullifier {
+            role: "seller".to_string(),
+            nullifier: vec![1, 2, 3],
+            contract_hash: vec![4, 5, 6],
+            salt: vec![7, 8, 9],
+            proof: ZkProof::new(vec![10], vec![vec![11]], vec![], PredicateOp::Nullifier),
+        };
+        let json = serde_json::to_string(&cn).unwrap();
+        let decoded: ContractNullifier = serde_json::from_str(&json).unwrap();
+        assert_eq!(decoded.role, "seller");
+        assert_eq!(decoded.nullifier, vec![1, 2, 3]);
     }
 }

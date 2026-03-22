@@ -1197,6 +1197,7 @@ async fn contract_prove(
                 .to_vec();
 
             Ok(zk_eidas_types::proof::ContractNullifier {
+                role: "holder".to_string(),
                 nullifier: nullifier_bytes,
                 contract_hash: contract_hash.to_be_bytes().to_vec(),
                 salt: salt.to_be_bytes().to_vec(),

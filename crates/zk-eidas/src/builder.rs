@@ -161,6 +161,7 @@ impl ZkCredential {
             .to_vec();
 
         Ok(ContractNullifier {
+            role: "holder".to_string(),
             nullifier: nullifier_bytes,
             contract_hash: contract_hash.to_be_bytes().to_vec(),
             salt: salt.to_be_bytes().to_vec(),
@@ -324,6 +325,7 @@ impl ZkCredential {
                 .to_vec();
 
             Some(ContractNullifier {
+                role: "holder".to_string(),
                 nullifier: nullifier_bytes,
                 contract_hash: contract_hash.to_be_bytes().to_vec(),
                 salt: salt.to_be_bytes().to_vec(),
