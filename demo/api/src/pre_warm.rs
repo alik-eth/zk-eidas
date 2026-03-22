@@ -420,11 +420,21 @@ async fn main() {
     // credential_id field and caches the result in the server's runtime memory.
     // Without this, the first contract-prove call takes ~90s for ECDSA proving.
     let contract_presets: Vec<(&str, serde_json::Value, serde_json::Value, &str)> = vec![
-        // PID seller/buyer — credential_id = document_number
+        // PID — credential_id = document_number (age_verification, vehicle_sale)
         ("pid", presets[0].1.clone(), serde_json::json!([
             { "claim": "birth_date", "op": "gte", "value": 18 }
         ]), presets[0].3),
-        // Vehicle — credential_id = vin
+        // Student ID — credential_id = student_number (student_transit)
+        ("student_id", presets[2].1.clone(), serde_json::json!([
+            { "claim": "valid_until", "op": "gte", "value": epoch_days_today() }
+        ]), presets[2].3),
+        // Drivers License — credential_id = license_number (driver_employment)
+        ("drivers_license", presets[1].1.clone(), serde_json::json!([
+            { "claim": "expiry_date", "op": "gte", "value": epoch_days_today() },
+            { "claim": "category", "op": "eq", "value": "A, B, C1" },
+            { "claim": "issue_date", "op": "lte", "value": epoch_days_years_ago(2) }
+        ]), presets[1].3),
+        // Vehicle — credential_id = vin (vehicle_sale)
         ("vehicle", presets[3].1.clone(), serde_json::json!([
             { "claim": "insurance_expiry", "op": "gte", "value": epoch_days_today() },
             { "claim": "vin", "op": "neq", "value": "REVOKED" }
@@ -470,7 +480,12 @@ async fn main() {
             data["nullifier"].as_str().unwrap_or("?"));
 
         // Extract ECDSA commitment from the compound proof and save to cache
-        let id_field = if *cred_type == "vehicle" { "vin" } else { "document_number" };
+        let id_field = match *cred_type {
+            "vehicle" => "vin",
+            "student_id" => "student_number",
+            "drivers_license" => "license_number",
+            _ => "document_number",
+        };
         let doc_val = claims[id_field].as_str().unwrap_or("");
         let cid = credential_id_u64(doc_val);
 
