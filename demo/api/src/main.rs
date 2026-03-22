@@ -1085,6 +1085,10 @@ struct ContractProveRequest {
     timestamp: String,
     #[serde(default)]
     skip_cache: bool,
+    #[serde(default)]
+    nullifier_field: Option<String>,
+    #[serde(default)]
+    role: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -1096,6 +1100,7 @@ struct ContractProveResponse {
     nullifier: String,
     contract_hash: String,
     salt: String,
+    role: String,
 }
 
 async fn contract_prove(
@@ -1104,6 +1109,7 @@ async fn contract_prove(
 ) -> Result<Json<ContractProveResponse>, (StatusCode, String)> {
     // 1. Generate salt
     let salt: u64 = rand::random();
+    let role_str = req.role.clone().unwrap_or_else(|| "holder".to_string());
 
     // 2. Compute contract_hash = SHA256(terms || timestamp) → u64
     use sha2::{Sha256, Digest};
@@ -1138,10 +1144,14 @@ async fn contract_prove(
             .chain(req.predicates.iter().map(|p| &p.claim))
             .cloned()
             .collect::<std::collections::HashSet<_>>();
-        let id_field_candidates = ["document_number", "license_number", "diploma_number", "vin", "student_number"];
-        let credential_id_field = id_field_candidates.iter()
-            .find(|f| all_field_names_cached.contains(&f.to_string()))
-            .ok_or_else(|| (StatusCode::BAD_REQUEST, "no credential_id field found".to_string()))?;
+        let credential_id_field = if let Some(ref nf) = req.nullifier_field {
+            nf.as_str()
+        } else {
+            let id_field_candidates = ["document_number", "license_number", "diploma_number", "vin", "student_number"];
+            *id_field_candidates.iter()
+                .find(|f| all_field_names_cached.contains(&f.to_string()))
+                .ok_or_else(|| (StatusCode::BAD_REQUEST, "no credential_id field found".to_string()))?
+        };
 
         // Parse credential to get credential_id value
         let builder_for_null = if req.format == "mdoc" {
@@ -1169,6 +1179,7 @@ async fn contract_prove(
 
         let circuits_path = state.circuits_path.clone();
         let ecdsa_cache_ref = state.ecdsa_cache.clone();
+        let role_for_closure = role_str.clone();
 
         let cn = tokio::task::spawn_blocking(move || -> Result<_, (StatusCode, String)> {
             unsafe { libc::nice(10) };
@@ -1196,7 +1207,7 @@ async fn contract_prove(
                 .to_vec();
 
             Ok(zk_eidas_types::proof::ContractNullifier {
-                role: "holder".to_string(),
+                role: role_for_closure,
                 nullifier: nullifier_bytes,
                 contract_hash: contract_hash.to_be_bytes().to_vec(),
                 salt: salt.to_be_bytes().to_vec(),
@@ -1219,6 +1230,7 @@ async fn contract_prove(
             nullifier: format!("0x{}", hex::encode(&nullifier_bytes)),
             contract_hash: format!("0x{:016x}", contract_hash),
             salt: format!("0x{:016x}", salt),
+            role: role_str.clone(),
         }));
     }
     } // skip_cache
@@ -1265,10 +1277,14 @@ async fn contract_prove(
     }
 
     // 5. Set contract nullifier — auto-detect credential_id field
-    let id_field_candidates = ["document_number", "license_number", "diploma_number", "vin", "student_number"];
-    let credential_id_field = id_field_candidates.iter()
-        .find(|f| all_field_names.contains(&f.to_string()))
-        .ok_or_else(|| (StatusCode::BAD_REQUEST, "no credential_id field found".to_string()))?;
+    let credential_id_field = if let Some(ref nf) = req.nullifier_field {
+        nf.as_str()
+    } else {
+        let id_field_candidates = ["document_number", "license_number", "diploma_number", "vin", "student_number"];
+        *id_field_candidates.iter()
+            .find(|f| all_field_names.contains(&f.to_string()))
+            .ok_or_else(|| (StatusCode::BAD_REQUEST, "no credential_id field found".to_string()))?
+    };
     builder = builder.contract_nullifier(credential_id_field, contract_hash, salt);
 
     // Compute credential_id for ECDSA caching
@@ -1281,7 +1297,7 @@ async fn contract_prove(
         (StatusCode::SERVICE_UNAVAILABLE, "proving unavailable".to_string())
     })?;
     let ecdsa_cache_ref = state.ecdsa_cache.clone();
-    let (compound_proof, proven_claims, all_field_names) =
+    let (mut compound_proof, proven_claims, all_field_names) =
         tokio::task::spawn_blocking(move || -> Result<_, (StatusCode, String)> {
             // SAFETY: nice() only adjusts scheduling priority; safe to call from any thread, cannot cause UB.
             unsafe { libc::nice(10) };
@@ -1314,6 +1330,9 @@ async fn contract_prove(
             )
         })??;
 
+    // 6b. Set role on contract nullifiers
+    compound_proof.set_nullifier_role(&role_str);
+
     // 7. Extract nullifier from compound proof
     let nullifier_hex = compound_proof
         .contract_nullifier()
@@ -1345,6 +1364,7 @@ async fn contract_prove(
         nullifier: nullifier_hex,
         contract_hash: format!("0x{:016x}", contract_hash),
         salt: format!("0x{:016x}", salt),
+        role: role_str,
     }))
 }
 
@@ -2665,6 +2685,47 @@ mod tests {
         let n1 = res1["nullifier"].as_str().unwrap();
         let n2 = res2["nullifier"].as_str().unwrap();
         assert_ne!(n1, n2, "different salts must produce different nullifiers");
+    }
+
+    #[tokio::test]
+    #[serial]
+    async fn contract_prove_with_nullifier_field_and_role() {
+        let (url, cred) = issue_test_credential(serde_json::json!({
+            "given_name": "Test", "birth_date": "1998-05-14", "document_number": "UA-ROLE-001"
+        })).await;
+        let client = reqwest::Client::new();
+        let res: serde_json::Value = client
+            .post(format!("{url}/holder/contract-prove"))
+            .json(&serde_json::json!({
+                "credential": cred, "format": "sdjwt",
+                "predicates": [{ "claim": "birth_date", "op": "gte", "value": 18 }],
+                "contract_terms": "test", "timestamp": "2026-03-23T10:00:00Z",
+                "nullifier_field": "document_number",
+                "role": "seller",
+            }))
+            .send().await.unwrap().json().await.unwrap();
+
+        assert_eq!(res["role"].as_str().unwrap(), "seller");
+        assert!(res["nullifier"].as_str().unwrap().starts_with("0x"));
+    }
+
+    #[tokio::test]
+    #[serial]
+    async fn contract_prove_defaults_role_to_holder() {
+        let (url, cred) = issue_test_credential(serde_json::json!({
+            "given_name": "Test", "birth_date": "1998-05-14", "document_number": "UA-ROLE-002"
+        })).await;
+        let client = reqwest::Client::new();
+        let res: serde_json::Value = client
+            .post(format!("{url}/holder/contract-prove"))
+            .json(&serde_json::json!({
+                "credential": cred, "format": "sdjwt",
+                "predicates": [{ "claim": "birth_date", "op": "gte", "value": 18 }],
+                "contract_terms": "test", "timestamp": "2026-03-23T10:00:00Z",
+            }))
+            .send().await.unwrap().json().await.unwrap();
+
+        assert_eq!(res["role"].as_str().unwrap(), "holder");
     }
 
     #[tokio::test]
