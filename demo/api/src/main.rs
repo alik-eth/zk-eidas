@@ -5,7 +5,7 @@ use axum::{
     Json, Router,
 };
 use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::{Mutex, Semaphore};
 use tower_http::cors::{AllowOrigin, CorsLayer};
@@ -14,7 +14,6 @@ use axum::body::Body;
 
 struct AppState {
     circuits_path: String,
-    nullifier_registry: Mutex<HashSet<String>>,
     status_list: Mutex<Vec<u8>>,  // bitstring: 0=valid, 1=revoked
     prove_semaphore: Semaphore,  // limit concurrent proof generation
     proof_cache: HashMap<String, CachedProof>,
@@ -267,8 +266,6 @@ struct ProveRequest {
     #[serde(default = "default_format")]
     format: String,
     predicates: Vec<PredicateRequest>,
-    #[serde(default)]
-    nullifier_scope: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -425,9 +422,6 @@ async fn generate_proof(
         proven_claims.push(pred.claim.clone());
         builder = builder.predicate(&pred.claim, predicate);
     }
-
-    // TODO(Task 7): replace with contract_nullifier API
-    let _nullifier_scope = &req.nullifier_scope;
 
     let has_nullifier = false;
     let _permit = state.prove_semaphore.acquire().await.map_err(|_| {
@@ -1079,56 +1073,143 @@ async fn export_compound_proof(
     }))
 }
 
-// === Nullifier Registry ===
+// === Contract Prove ===
 
 #[derive(Deserialize)]
-struct NullifierCheckRequest {
-    nullifier: String,
+struct ContractProveRequest {
+    credential: String,
+    #[serde(default = "default_format")]
+    format: String,
+    predicates: Vec<PredicateRequest>,
+    contract_terms: String,
+    timestamp: String,
 }
 
 #[derive(Serialize)]
-struct NullifierCheckResponse {
-    seen_before: bool,
+struct ContractProveResponse {
+    compound_proof_json: String,
+    op: String,
+    sub_proofs_count: usize,
+    hidden_fields: Vec<String>,
     nullifier: String,
-    registry_size: usize,
+    contract_hash: String,
+    salt: String,
 }
 
-/// Check if a nullifier has been seen (read-only, does not insert).
-fn query_nullifier_in_registry(registry: &HashSet<String>, nullifier: &str) -> bool {
-    registry.contains(nullifier)
-}
-
-/// Insert a nullifier into the registry (write operation).
-fn commit_nullifier_in_registry(registry: &mut HashSet<String>, nullifier: &str) {
-    registry.insert(nullifier.to_string());
-}
-
-async fn check_nullifier(
+async fn contract_prove(
     State(state): State<Arc<AppState>>,
-    Json(req): Json<NullifierCheckRequest>,
-) -> Result<Json<NullifierCheckResponse>, (StatusCode, String)> {
-    let registry = state.nullifier_registry.lock().await;
-    let seen_before = query_nullifier_in_registry(&registry, &req.nullifier);
-    let registry_size = registry.len();
-    Ok(Json(NullifierCheckResponse {
-        seen_before,
-        nullifier: req.nullifier,
-        registry_size,
-    }))
-}
+    Json(req): Json<ContractProveRequest>,
+) -> Result<Json<ContractProveResponse>, (StatusCode, String)> {
+    // 1. Generate salt
+    let salt: u64 = rand::random();
 
-async fn commit_nullifier(
-    State(state): State<Arc<AppState>>,
-    Json(req): Json<NullifierCheckRequest>,
-) -> Result<Json<NullifierCheckResponse>, (StatusCode, String)> {
-    let mut registry = state.nullifier_registry.lock().await;
-    let seen_before = query_nullifier_in_registry(&registry, &req.nullifier);
-    commit_nullifier_in_registry(&mut registry, &req.nullifier);
-    let registry_size = registry.len();
-    Ok(Json(NullifierCheckResponse {
-        seen_before,
-        nullifier: req.nullifier,
-        registry_size,
+    // 2. Compute contract_hash = SHA256(terms || timestamp || salt) → u64
+    use sha2::{Sha256, Digest};
+    let mut hasher = Sha256::new();
+    hasher.update(req.contract_terms.as_bytes());
+    hasher.update(req.timestamp.as_bytes());
+    hasher.update(&salt.to_be_bytes());
+    let hash: [u8; 32] = hasher.finalize().into();
+    let contract_hash = u64::from_be_bytes(hash[..8].try_into().unwrap());
+
+    // 3. Parse credential
+    let (mut builder, all_field_names) = if req.format == "mdoc" {
+        let (mdoc_bytes, pub_key_x, pub_key_y) = parse_mdoc_token(&req.credential)
+            .map_err(|e| (StatusCode::BAD_REQUEST, format!("mdoc token: {e}")))?;
+        let credential =
+            zk_eidas_mdoc::MdocParser::parse_with_issuer_key(&mdoc_bytes, pub_key_x, pub_key_y)
+                .map_err(|e| (StatusCode::BAD_REQUEST, format!("mdoc parse: {e}")))?;
+        let names: Vec<String> = credential.claims().keys().cloned().collect();
+        (
+            zk_eidas::ZkCredential::from_credential(credential, &state.circuits_path),
+            names,
+        )
+    } else {
+        let builder = zk_eidas::ZkCredential::from_sdjwt(&req.credential, &state.circuits_path)
+            .map_err(|e| (StatusCode::BAD_REQUEST, format!("parse error: {e}")))?;
+        let names: Vec<String> = builder.credential().claims().keys().cloned().collect();
+        (builder, names)
+    };
+
+    // 4. Add predicates
+    let mut claims_predicates: std::collections::BTreeMap<String, Vec<zk_eidas::Predicate>> =
+        std::collections::BTreeMap::new();
+    let mut proven_claims: Vec<String> = Vec::new();
+
+    for pred in &req.predicates {
+        let predicate = parse_predicate(pred)?;
+        if !proven_claims.contains(&pred.claim) {
+            proven_claims.push(pred.claim.clone());
+        }
+        claims_predicates
+            .entry(pred.claim.clone())
+            .or_default()
+            .push(predicate);
+    }
+
+    for (claim, subs) in claims_predicates {
+        let compound_pred = zk_eidas::Predicate::and(subs);
+        builder = builder.predicate(&claim, compound_pred);
+    }
+
+    // 5. Set contract nullifier
+    builder = builder.contract_nullifier(contract_hash, salt);
+
+    // 6. Prove
+    let _permit = state.prove_semaphore.acquire().await.map_err(|_| {
+        (StatusCode::SERVICE_UNAVAILABLE, "proving unavailable".to_string())
+    })?;
+    let (compound_proof, proven_claims, all_field_names) =
+        tokio::task::spawn_blocking(move || -> Result<_, (StatusCode, String)> {
+            // SAFETY: nice() only adjusts scheduling priority; safe to call from any thread, cannot cause UB.
+            unsafe { libc::nice(10) };
+            let compound_proof = builder.prove_compound().map_err(|e| {
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    format!("contract proving failed: {e}"),
+                )
+            })?;
+            Ok((compound_proof, proven_claims, all_field_names))
+        })
+        .await
+        .map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("task join error: {e}"),
+            )
+        })??;
+
+    // 7. Extract nullifier from compound proof
+    let nullifier_hex = compound_proof
+        .contract_nullifier()
+        .map(|cn| format!("0x{}", hex::encode(&cn.nullifier)))
+        .unwrap_or_else(|| "0x".to_string());
+
+    let op_label = format!("{:?}", compound_proof.op());
+    let sub_proofs_count = compound_proof.proofs().len();
+
+    let compound_proof_json = serde_json::to_string(&compound_proof).map_err(|e| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("serialization failed: {e}"),
+        )
+    })?;
+
+    let hidden_fields: Vec<String> = all_field_names
+        .iter()
+        .filter(|f| !proven_claims.contains(f))
+        .cloned()
+        .collect();
+
+    // 8. Return hex-encoded values
+    Ok(Json(ContractProveResponse {
+        compound_proof_json,
+        op: op_label,
+        sub_proofs_count,
+        hidden_fields,
+        nullifier: nullifier_hex,
+        contract_hash: format!("0x{:016x}", contract_hash),
+        salt: format!("0x{:016x}", salt),
     }))
 }
 
@@ -1453,7 +1534,6 @@ pub fn build_app(circuits_path: &str) -> Router {
     let loaded = load_proof_cache(api_dir);
     let state = Arc::new(AppState {
         circuits_path: circuits_path.to_string(),
-        nullifier_registry: Mutex::new(HashSet::new()),
         status_list: Mutex::new(Vec::new()),
         prove_semaphore: Semaphore::new(1),  // one proof at a time
         proof_cache: loaded.proofs,
@@ -1469,10 +1549,9 @@ pub fn build_app(circuits_path: &str) -> Router {
         .route("/holder/prove-compound", post(generate_compound_proof))
         .route("/holder/prove-binding", post(prove_binding))
         .route("/verifier/verify-compound", post(verify_compound_proof))
-        // NOTE: nullifier and revocation endpoints are unauthenticated.
+        .route("/contracts/prove", post(contract_prove))
+        // NOTE: revocation endpoints are unauthenticated.
         // A production deployment MUST add authorization middleware.
-        .route("/verifier/check-nullifier", post(check_nullifier))
-        .route("/verifier/commit-nullifier", post(commit_nullifier))
         .route("/issuer/revoke", post(revoke_credential))
         .route("/issuer/revocation-status", get(revocation_status))
         .route("/issuer/revocation-root", get(revocation_status))  // backward compat alias
@@ -1601,8 +1680,7 @@ mod tests {
                 "format": "sdjwt",
                 "predicates": [
                     { "claim": "birth_date", "op": "gte", "value": 18 }
-                ],
-                "nullifier_scope": "test-scope-001"
+                ]
             }))
             .send()
             .await
@@ -1623,9 +1701,6 @@ mod tests {
             .iter()
             .map(|v| v.as_str().unwrap().to_string())
             .collect();
-        // Note: nullifier is only generated by prove() (single predicate),
-        // not prove_all(). The fixture uses prove_all via the API, so nullifier
-        // may be null even when nullifier_scope is set.
         let nullifier = prove_res["nullifier"].as_str().map(|s| s.to_string());
 
         FIXTURE.set(TestFixture {
@@ -1779,49 +1854,6 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(res.status(), 400);
-    }
-
-    // === Nullifier ===
-
-    #[tokio::test]
-    #[serial]
-    async fn nullifier_check_and_commit() {
-        let f = setup().await;
-        let client = reqwest::Client::new();
-        // Use a synthetic nullifier value (the fixture may not have one due to
-        // prove_all not propagating nullifier_scope to sub-proofs)
-        let nullifier = "0xdeadbeef00000000000000000000000000000000000000000000000000000001";
-
-        // Check — not seen yet
-        let res = client
-            .post(format!("{}/verifier/check-nullifier", f.base_url))
-            .json(&serde_json::json!({ "nullifier": nullifier }))
-            .send()
-            .await
-            .unwrap();
-        assert_eq!(res.status(), 200);
-        let body: serde_json::Value = res.json().await.unwrap();
-        assert_eq!(body["seen_before"], false);
-
-        // Commit
-        let res = client
-            .post(format!("{}/verifier/commit-nullifier", f.base_url))
-            .json(&serde_json::json!({ "nullifier": nullifier }))
-            .send()
-            .await
-            .unwrap();
-        assert_eq!(res.status(), 200);
-
-        // Check again — seen now
-        let res = client
-            .post(format!("{}/verifier/check-nullifier", f.base_url))
-            .json(&serde_json::json!({ "nullifier": nullifier }))
-            .send()
-            .await
-            .unwrap();
-        assert_eq!(res.status(), 200);
-        let body: serde_json::Value = res.json().await.unwrap();
-        assert_eq!(body["seen_before"], true);
     }
 
     // === CBOR Export ===
