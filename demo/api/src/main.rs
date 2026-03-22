@@ -18,6 +18,9 @@ struct AppState {
     prove_semaphore: Semaphore,  // limit concurrent proof generation
     proof_cache: HashMap<String, CachedProof>,
     binding_cache: HashMap<String, CachedBindingProof>,
+    /// Cache ECDSA commitment data for contract nullifier generation.
+    /// Key: credential_id u64 value. Value: (commitment_bytes, sd_array_hash, message_hash).
+    ecdsa_cache: Arc<std::sync::Mutex<HashMap<u64, (Vec<u8>, Vec<u8>, Vec<u8>)>>>,
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -1145,8 +1148,8 @@ async fn contract_prove(
             .find(|f| all_field_names_cached.contains(&f.to_string()))
             .ok_or_else(|| (StatusCode::BAD_REQUEST, "no credential_id field found".to_string()))?;
 
-        // Parse credential just for nullifier generation
-        let mut builder_for_null = if req.format == "mdoc" {
+        // Parse credential to get credential_id value
+        let builder_for_null = if req.format == "mdoc" {
             let (mdoc_bytes, pub_key_x, pub_key_y) = parse_mdoc_token(&req.credential)
                 .map_err(|e| (StatusCode::BAD_REQUEST, format!("mdoc token: {e}")))?;
             let credential = zk_eidas_mdoc::MdocParser::parse_with_issuer_key(&mdoc_bytes, pub_key_x, pub_key_y)
@@ -1157,20 +1160,39 @@ async fn contract_prove(
                 .map_err(|e| (StatusCode::BAD_REQUEST, format!("parse error: {e}")))?
         };
 
-        // Only need a dummy predicate so prove_compound doesn't reject empty predicates
-        // Actually, we just need ensure_ecdsa + prove_nullifier directly
         let cid_field = credential_id_field.to_string();
-        let circuits_path = state.circuits_path.clone();
+        let doc_value = builder_for_null.credential().claims().get(&cid_field)
+            .ok_or_else(|| (StatusCode::BAD_REQUEST, format!("claim not found: {cid_field}")))?
+            .clone();
+        let credential_id = zk_eidas::claim_to_u64_or_hash_pub(&doc_value);
+
+        // Check ECDSA commitment cache first
+        let cached_ecdsa = state.ecdsa_cache.lock().unwrap().get(&credential_id).cloned();
+
         let _permit = state.prove_semaphore.acquire().await
             .map_err(|_| (StatusCode::SERVICE_UNAVAILABLE, "proving unavailable".into()))?;
 
+        let circuits_path = state.circuits_path.clone();
+        let ecdsa_cache_ref = state.ecdsa_cache.clone();
+
         let nullifier_proof = tokio::task::spawn_blocking(move || -> Result<_, (StatusCode, String)> {
             unsafe { libc::nice(10) };
-            let (commitment, sd_array_hash, message_hash) = builder_for_null.ensure_ecdsa_pub(&cid_field)
-                .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("ecdsa: {e}")))?;
-            let doc_value = builder_for_null.credential().claims().get(&cid_field)
-                .ok_or_else(|| (StatusCode::BAD_REQUEST, format!("claim not found: {cid_field}")))?;
-            let credential_id = zk_eidas::claim_to_u64_or_hash_pub(doc_value);
+
+            let (commitment_bytes, sd_array_hash, message_hash) = if let Some(cached) = cached_ecdsa {
+                eprintln!("[contracts/prove] ECDSA CACHE HIT for credential_id {credential_id}");
+                cached
+            } else {
+                eprintln!("[contracts/prove] ECDSA CACHE MISS for credential_id {credential_id} — generating...");
+                let mut builder = builder_for_null;
+                let (commitment, sd_hash, msg_hash) = builder.ensure_ecdsa_pub(&cid_field)
+                    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("ecdsa: {e}")))?;
+                let result = (commitment.value().to_vec(), sd_hash, msg_hash);
+                // Cache for next time
+                ecdsa_cache_ref.lock().unwrap().insert(credential_id, result.clone());
+                result
+            };
+
+            let commitment = zk_eidas_types::commitment::EcdsaCommitment::new(commitment_bytes);
             let prover = zk_eidas_prover::Prover::new(&circuits_path);
             let proof = prover.prove_nullifier(credential_id, contract_hash, salt, &commitment, &sd_array_hash, &message_hash)
                 .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("nullifier: {e}")))?;
@@ -1632,6 +1654,7 @@ pub fn build_app(circuits_path: &str) -> Router {
         prove_semaphore: Semaphore::new(1),  // one proof at a time
         proof_cache: loaded.proofs,
         binding_cache: loaded.bindings,
+        ecdsa_cache: Arc::new(std::sync::Mutex::new(HashMap::new())),
     });
 
     Router::new()
