@@ -36,6 +36,9 @@ interface ContractWizardState {
   compressedSize: number
   compressedCborBase64: string | null
   cached: boolean
+  nullifier: string | null
+  contractHash: string | null
+  salt: string | null
 }
 
 const API_URL = typeof window !== 'undefined' && window.location.hostname === 'localhost' ? 'http://localhost:3001' : ''
@@ -50,6 +53,9 @@ const INITIAL_STATE: ContractWizardState = {
   compressedSize: 0,
   compressedCborBase64: null,
   cached: false,
+  nullifier: null,
+  contractHash: null,
+  salt: null,
 }
 
 export const Route = createFileRoute('/contracts')({
@@ -167,6 +173,9 @@ function Contracts() {
             qrDataUrls: [],
             compressedSize: 0,
             compressedCborBase64: null,
+            nullifier: null,
+            contractHash: null,
+            salt: null,
           }))
         } else if (step < state.step) {
           setState(prev => ({ ...prev, step: step as ContractWizardState['step'] }))
@@ -512,6 +521,7 @@ function ProveStep({ state, setState, t }: { state: ContractWizardState; setStat
       const allQrDataUrls: string[] = []
       let totalCompressedSize = 0
       let anyCached = false
+      let nullifierData: { nullifier: string; contractHash: string; salt: string } | null = null
 
       const { encodeProofChunks, LogicalOpFlag } = await import('../lib/qr-chunking')
       const QRCode = (await import('qrcode')).default
@@ -537,23 +547,17 @@ function ProveStep({ state, setState, t }: { state: ContractWizardState; setStat
             : p.predicate.value,
         }))
 
-        // Inject document ID eq predicate
-        const docIdPredicate = {
-          claim: req.disclosedField,
-          op: 'eq',
-          value: cred.credentialId,
-        }
-        const allPredicates = [...predicates, docIdPredicate]
-
-        // Prove compound
-        const proveRes = await fetch(`${API_URL}/holder/prove-compound`, {
+        // Prove via /contracts/prove (includes nullifier generation)
+        const selectedTemplate = CONTRACT_TEMPLATES.find(tpl => tpl.id === state.templateId)
+        const proveRes = await fetch(`${API_URL}/contracts/prove`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             credential: cred.credential,
             format: cred.format,
-            predicates: allPredicates,
-            op: 'and',
+            predicates,
+            contract_terms: JSON.stringify(selectedTemplate),
+            timestamp: new Date().toISOString(),
             ...(forceSkipCache ? { skip_cache: true } : {}),
           }),
         })
@@ -585,11 +589,8 @@ function ProveStep({ state, setState, t }: { state: ContractWizardState; setStat
           allQrDataUrls.push(url)
         }
 
-        // Build predicate descriptions (including the auto-injected doc ID eq predicate)
-        const predicateDescriptions = [
-          ...templatePredicates.map(p => t(p.labelKey)),
-          `${t('contracts.documentId')}: ${req.disclosedField} = ${cred.credentialId}`,
-        ]
+        // Build predicate descriptions
+        const predicateDescriptions = templatePredicates.map(p => t(p.labelKey))
 
         // Update credential data with proof info
         updatedCredentials[ci] = {
@@ -598,6 +599,15 @@ function ProveStep({ state, setState, t }: { state: ContractWizardState; setStat
           compoundOp: proveData.op,
           hiddenFields: proveData.hidden_fields,
           predicateDescriptions,
+        }
+
+        // Store nullifier data from the first credential's response
+        if (ci === 0 && proveData.nullifier) {
+          nullifierData = {
+            nullifier: proveData.nullifier,
+            contractHash: proveData.contract_hash,
+            salt: proveData.salt,
+          }
         }
       }
 
@@ -647,6 +657,9 @@ function ProveStep({ state, setState, t }: { state: ContractWizardState; setStat
           qrDataUrls: allQrDataUrls,
           compressedSize: totalCompressedSize,
           cached: anyCached,
+          nullifier: nullifierData?.nullifier ?? null,
+          contractHash: nullifierData?.contractHash ?? null,
+          salt: nullifierData?.salt ?? null,
         }))
       }, 600)
     } catch (e: unknown) {
@@ -698,13 +711,6 @@ function ProveStep({ state, setState, t }: { state: ContractWizardState; setStat
                       )}
                     </div>
                   ))}
-                  {/* Document ID disclosure notice */}
-                  <div className="flex items-center gap-3 px-4 py-3 bg-amber-950/20 rounded-lg border border-amber-700/30">
-                    <svg className="w-4 h-4 text-amber-400 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
-                    </svg>
-                    <span className="text-sm text-amber-300">{t('contracts.documentId')}: <span className="font-mono">{req.disclosedField} = {cred?.credentialId}</span></span>
-                  </div>
                 </div>
               </div>
             )
@@ -837,18 +843,6 @@ function DocumentStep({ state, setState, t }: { state: ContractWizardState; setS
                         <span className="text-sm text-gray-800">{t(p.labelKey)}</span>
                       </div>
                     ))}
-
-                    {/* Disclosed document ID */}
-                    <div className="flex items-center gap-2 mt-1">
-                      <div className="w-4 h-4 rounded-full bg-blue-100 border border-blue-400 flex items-center justify-center shrink-0">
-                        <span className="text-blue-600 text-[8px] font-bold">i</span>
-                      </div>
-                      <span className="text-sm text-gray-700">
-                        <span className="font-medium">{t('contracts.documentId')}: </span>
-                        <span className="font-mono text-blue-700">{cred.credentialId}</span>
-                        <span className="text-gray-400 text-xs ml-1">({t('contracts.disclosed')})</span>
-                      </span>
-                    </div>
                   </div>
                 </div>
               )
@@ -895,6 +889,32 @@ function DocumentStep({ state, setState, t }: { state: ContractWizardState; setS
                     SHA-256 binding: {binding.bindingHash}
                   </p>
                 ))}
+              </div>
+            )}
+
+            {/* Nullifier / Contract Hash / Salt */}
+            {state.nullifier && (
+              <div className="mb-5 border border-gray-300 rounded-lg p-4 print:border-black/30">
+                <p className="text-xs font-semibold text-gray-500 mb-2 uppercase tracking-wider">{t('contracts.nullifier')}</p>
+                <div className="space-y-1.5">
+                  <div>
+                    <span className="text-[10px] text-gray-400 font-medium">{t('contracts.nullifier')}</span>
+                    <p className="text-xs text-gray-700 font-mono break-all">{state.nullifier}</p>
+                  </div>
+                  {state.contractHash && (
+                    <div>
+                      <span className="text-[10px] text-gray-400 font-medium">{t('contracts.contractHash')}</span>
+                      <p className="text-xs text-gray-700 font-mono break-all">{state.contractHash}</p>
+                    </div>
+                  )}
+                  {state.salt && (
+                    <div>
+                      <span className="text-[10px] text-gray-400 font-medium">{t('contracts.salt')}</span>
+                      <p className="text-xs text-gray-700 font-mono break-all">{state.salt}</p>
+                    </div>
+                  )}
+                </div>
+                <p className="text-[9px] text-gray-400 mt-2 leading-relaxed italic">{t('contracts.nullifierTooltip')}</p>
               </div>
             )}
 
