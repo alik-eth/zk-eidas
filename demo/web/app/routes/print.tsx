@@ -172,10 +172,10 @@ function PrintPage() {
               <table className="mt-1 text-xs text-gray-700 w-full">
                 <tbody>
                   {predicates.map((p, i) => (
-                    <tr key={i} className={`border-b border-gray-100 last:border-0 ${p.disclosed ? 'bg-blue-50' : ''}`}>
+                    <tr key={i} className="border-b border-gray-100 last:border-0">
                       <td className="py-0.5 pr-2 font-medium">{p.claim}</td>
                       <td className="py-0.5 pr-2 font-mono text-gray-500">{p.op}</td>
-                      <td className={`py-0.5 pr-2 ${p.disclosed ? 'font-semibold text-blue-700' : ''}`}>{p.publicValue}</td>
+                      <td className="py-0.5 pr-2">{p.publicValue}</td>
                       <td className="py-0.5 text-right">
                         {p.disclosed
                           ? <span className="text-blue-600 font-semibold">{t('print.public')}</span>

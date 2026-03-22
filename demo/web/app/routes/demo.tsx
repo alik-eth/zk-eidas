@@ -14,7 +14,6 @@ interface ProofResult {
   proof_json: string
   proof_hex: string
   op: string
-  revealed_value?: string
 }
 
 interface PrintProofItem {
@@ -29,7 +28,6 @@ interface PrintPredicate {
   op: string
   publicValue: string
   disclosed: boolean
-  revealedValue?: string
 }
 
 interface WizardState {
@@ -886,15 +884,12 @@ function VerifierStep({ state, setState, t }: { state: WizardState; setState: Re
             const matched = selectedPreds[pi]
             if (matched) {
               const fieldConfig = config.fields.find(f => f.name === matched.predicate.claim)
-              const isReveal = matched.predicate.op === 'reveal'
-              const fieldValue = state.fields.find(f => f.name === matched.predicate.claim)?.value ?? ''
               predicates.push({
                 claim: fieldConfig ? t(fieldConfig.labelKey) : matched.predicate.claim,
                 claimKey: fieldConfig?.labelKey,
-                op: isReveal ? '=' : opSymbol(matched.predicate.op),
-                publicValue: isReveal ? fieldValue : resolveValue(matched.predicate),
-                disclosed: isReveal,
-                revealedValue: isReveal ? fieldValue : undefined,
+                op: opSymbol(matched.predicate.op),
+                publicValue: resolveValue(matched.predicate),
+                disclosed: false,
               })
             }
           }
@@ -902,42 +897,18 @@ function VerifierStep({ state, setState, t }: { state: WizardState; setState: Re
         const res = await fetch(`${API_URL}/holder/proof-export-compound?compress=true`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            compound_proof_json: state.compoundProofJson,
-            reveals: config ? config.predicates
-              .filter(p => state.selectedPredicateIds.includes(p.id))
-              .map(p => p.predicate.op === 'reveal'
-                ? { claim: p.predicate.claim, value: state.fields.find(f => f.name === p.predicate.claim)?.value ?? '' }
-                : null
-              ) : [],
-          }),
+          body: JSON.stringify({ compound_proof_json: state.compoundProofJson }),
         })
         if (!res.ok) throw new Error(await res.text())
         const data = await res.json()
         proofs = [{ predicate: `${logicalOp.toUpperCase()} compound`, op: logicalOp, compressedCbor: data.compressed_cbor_base64 }]
       } else {
         proofs = await Promise.all(state.proofs.map(async (p) => {
-          const isReveal = p.op === 'Reveal'
-          predicates.push({
-            claim: p.predicate,
-            op: isReveal ? '=' : p.op,
-            publicValue: isReveal ? (p.revealed_value ?? '') : '',
-            disclosed: isReveal,
-            revealedValue: isReveal ? (p.revealed_value ?? '') : undefined,
-          })
+          predicates.push({ claim: p.predicate, op: p.op, publicValue: '', disclosed: false })
           const res = await fetch(`${API_URL}/holder/proof-export?compress=true`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              proofs: [{
-                proof_json: p.proof_json,
-                predicate: p.predicate,
-                ...(isReveal ? {
-                  revealed_claim: config?.predicates.find(pr => state.selectedPredicateIds.includes(pr.id) && pr.predicate.op === 'reveal')?.predicate.claim,
-                  revealed_value: p.revealed_value,
-                } : {}),
-              }]
-            }),
+            body: JSON.stringify({ proofs: [{ proof_json: p.proof_json, predicate: p.predicate }] }),
           })
           if (!res.ok) throw new Error(await res.text())
           const data = await res.json()
@@ -1327,10 +1298,10 @@ function PrintStep({ state, t }: { state: WizardState; t: (key: string) => strin
                 <table className="mt-1 text-xs text-gray-700 w-full">
                   <tbody>
                     {state.printPredicates.map((p, i) => (
-                      <tr key={i} className={`border-b border-gray-100 last:border-0 ${p.disclosed ? 'bg-blue-50' : ''}`}>
+                      <tr key={i} className="border-b border-gray-100 last:border-0">
                         <td className="py-0.5 pr-2 font-medium">{p.claimKey ? t(p.claimKey) : p.claim}</td>
                         <td className="py-0.5 pr-2 font-mono text-gray-500">{p.op}</td>
-                        <td className={`py-0.5 pr-2 ${p.disclosed ? 'font-semibold text-blue-700' : ''}`}>{p.publicValue}</td>
+                        <td className="py-0.5 pr-2">{p.publicValue}</td>
                         <td className="py-0.5 text-right">
                           {p.disclosed
                             ? <span className="text-blue-600 font-semibold">{t('print.public')}</span>
