@@ -47,6 +47,8 @@ struct CachedProofResult {
     proof_json: String,
     proof_hex: String,
     op: String,
+    #[serde(default)]
+    revealed_value: Option<String>,
 }
 
 // === Issue ===
@@ -285,6 +287,8 @@ struct ProofResult {
     proof_json: String,
     proof_hex: String,
     op: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    revealed_value: Option<String>,
 }
 
 fn parse_predicate(pred: &PredicateRequest) -> Result<zk_eidas::Predicate, (StatusCode, String)> {
@@ -348,6 +352,7 @@ fn parse_predicate(pred: &PredicateRequest) -> Result<zk_eidas::Predicate, (Stat
                 .ok_or_else(|| (StatusCode::BAD_REQUEST, "range high must be integer".into()))?;
             Ok(zk_eidas::Predicate::range(low, high))
         }
+        "reveal" => Ok(zk_eidas::Predicate::Reveal),
         other => Err((
             StatusCode::BAD_REQUEST,
             format!("unsupported op: {}", other),
@@ -412,12 +417,30 @@ async fn generate_proof(
                     format!("{} <= {} <= {}", arr.0, pred.claim, arr.1)
                 }
             }
+            "reveal" => format!("reveal {}", pred.claim),
             _ => format!("{} {}", pred.claim, pred.op),
         };
         proof_descriptions.push(desc);
         proven_claims.push(pred.claim.clone());
         builder = builder.predicate(&pred.claim, predicate);
     }
+
+    // Pre-compute revealed values for "reveal" predicates before moving builder into closure.
+    let revealed_values: Vec<Option<String>> = req
+        .predicates
+        .iter()
+        .map(|pred| {
+            if pred.op == "reveal" {
+                builder
+                    .credential()
+                    .claims()
+                    .get(&pred.claim)
+                    .map(|cv| cv.to_plaintext())
+            } else {
+                None
+            }
+        })
+        .collect();
 
     let has_nullifier = false;
     let _permit = state.prove_semaphore.acquire().await.map_err(|_| {
@@ -460,13 +483,15 @@ async fn generate_proof(
     let proofs: Vec<ProofResult> = zk_proofs
         .iter()
         .zip(proof_descriptions.iter())
-        .map(|(proof, desc)| {
+        .enumerate()
+        .map(|(i, (proof, desc))| {
             let op = format!("{:?}", proof.predicate_op());
             ProofResult {
                 predicate: desc.clone(),
                 proof_json: serde_json::to_string(proof).unwrap(),
                 proof_hex: format!("0x{}", hex::encode(proof.proof_bytes())),
                 op,
+                revealed_value: revealed_values.get(i).cloned().flatten(),
             }
         })
         .collect();
@@ -803,12 +828,14 @@ async fn prove_binding(
                 proof_json: p.proof_json.clone(),
                 proof_hex: p.proof_hex.clone(),
                 op: p.op.clone(),
+                revealed_value: p.revealed_value.clone(),
             }).collect(),
             proofs_b: cached.proofs_b.iter().map(|p| ProofResult {
                 predicate: p.predicate.clone(),
                 proof_json: p.proof_json.clone(),
                 proof_hex: p.proof_hex.clone(),
                 op: p.op.clone(),
+                revealed_value: p.revealed_value.clone(),
             }).collect(),
             binding_hash: cached.binding_hash.clone(),
             binding_verified: cached.binding_verified,
@@ -900,6 +927,7 @@ async fn prove_binding(
             proof_json: serde_json::to_string(proof).unwrap(),
             proof_hex: format!("0x{}", hex::encode(proof.proof_bytes())),
             op: format!("{:?}", proof.predicate_op()),
+            revealed_value: None,
         })
         .collect();
 
@@ -910,6 +938,7 @@ async fn prove_binding(
             proof_json: serde_json::to_string(proof).unwrap(),
             proof_hex: format!("0x{}", hex::encode(proof.proof_bytes())),
             op: format!("{:?}", proof.predicate_op()),
+            revealed_value: None,
         })
         .collect();
 
@@ -946,6 +975,10 @@ struct ExportRequest {
 struct ExportProofInput {
     proof_json: String,
     predicate: String,
+    #[serde(default)]
+    revealed_claim: Option<String>,
+    #[serde(default)]
+    revealed_value: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -971,7 +1004,18 @@ async fn export_proof(
         descriptions.push(input.predicate.clone());
     }
 
-    let envelope = zk_eidas::ProofEnvelope::from_proofs(&zk_proofs, &descriptions);
+    let mut reveals: Vec<Option<(String, String)>> = Vec::new();
+    for input in &req.proofs {
+        if let (Some(claim), Some(value)) = (&input.revealed_claim, &input.revealed_value) {
+            reveals.push(Some((claim.clone(), value.clone())));
+        } else {
+            reveals.push(None);
+        }
+    }
+
+    let envelope = zk_eidas::ProofEnvelope::from_proofs_with_reveals(
+        &zk_proofs, &descriptions, &reveals,
+    );
 
     let cbor_bytes = envelope.to_bytes().map_err(|e| {
         (
@@ -1012,8 +1056,16 @@ async fn export_proof(
 // === Compound Proof Export (CBOR) ===
 
 #[derive(Deserialize)]
+struct RevealInfo {
+    claim: String,
+    value: String,
+}
+
+#[derive(Deserialize)]
 struct CompoundExportRequest {
     compound_proof_json: String,
+    #[serde(default)]
+    reveals: Vec<Option<RevealInfo>>,
 }
 
 async fn export_compound_proof(
@@ -1034,7 +1086,15 @@ async fn export_compound_proof(
         .map(|p| format!("{:?}", p.predicate_op()))
         .collect();
 
-    let mut envelope = zk_eidas::ProofEnvelope::from_proofs(compound.proofs(), &descriptions);
+    let reveals: Vec<Option<(String, String)>> = req
+        .reveals
+        .iter()
+        .map(|r| r.as_ref().map(|ri| (ri.claim.clone(), ri.value.clone())))
+        .collect();
+
+    let mut envelope = zk_eidas::ProofEnvelope::from_proofs_with_reveals(
+        compound.proofs(), &descriptions, &reveals,
+    );
     envelope.set_logical_op(Some(compound.op()));
 
     let cbor_bytes = envelope.to_bytes().map_err(|e| {
