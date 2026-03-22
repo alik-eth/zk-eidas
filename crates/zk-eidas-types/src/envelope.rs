@@ -20,8 +20,14 @@ pub struct EnvelopeProof {
     pub proof_bytes: Vec<u8>,
     /// Public inputs for verification.
     pub public_inputs: Vec<Vec<u8>>,
-    /// Predicate operation name (e.g. "Gte", "EqSigned").
+    /// Predicate operation name (e.g. "Gte", "Reveal").
     pub op: String,
+    /// Claim name for revealed values (e.g. "document_number").
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub revealed_claim: Option<String>,
+    /// Plaintext value for revealed claims (e.g. "UA-1234567890").
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub revealed_value: Option<String>,
 }
 
 impl ProofEnvelope {
@@ -35,6 +41,38 @@ impl ProofEnvelope {
                 proof_bytes: proof.proof_bytes().to_vec(),
                 public_inputs: proof.public_inputs().to_vec(),
                 op: format!("{:?}", proof.predicate_op()),
+                revealed_claim: None,
+                revealed_value: None,
+            })
+            .collect();
+
+        Self {
+            version: 1,
+            proofs: entries,
+            logical_op: None,
+        }
+    }
+
+    /// Create an envelope from ZkProofs with predicate descriptions and optional revealed values.
+    pub fn from_proofs_with_reveals(
+        proofs: &[ZkProof],
+        descriptions: &[String],
+        reveals: &[Option<(String, String)>],
+    ) -> Self {
+        let entries = proofs
+            .iter()
+            .zip(descriptions.iter())
+            .enumerate()
+            .map(|(i, (proof, desc))| {
+                let reveal = reveals.get(i).and_then(|r| r.as_ref());
+                EnvelopeProof {
+                    predicate: desc.clone(),
+                    proof_bytes: proof.proof_bytes().to_vec(),
+                    public_inputs: proof.public_inputs().to_vec(),
+                    op: format!("{:?}", proof.predicate_op()),
+                    revealed_claim: reveal.map(|(c, _)| c.clone()),
+                    revealed_value: reveal.map(|(_, v)| v.clone()),
+                }
             })
             .collect();
 
@@ -159,5 +197,34 @@ mod tests {
         let proof = ZkProof::new(vec![1], vec![], vec![], PredicateOp::Eq);
         let envelope = ProofEnvelope::from_proofs(&[proof], &["test".to_string()]);
         assert_eq!(envelope.logical_op(), None);
+    }
+
+    #[test]
+    fn roundtrip_cbor_with_revealed_value() {
+        let proof = ZkProof::new(
+            vec![1, 2, 3],
+            vec![vec![4, 5]],
+            vec![6, 7],
+            PredicateOp::Eq, // Will be PredicateOp::Reveal once Task 1 merges
+        );
+        let reveals = vec![Some(("document_number".to_string(), "UA-1234567890".to_string()))];
+        let envelope = ProofEnvelope::from_proofs_with_reveals(
+            &[proof],
+            &["reveal document_number".to_string()],
+            &reveals,
+        );
+        let bytes = envelope.to_bytes().unwrap();
+        let decoded = ProofEnvelope::from_bytes(&bytes).unwrap();
+        assert_eq!(decoded.proofs().len(), 1);
+        assert_eq!(decoded.proofs()[0].revealed_claim.as_deref(), Some("document_number"));
+        assert_eq!(decoded.proofs()[0].revealed_value.as_deref(), Some("UA-1234567890"));
+    }
+
+    #[test]
+    fn from_proofs_has_no_revealed_values() {
+        let proof = ZkProof::new(vec![1], vec![], vec![5], PredicateOp::Gte);
+        let envelope = ProofEnvelope::from_proofs(&[proof], &["age >= 18".to_string()]);
+        assert!(envelope.proofs()[0].revealed_claim.is_none());
+        assert!(envelope.proofs()[0].revealed_value.is_none());
     }
 }
