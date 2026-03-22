@@ -77,6 +77,7 @@ impl CircuitLoader {
             PredicateOp::SetMember => "set_member",
             PredicateOp::Nullifier => "nullifier",
             PredicateOp::HolderBinding => "holder_binding",
+            PredicateOp::Reveal => "eq",
         };
 
         let dir = self.base_path.join(name);

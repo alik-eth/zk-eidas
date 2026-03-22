@@ -16,6 +16,8 @@ pub enum PredicateOp {
     /// Special circuits
     Nullifier,
     HolderBinding,
+    /// Selective disclosure — reveals claim value using eq circuit
+    Reveal,
 }
 
 /// A fully-specified predicate binding a claim name, operation, and threshold.
@@ -85,6 +87,7 @@ mod tests {
             PredicateOp::SetMember,
             PredicateOp::Nullifier,
             PredicateOp::HolderBinding,
+            PredicateOp::Reveal,
         ];
         for op in &ops {
             let json = serde_json::to_string(op).unwrap();

@@ -67,6 +67,18 @@ impl ClaimValue {
         ClaimValue::date(year, month, day)
     }
 
+    /// Return the human-readable plaintext representation of this claim value.
+    pub fn to_plaintext(&self) -> String {
+        match self {
+            ClaimValue::Integer(n) => n.to_string(),
+            ClaimValue::Boolean(b) => b.to_string(),
+            ClaimValue::String(s) => s.clone(),
+            ClaimValue::Date { year, month, day } => {
+                format!("{:04}-{:02}-{:02}", year, month, day)
+            }
+        }
+    }
+
     /// Convert a claim value to u64 for circuit input.
     ///
     /// Integers/booleans/dates map directly to u64. Strings are hashed via
@@ -374,5 +386,14 @@ mod tests {
     fn to_field_element_zero_returns_ok() {
         let cv = ClaimValue::Integer(0);
         assert!(cv.to_field_element().is_ok());
+    }
+
+    #[test]
+    fn claim_value_to_plaintext() {
+        assert_eq!(ClaimValue::Integer(42).to_plaintext(), "42");
+        assert_eq!(ClaimValue::Boolean(true).to_plaintext(), "true");
+        assert_eq!(ClaimValue::String("hello".into()).to_plaintext(), "hello");
+        let date = ClaimValue::Date { year: 1998, month: 5, day: 14 };
+        assert_eq!(date.to_plaintext(), "1998-05-14");
     }
 }
