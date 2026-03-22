@@ -426,11 +426,10 @@ async fn generate_proof(
         builder = builder.predicate(&pred.claim, predicate);
     }
 
-    if let Some(scope) = &req.nullifier_scope {
-        builder = builder.nullifier_scope(scope);
-    }
+    // TODO(Task 7): replace with contract_nullifier API
+    let _nullifier_scope = &req.nullifier_scope;
 
-    let has_nullifier = req.nullifier_scope.is_some();
+    let has_nullifier = false;
     let _permit = state.prove_semaphore.acquire().await.map_err(|_| {
         (StatusCode::SERVICE_UNAVAILABLE, "proving unavailable".to_string())
     })?;

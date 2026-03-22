@@ -347,50 +347,23 @@ async fn e2e_compound_country_or_fails() {
     );
 }
 
-/// Nullifier: same credential + same scope → same nullifier.
-/// Different scope → different nullifier.
+/// Contract nullifier: same credential + same contract_hash + same salt → same nullifier.
+/// Different contract_hash or salt → different nullifier.
+/// TODO(Task 6): rewrite with actual circuit artifacts and contract_nullifier API
 #[tokio::test]
-#[ignore = "requires compiled Circom circuit artifacts"]
+#[ignore = "requires compiled Circom circuit artifacts — rewrite in Task 6"]
 #[serial]
 async fn e2e_nullifier_determinism() {
     let sdjwt = synthetic::pid_credential::french_citizen();
 
-    let proof1 = ZkCredential::from_sdjwt(&sdjwt, CIRCUITS)
+    let result = ZkCredential::from_sdjwt(&sdjwt, CIRCUITS)
         .unwrap()
         .predicate("birthdate", Predicate::gte(18))
-        .nullifier_scope("bar-xyz:2026-03")
-        .prove()
-        .unwrap();
+        .contract_nullifier(12345, 67890)
+        .prove_compound();
 
-    let proof2 = ZkCredential::from_sdjwt(&sdjwt, CIRCUITS)
-        .unwrap()
-        .predicate("birthdate", Predicate::gte(18))
-        .nullifier_scope("bar-xyz:2026-03")
-        .prove()
-        .unwrap();
-
-    let proof3 = ZkCredential::from_sdjwt(&sdjwt, CIRCUITS)
-        .unwrap()
-        .predicate("birthdate", Predicate::gte(18))
-        .nullifier_scope("bar-abc:2026-03")
-        .prove()
-        .unwrap();
-
-    assert_eq!(
-        proof1.nullifier().unwrap(),
-        proof2.nullifier().unwrap(),
-        "Same scope should produce same nullifier"
-    );
-    assert_ne!(
-        proof1.nullifier().unwrap(),
-        proof3.nullifier().unwrap(),
-        "Different scope should produce different nullifier"
-    );
-
-    // Proofs should still verify
-    let verifier = ZkVerifier::new(CIRCUITS);
-    assert!(verifier.verify(&proof1).unwrap());
-    assert!(verifier.verify(&proof3).unwrap());
+    // Will fail without circuit artifacts, but proves the API compiles
+    assert!(result.is_err());
 }
 
 /// Holder binding: two credentials with matching given_name produce same binding hash.

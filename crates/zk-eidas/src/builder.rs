@@ -3,7 +3,7 @@ use sha2::{Digest, Sha256};
 use zk_eidas_prover::SignedProofInput;
 use zk_eidas_types::commitment::EcdsaCommitment;
 use zk_eidas_types::credential::{ClaimValue, Credential};
-use zk_eidas_types::proof::{CompoundProof, LogicalOp, ZkProof};
+use zk_eidas_types::proof::{CompoundProof, ContractNullifier, LogicalOp, ZkProof};
 
 /// High-level predicate for the builder API.
 pub enum Predicate {
@@ -69,7 +69,7 @@ pub struct ZkCredential {
     credential: Credential,
     circuits_path: String,
     predicates: Vec<(String, Predicate)>,
-    nullifier_scope: Option<String>,
+    contract_nullifier_params: Option<(u64, u64)>,  // (contract_hash, salt)
     /// Per-claim ECDSA proof cache. Each claim needs its own ECDSA proof because
     /// the commitment binds to the claim_value: Poseidon(claim_value, sd_array_hash, message_hash)
     ecdsa_cache: HashMap<String, (ZkProof, EcdsaCommitment, Vec<u8>, Vec<u8>)>,
@@ -87,7 +87,7 @@ impl ZkCredential {
             credential,
             circuits_path: circuits_path.to_string(),
             predicates: Vec::new(),
-            nullifier_scope: None,
+            contract_nullifier_params: None,
             ecdsa_cache: HashMap::new(),
         }
     }
@@ -100,7 +100,7 @@ impl ZkCredential {
             credential,
             circuits_path: circuits_path.to_string(),
             predicates: Vec::new(),
-            nullifier_scope: None,
+            contract_nullifier_params: None,
             ecdsa_cache: HashMap::new(),
         })
     }
@@ -118,9 +118,9 @@ impl ZkCredential {
         Some((json, claim_u64))
     }
 
-    /// Set a nullifier scope for double-spend prevention.
-    pub fn nullifier_scope(mut self, scope: &str) -> Self {
-        self.nullifier_scope = Some(scope.to_string());
+    /// Set contract nullifier parameters for court-resolvable nullifier generation.
+    pub fn contract_nullifier(mut self, contract_hash: u64, salt: u64) -> Self {
+        self.contract_nullifier_params = Some((contract_hash, salt));
         self
     }
 
@@ -205,13 +205,10 @@ impl ZkCredential {
     }
 
     /// Generate proofs for all predicates. Returns one ZkProof per predicate.
-    ///
-    /// If a `nullifier_scope` was set, a nullifier is computed and attached to
-    /// every returned proof so that verifiers can detect double-spend.
     pub fn prove_all(mut self) -> Result<Vec<ZkProof>, ZkError> {
         let predicates = &self.predicates;
-        if predicates.is_empty() && self.nullifier_scope.is_none() {
-            // No predicates, no nullifier — nothing to prove.
+        if predicates.is_empty() {
+            // No predicates — nothing to prove.
             // This is valid when called from prove_with_binding (binding-only).
             return Ok(Vec::new());
         }
@@ -227,59 +224,6 @@ impl ZkCredential {
         for (claim_name, predicate) in predicates {
             let proof = self.prove_single(&claim_name, predicate)?;
             proofs.push(proof);
-        }
-
-        // Generate nullifier and attach to all proofs
-        if let Some(scope) = self.nullifier_scope.clone() {
-            let credential_secret = match self.credential.signature_data() {
-                zk_eidas_types::credential::SignatureData::Ecdsa { message_hash, .. } => {
-                    bytes_to_u64(message_hash)
-                }
-                zk_eidas_types::credential::SignatureData::Opaque { public_key, .. } => {
-                    let hash: [u8; 32] = Sha256::digest(public_key).into();
-                    bytes_to_u64(&hash)
-                }
-            };
-
-            let scope_u64 = bytes_to_u64(&Sha256::digest(scope.as_bytes()).into());
-
-            // For the nullifier circuit, we need the commitment chain
-            let first_claim = self.credential.claims().keys().next()
-                .ok_or(ZkError::UnsupportedPredicate)?
-                .clone();
-            let (commitment, sd_array_hash, message_hash) = self.ensure_ecdsa(&first_claim)?;
-
-            let claim_value = self.credential.claims().get(&first_claim)
-                .ok_or_else(|| ZkError::ClaimNotFound(first_claim.clone()))?;
-            let _claim_u64 = claim_to_u64(claim_value).unwrap_or(0);
-
-            // Compute nullifier = hash(secret || scope) for determinism
-            let mut h = Sha256::new();
-            h.update(&credential_secret.to_be_bytes());
-            h.update(scope.as_bytes());
-            let nullifier_hash: [u8; 32] = h.finalize().into();
-            let nullifier_u64 = bytes_to_u64(&nullifier_hash);
-
-            let prover = zk_eidas_prover::Prover::new(&self.circuits_path);
-            // TODO(Task 5): replace with new contract_nullifier API
-            let nullifier_proof = prover
-                .prove_nullifier(
-                    credential_secret,
-                    scope_u64,
-                    nullifier_u64,
-                    &commitment,
-                    &sd_array_hash,
-                    &message_hash,
-                )
-                .map_err(ZkError::from)?;
-
-            let nullifier_bytes = *nullifier_proof.nullifier()
-                .unwrap_or(&[0u8; 32]);
-
-            proofs = proofs
-                .into_iter()
-                .map(|p| p.with_nullifier(nullifier_bytes))
-                .collect();
         }
 
         Ok(proofs)
@@ -310,18 +254,50 @@ impl ZkCredential {
             }
         }
 
+        let contract_nullifier = if let Some((contract_hash, salt)) = self.contract_nullifier_params {
+            // Ensure ECDSA proof exists for document_number
+            let (commitment, sd_array_hash, message_hash) = self.ensure_ecdsa("document_number")?;
+
+            let doc_value = self.credential.claims().get("document_number")
+                .ok_or_else(|| ZkError::ClaimNotFound("document_number".to_string()))?;
+            let credential_id = claim_to_u64_or_hash(doc_value);
+
+            let prover = zk_eidas_prover::Prover::new(&self.circuits_path);
+            let nullifier_proof = prover
+                .prove_nullifier(credential_id, contract_hash, salt, &commitment, &sd_array_hash, &message_hash)
+                .map_err(ZkError::from)?;
+
+            let nullifier_bytes = nullifier_proof.nullifier()
+                .ok_or(ZkError::UnsupportedPredicate)?
+                .to_vec();
+
+            Some(ContractNullifier {
+                nullifier: nullifier_bytes,
+                contract_hash: contract_hash.to_be_bytes().to_vec(),
+                salt: salt.to_be_bytes().to_vec(),
+                proof: nullifier_proof,
+            })
+        } else {
+            None
+        };
+
         // Collect ECDSA proofs from cache (one per unique claim)
+        // Done after contract_nullifier to include document_number ECDSA proof if generated
         let ecdsa_proofs: HashMap<String, ZkProof> = self
             .ecdsa_cache
             .into_iter()
             .map(|(claim_name, (proof, _, _, _))| (claim_name, proof))
             .collect();
 
-        Ok(CompoundProof::with_ecdsa_proofs(
+        let mut compound = CompoundProof::with_ecdsa_proofs(
             sub_proofs,
             logical_op.unwrap_or(LogicalOp::And),
             ecdsa_proofs,
-        ))
+        );
+        if let Some(cn) = contract_nullifier {
+            compound = compound.with_contract_nullifier(cn);
+        }
+        Ok(compound)
     }
 
     /// Generate a single zero-knowledge proof for one predicate.
@@ -341,46 +317,7 @@ impl ZkCredential {
             .clone();
         let predicate = std::mem::take(&mut self.predicates).into_iter().next().unwrap().1;
 
-        let mut proof = self.prove_single(&claim_name, predicate)?;
-
-        if let Some(scope) = self.nullifier_scope.clone() {
-            let credential_secret = match self.credential.signature_data() {
-                zk_eidas_types::credential::SignatureData::Ecdsa { message_hash, .. } => {
-                    bytes_to_u64(message_hash)
-                }
-                _ => return Err(ZkError::EcdsaRequired),
-            };
-            let scope_u64 = bytes_to_u64(&Sha256::digest(scope.as_bytes()).into());
-
-            let (commitment, sd_array_hash, message_hash) = self.ensure_ecdsa(&claim_name)?;
-
-            let claim_value = self.credential.claims().get(&claim_name)
-                .ok_or_else(|| ZkError::ClaimNotFound(claim_name.clone()))?;
-            let _claim_u64 = claim_to_u64(claim_value).unwrap_or(0);
-
-            let mut h = Sha256::new();
-            h.update(&credential_secret.to_be_bytes());
-            h.update(scope.as_bytes());
-            let nullifier_hash: [u8; 32] = h.finalize().into();
-            let nullifier_u64 = bytes_to_u64(&nullifier_hash);
-
-            let prover = zk_eidas_prover::Prover::new(&self.circuits_path);
-            // TODO(Task 5): replace with new contract_nullifier API
-            let nullifier_proof = prover
-                .prove_nullifier(
-                    credential_secret,
-                    scope_u64,
-                    nullifier_u64,
-                    &commitment,
-                    &sd_array_hash,
-                    &message_hash,
-                )
-                .map_err(ZkError::from)?;
-
-            let nullifier_bytes = *nullifier_proof.nullifier()
-                .unwrap_or(&[0u8; 32]);
-            proof = proof.with_nullifier(nullifier_bytes);
-        }
+        let proof = self.prove_single(&claim_name, predicate)?;
 
         Ok(proof)
     }
@@ -979,7 +916,7 @@ mod tests {
     }
 
     #[test]
-    fn nullifier_scope_builder_compiles() {
+    fn contract_nullifier_builder_compiles() {
         let (sdjwt, _key) = zk_eidas_parser::test_utils::build_ecdsa_signed_sdjwt(
             serde_json::json!({"age": 25}),
             "test-issuer",
@@ -987,10 +924,10 @@ mod tests {
         let builder = ZkCredential::from_sdjwt(&sdjwt, "/nonexistent")
             .unwrap()
             .predicate("age", Predicate::gte(18))
-            .nullifier_scope("store-123:2026-03");
+            .contract_nullifier(12345, 67890);
 
         // Will fail at circuit loading but proves the API works
-        let result = builder.prove();
+        let result = builder.prove_compound();
         assert!(result.is_err());
     }
 
