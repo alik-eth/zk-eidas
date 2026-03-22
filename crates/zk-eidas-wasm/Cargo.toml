@@ -19,6 +19,8 @@ sha2 = "0.10.9"
 num-bigint = "0.4.6"
 zk-eidas-utils = { version = "0.1.0", path = "../zk-eidas-utils" }
 getrandom = { version = "0.2", features = ["js"] }
+ciborium = "0.2"
+flate2 = { version = "1", default-features = false, features = ["rust_backend"] }
 
 [dev-dependencies]
 wasm-bindgen-test = "0.3"
