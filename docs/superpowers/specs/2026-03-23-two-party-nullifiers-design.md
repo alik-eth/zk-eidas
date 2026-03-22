@@ -269,7 +269,10 @@ Single-party templates render one block naturally — `partyProofs` has one entr
 
 ## i18n
 
-One new key: shared section header `contracts.shared` → `"SHARED" / "СПІЛЬНЕ"`.
+Three new keys:
+- `contracts.shared` → `"SHARED" / "СПІЛЬНЕ"` (section header)
+- `contracts.issuer` → `"Issuer" / "Видавець"` (per-party issuer label)
+- `contracts.date` → `"Date" / "Дата"` (shared section date label)
 
 Existing keys reused: `contracts.role.seller`, `contracts.role.buyer`, `contracts.nullifier`, `contracts.salt`, `contracts.contractHash`.
 
@@ -300,4 +303,4 @@ Existing keys reused: `contracts.role.seller`, `contracts.role.buyer`, `contract
 4. **`ContractTemplate`** — add `nullifierField` to `CredentialRequirement`
 5. **`contracts.tsx` prove loop** — compute timestamp once, pass `nullifier_field` + `role` to API, collect `PartyProof[]`
 6. **`contracts.tsx` A4 preview** — render per-party nullifier blocks with grouped QRs, two signature lines
-7. **1 new i18n key** — shared section header
+7. **3 new i18n keys** — shared section header, issuer label, date label
