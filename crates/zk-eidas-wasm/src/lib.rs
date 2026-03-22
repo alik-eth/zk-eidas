@@ -300,6 +300,120 @@ pub fn export_to_envelope(compound_proof_json: &str, compress: bool) -> Result<V
     }
 }
 
+/// Generate nullifier circuit inputs from a credential and contract metadata.
+///
+/// Parses the SD-JWT to extract credential_id (SHA256 of document_number → u64).
+/// Takes ECDSA public signals (commitment, sd_array_hash, message_hash) from a
+/// previously generated ECDSA proof.
+/// Generates a random salt and computes contract_hash.
+#[wasm_bindgen]
+pub fn generate_nullifier_inputs(
+    sdjwt: &str,
+    contract_terms: &str,
+    timestamp: &str,
+    ecdsa_public_signals: &str,
+) -> Result<String, JsError> {
+    let parser = zk_eidas_parser::SdJwtParser::new();
+    let credential = parser.parse(sdjwt)
+        .map_err(|e| JsError::new(&format!("SD-JWT parse error: {e}")))?;
+
+    // Determine ID field based on credential type
+    let id_field = if credential.claims().contains_key("vin") {
+        "vin"
+    } else if credential.claims().contains_key("student_number") {
+        "student_number"
+    } else if credential.claims().contains_key("license_number") {
+        "license_number"
+    } else {
+        "document_number"
+    };
+
+    let id_value = credential.claims().get(id_field)
+        .ok_or_else(|| JsError::new(&format!("claim '{id_field}' not found for credential_id")))?;
+
+    let id_str = id_value.to_plaintext();
+    let id_hash: [u8; 32] = Sha256::digest(id_str.as_bytes()).into();
+    let credential_id = bytes_to_u64(&id_hash);
+
+    // Parse ECDSA public signals [commitment, sd_array_hash, message_hash]
+    let signals: Vec<String> = serde_json::from_str(ecdsa_public_signals)
+        .map_err(|e| JsError::new(&format!("invalid ecdsa_public_signals: {e}")))?;
+    if signals.len() < 3 {
+        return Err(JsError::new("ecdsa_public_signals must have at least 3 entries"));
+    }
+    let commitment = &signals[0];
+    let sd_array_hash = &signals[1];
+    let message_hash = &signals[2];
+
+    // Random salt
+    let mut salt_bytes = [0u8; 8];
+    getrandom::getrandom(&mut salt_bytes)
+        .map_err(|e| JsError::new(&format!("random generation failed: {e}")))?;
+    let salt = u64::from_be_bytes(salt_bytes);
+
+    // contract_hash = SHA256(contract_terms || timestamp || salt) → u64
+    let mut hasher = Sha256::new();
+    hasher.update(contract_terms.as_bytes());
+    hasher.update(timestamp.as_bytes());
+    hasher.update(salt.to_be_bytes());
+    let contract_hash_bytes: [u8; 32] = hasher.finalize().into();
+    let contract_hash = bytes_to_u64(&contract_hash_bytes);
+
+    let result = serde_json::json!({
+        "inputs": {
+            "credential_id": credential_id.to_string(),
+            "contract_hash": contract_hash.to_string(),
+            "salt": salt.to_string(),
+            "commitment": commitment,
+            "sd_array_hash": sd_array_hash,
+            "message_hash": message_hash,
+        },
+        "credential_id": credential_id,
+        "contract_hash_hex": format!("0x{:016x}", contract_hash),
+        "salt_hex": format!("0x{:016x}", salt),
+    });
+
+    Ok(result.to_string())
+}
+
+/// Generate holder binding circuit inputs for one side of a binding.
+///
+/// Each credential in a binding pair calls this separately. The circuit proves
+/// that claim_value is committed under the ECDSA signature, and outputs
+/// binding_hash = Poseidon(claim_value). Both sides must produce the same
+/// binding_hash to prove the binding holds.
+#[wasm_bindgen]
+pub fn generate_holder_binding_inputs(
+    sdjwt: &str,
+    claim_name: &str,
+    ecdsa_public_signals: &str,
+) -> Result<String, JsError> {
+    let parser = zk_eidas_parser::SdJwtParser::new();
+    let credential = parser.parse(sdjwt)
+        .map_err(|e| JsError::new(&format!("SD-JWT parse error: {e}")))?;
+
+    let claim_value = credential.claims().get(claim_name)
+        .ok_or_else(|| JsError::new(&format!("claim '{claim_name}' not found")))?;
+    let claim_u64 = claim_value.to_circuit_u64();
+
+    let signals: Vec<String> = serde_json::from_str(ecdsa_public_signals)
+        .map_err(|e| JsError::new(&format!("invalid ecdsa_public_signals: {e}")))?;
+    if signals.len() < 3 {
+        return Err(JsError::new("ecdsa_public_signals must have at least 3 entries"));
+    }
+
+    let result = serde_json::json!({
+        "inputs": {
+            "claim_value": claim_u64.to_string(),
+            "sd_array_hash": &signals[1],
+            "message_hash": &signals[2],
+            "commitment": &signals[0],
+        }
+    });
+
+    Ok(result.to_string())
+}
+
 #[cfg(all(test, target_arch = "wasm32"))]
 mod wasm_tests {
     use super::*;
@@ -555,6 +669,41 @@ mod tests {
         let envelope = ProofEnvelope::from_compressed_bytes(&compressed).unwrap();
         assert_eq!(envelope.proofs().len(), 1);
         assert_eq!(envelope.logical_op(), Some(LogicalOp::And));
+    }
+
+    #[test]
+    #[should_panic(expected = "cannot call wasm-bindgen imported functions on non-wasm targets")]
+    fn generate_nullifier_inputs_rejects_invalid_sdjwt() {
+        let ecdsa_signals = serde_json::json!(["12345", "67890", "11111"]);
+        let _ = generate_nullifier_inputs(
+            "invalid-sdjwt",
+            "{\"type\":\"test\"}",
+            "2026-03-22T12:00:00Z",
+            &ecdsa_signals.to_string(),
+        );
+    }
+
+    #[test]
+    #[should_panic(expected = "cannot call wasm-bindgen imported functions on non-wasm targets")]
+    fn generate_nullifier_inputs_rejects_short_signals() {
+        let ecdsa_signals = serde_json::json!(["12345"]);
+        let _ = generate_nullifier_inputs(
+            "invalid-sdjwt",
+            "{}",
+            "2026-03-22T12:00:00Z",
+            &ecdsa_signals.to_string(),
+        );
+    }
+
+    #[test]
+    #[should_panic(expected = "cannot call wasm-bindgen imported functions on non-wasm targets")]
+    fn generate_holder_binding_inputs_rejects_invalid_sdjwt() {
+        let ecdsa_signals = serde_json::json!(["12345", "67890", "11111"]);
+        let _ = generate_holder_binding_inputs(
+            "invalid-sdjwt",
+            "document_number",
+            &ecdsa_signals.to_string(),
+        );
     }
 
     #[test]
