@@ -1472,16 +1472,26 @@ struct LoadedCache {
 fn load_proof_cache(api_dir: &str) -> LoadedCache {
     let empty = || LoadedCache { proofs: HashMap::new(), bindings: HashMap::new(), ecdsa_commitments: HashMap::new() };
 
-    // Check multiple locations: env var, working dir, CARGO_MANIFEST_DIR
-    let candidates = [
+    // Try directory-based cache first
+    let dir_candidates = [
         std::env::var("PROOF_CACHE_PATH").ok().map(std::path::PathBuf::from),
+        Some(std::path::PathBuf::from("proof-cache")),
+        Some(std::path::PathBuf::from(api_dir).join("proof-cache")),
+    ];
+
+    if let Some(cache_dir) = dir_candidates.iter().flatten().find(|p| p.is_dir()) {
+        return load_proof_cache_dir(cache_dir);
+    }
+
+    // Fall back to monolithic JSON file
+    let file_candidates = [
         Some(std::path::PathBuf::from("proof-cache.json")),
         Some(std::path::PathBuf::from(api_dir).join("proof-cache.json")),
     ];
-    let cache_path = match candidates.iter().flatten().find(|p| p.exists()) {
+    let cache_path = match file_candidates.iter().flatten().find(|p| p.exists()) {
         Some(p) => p.clone(),
         None => {
-            eprintln!("[cache] No proof-cache.json found, running without cache");
+            eprintln!("[cache] No proof-cache found, running without cache");
             return empty();
         }
     };
@@ -1493,6 +1503,66 @@ fn load_proof_cache(api_dir: &str) -> LoadedCache {
             return empty();
         }
     };
+    load_proof_cache_from_value(&parsed, &cache_path.display().to_string())
+}
+
+fn load_proof_cache_dir(cache_dir: &std::path::Path) -> LoadedCache {
+    let mut proofs = HashMap::new();
+    let mut bindings = HashMap::new();
+    let mut ecdsa_commitments = HashMap::new();
+
+    let read_dir_entries = |subdir: &str| -> Vec<(String, serde_json::Value)> {
+        let path = cache_dir.join(subdir);
+        if !path.is_dir() { return vec![]; }
+        let mut entries = vec![];
+        if let Ok(dir) = std::fs::read_dir(&path) {
+            for entry in dir.flatten() {
+                let p = entry.path();
+                if p.extension().is_some_and(|e| e == "json") {
+                    let key = p.file_stem().unwrap_or_default().to_string_lossy().to_string();
+                    if let Ok(data) = std::fs::read_to_string(&p) {
+                        if let Ok(val) = serde_json::from_str(&data) {
+                            entries.push((key, val));
+                        }
+                    }
+                }
+            }
+        }
+        entries
+    };
+
+    for (key, val) in read_dir_entries("predicate") {
+        if let Ok(cached) = serde_json::from_value::<CachedProof>(val) {
+            proofs.insert(key, cached);
+        }
+    }
+
+    for (key, val) in read_dir_entries("binding") {
+        if let Ok(cached) = serde_json::from_value::<CachedBindingProof>(val) {
+            bindings.insert(key, cached);
+        }
+    }
+
+    let to_bytes = |arr: &[serde_json::Value]| -> Vec<u8> {
+        arr.iter().filter_map(|x| x.as_u64().map(|n| n as u8)).collect()
+    };
+    for (key, val) in read_dir_entries("ecdsa") {
+        if let (Ok(cid), Some(c), Some(s), Some(m)) = (
+            key.parse::<u64>(),
+            val["commitment"].as_array(),
+            val["sd_array_hash"].as_array(),
+            val["message_hash"].as_array(),
+        ) {
+            ecdsa_commitments.insert(cid, (to_bytes(c), to_bytes(s), to_bytes(m)));
+        }
+    }
+
+    eprintln!("[cache] Loaded {} cached proofs + {} bindings + {} ecdsa commitments from {}",
+        proofs.len(), bindings.len(), ecdsa_commitments.len(), cache_dir.display());
+    LoadedCache { proofs, bindings, ecdsa_commitments }
+}
+
+fn load_proof_cache_from_value(parsed: &serde_json::Value, source: &str) -> LoadedCache {
     let mut proofs = HashMap::new();
     if let Some(entries) = parsed["entries"].as_object() {
         for (key, entry) in entries {
@@ -1526,7 +1596,7 @@ fn load_proof_cache(api_dir: &str) -> LoadedCache {
         }
     }
     eprintln!("[cache] Loaded {} cached proofs + {} bindings + {} ecdsa commitments from {}",
-        proofs.len(), bindings.len(), ecdsa_commitments.len(), cache_path.display());
+        proofs.len(), bindings.len(), ecdsa_commitments.len(), source);
     LoadedCache { proofs, bindings, ecdsa_commitments }
 }
 
