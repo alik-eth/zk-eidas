@@ -37,16 +37,18 @@ function VerifyPage() {
   const [partyCheckResults, setPartyCheckResults] = useState<{ role: string; matched: boolean }[] | null>(null)
   const [partyChecking, setPartyChecking] = useState(false)
   const collectorRef = useRef(new ChunkCollector())
+  const cborRef = useRef<{ decode: (data: Uint8Array) => any; encode: (value: any) => Uint8Array } | null>(null)
 
-  // Pre-initialize snarkjs verification backend
+  // Pre-initialize snarkjs verification backend + cbor-x
   useEffect(() => {
     let cancelled = false
     ;(async () => {
       try {
-        const [, { initVerifier, loadTrustedVks }] = await Promise.all([
-          import('cbor-x'),  // eagerly cache for offline use
+        const [cborModule, { initVerifier, loadTrustedVks }] = await Promise.all([
+          import('cbor-x'),
           import('@zk-eidas/verifier-sdk'),
         ])
+        cborRef.current = cborModule
         await loadTrustedVks('/trusted-vks.json')
         await initVerifier()
         if (!cancelled) setWasmReady(true)
@@ -127,8 +129,8 @@ function VerifyPage() {
       const buffer = await file.arrayBuffer()
       const bytes = new Uint8Array(buffer)
 
-      const { decode } = await import('cbor-x')
-      const envelope = decode(bytes)
+      const cbor = cborRef.current ?? await import('cbor-x')
+      const envelope = cbor.decode(bytes)
 
       if (envelope && envelope.version === 2 && Array.isArray(envelope.proof_envelopes)) {
         // V2 bundle format from /contracts
@@ -214,9 +216,9 @@ function VerifyPage() {
         for (const proofId of collector.proofIds()) {
           if (proofId === TERMS_PROOF_ID || proofId === METADATA_PROOF_ID) continue
           const compressed = collector.reassemble(proofId)!
-          const cbor = await decompressDeflate(compressed)
-          const { decode } = await import('cbor-x')
-          const envelope = decode(cbor)
+          const decompressed = await decompressDeflate(compressed)
+          const cborMod = cborRef.current ?? await import('cbor-x')
+          const envelope = cborMod.decode(decompressed)
 
           if (envelope && Array.isArray(envelope.proofs)) {
             for (const p of envelope.proofs) {
