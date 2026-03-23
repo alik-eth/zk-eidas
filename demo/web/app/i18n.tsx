@@ -1132,6 +1132,58 @@ const translations: Record<string, Record<Locale, string>> = {
     en: "Commitment chain mismatch",
     uk: "Невідповідність ланцюга commitment",
   },
+  "verify.scanOverall": {
+    en: "Scanned {n} of {total} QR codes",
+    uk: "Зіскановано {n} з {total} QR-кодів",
+  },
+  "verify.contractIntegrity": {
+    en: "CONTRACT INTEGRITY",
+    uk: "ЦІЛІСНІСТЬ КОНТРАКТУ",
+  },
+  "verify.hashMatch": {
+    en: "contract_hash matches SHA256(terms \u2225 timestamp)",
+    uk: "contract_hash збігається з SHA256(умови \u2225 мітка часу)",
+  },
+  "verify.hashMismatch": {
+    en: "Contract hash does not match terms content. Document may be tampered.",
+    uk: "Хеш контракту не збігається зі змістом умов. Документ міг бути підроблений.",
+  },
+  "verify.parties": {
+    en: "PARTIES",
+    uk: "СТОРОНИ",
+  },
+  "verify.verifyParty": {
+    en: "VERIFY PARTY IDENTITY",
+    uk: "ПЕРЕВІРИТИ ОСОБУ СТОРОНИ",
+  },
+  "verify.documentNumber": {
+    en: "Document number",
+    uk: "Номер документа",
+  },
+  "verify.check": {
+    en: "Check",
+    uk: "Перевірити",
+  },
+  "verify.partyMatch": {
+    en: "Match: {role} nullifier",
+    uk: "Збіг: нуліфікатор {role}",
+  },
+  "verify.noMatch": {
+    en: "No party in this document matches this credential.",
+    uk: "Жодна сторона в цьому документі не відповідає цьому посвідченню.",
+  },
+  "verify.termsQr": {
+    en: "Contract terms",
+    uk: "Умови контракту",
+  },
+  "verify.metadataQr": {
+    en: "Contract metadata",
+    uk: "Метадані контракту",
+  },
+  "verify.proofN": {
+    en: "Proof {n}",
+    uk: "Доказ {n}",
+  },
 
   // ── Print page ──────────────────────────────────────────────────────────
   "print.title": {
