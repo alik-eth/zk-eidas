@@ -497,6 +497,81 @@ async fn main() {
             { "claim": "insurance_expiry", "op": "gte", "value": epoch_days_today() },
             { "claim": "vin", "op": "neq", "value": "REVOKED" }
         ]), presets[3].3),
+
+        // === EU variants ===
+
+        // PID EU seller — credential_id = document_number DE-1234567890
+        ("pid", serde_json::json!({
+            "given_name": "Maximilian", "family_name": "Schneider",
+            "birth_date": "1990-03-22", "age_over_18": "true",
+            "nationality": "DE", "issuing_country": "DE",
+            "resident_country": "DE", "resident_city": "Berlin",
+            "gender": "M", "document_number": "DE-1234567890",
+            "expiry_date": "2033-08-01",
+            "issuing_authority": "Bundesdruckerei GmbH"
+        }), serde_json::json!([
+            { "claim": "birth_date", "op": "gte", "value": 18 }
+        ]), "https://bundesdruckerei.de"),
+        // PID EU buyer — credential_id = document_number DE-9876543210
+        ("pid", serde_json::json!({
+            "given_name": "Sophie", "family_name": "Müller",
+            "birth_date": "1993-07-15", "age_over_18": "true",
+            "nationality": "DE", "issuing_country": "DE",
+            "resident_country": "DE", "resident_city": "München",
+            "gender": "F", "document_number": "DE-9876543210",
+            "expiry_date": "2032-07-15",
+            "issuing_authority": "Bundesdruckerei GmbH"
+        }), serde_json::json!([
+            { "claim": "birth_date", "op": "gte", "value": 18 }
+        ]), "https://bundesdruckerei.de"),
+        // Driver's License UA — credential_id = license_number UA-DL-12345678
+        ("drivers_license", serde_json::json!({
+            "holder_name": "Андрій Мельник", "category": "A, B",
+            "issue_date": "2018-06-15", "expiry_date": "2033-06-15",
+            "restrictions": "None", "license_number": "UA-DL-12345678"
+        }), serde_json::json!([
+            { "claim": "expiry_date", "op": "gte", "value": epoch_days_today() },
+            { "claim": "category", "op": "eq", "value": "A, B" },
+            { "claim": "issue_date", "op": "lte", "value": epoch_days_years_ago(2) }
+        ]), "https://hsc.gov.ua"),
+        // Student ID UA — credential_id = student_number UA-KNU-STU-21-98765
+        ("student_id", serde_json::json!({
+            "student_name": "Оксана Шевченко",
+            "university": "КНУ ім. Шевченка",
+            "faculty": "Кібернетика",
+            "enrollment_year": "2021",
+            "valid_until": "2026-06-30",
+            "student_number": "UA-KNU-STU-21-98765"
+        }), serde_json::json!([
+            { "claim": "valid_until", "op": "gte", "value": epoch_days_today() }
+        ]), "https://knu.ua"),
+        // Diploma UA — credential_id = diploma_number UA-KPI-2022-07891
+        ("diploma", serde_json::json!({
+            "student_name": "Дмитро Бондаренко",
+            "university": "КПІ ім. Сікорського",
+            "degree": "Магістр",
+            "field_of_study": "Computer Science",
+            "graduation_year": "2022",
+            "diploma_number": "UA-KPI-2022-07891",
+            "honors": "Cum Laude"
+        }), serde_json::json!([
+            { "claim": "field_of_study", "op": "set_member", "value": ["Computer Science", "Mathematics", "Physics", "Chemistry", "Biology", "Engineering"] },
+            { "claim": "graduation_year", "op": "gte", "value": 2020 },
+            { "claim": "diploma_number", "op": "eq", "value": "UA-KPI-2022-07891" }
+        ]), "https://kpi.ua"),
+        // Vehicle UA — credential_id = vin WVWZZZ3CZWE123456
+        ("vehicle", serde_json::json!({
+            "owner_name": "Олександр Петренко",
+            "owner_document_number": "UA-1234567890",
+            "plate_number": "AA1234BB",
+            "make_model": "Volkswagen Golf",
+            "vin": "WVWZZZ3CZWE123456",
+            "insurance_expiry": "2027-03-01",
+            "registration_date": "2020-09-15"
+        }), serde_json::json!([
+            { "claim": "insurance_expiry", "op": "gte", "value": epoch_days_today() },
+            { "claim": "vin", "op": "neq", "value": "REVOKED" }
+        ]), "https://mvs.gov.ua"),
     ];
 
     for (cred_type, claims, predicates, issuer) in &contract_presets {
@@ -506,6 +581,7 @@ async fn main() {
             "vehicle" => "vin",
             "student_id" => "student_number",
             "drivers_license" => "license_number",
+            "diploma" => "diploma_number",
             _ => "document_number",
         };
         let doc_val = claims[id_field].as_str().unwrap_or("");
