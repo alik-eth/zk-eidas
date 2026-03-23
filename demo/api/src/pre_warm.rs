@@ -1,11 +1,11 @@
 //! Pre-warm script: issues default credentials and pre-computes proofs
-//! for all credential presets. Saves results to proof-cache.json.
+//! for all credential presets. Saves results to proof-cache/ directory.
 //!
 //! Run: cargo run --bin pre-warm
+//! Run with --force to recompute all entries (skip the cache-hit check).
 //! Requires the API server to be running on localhost:3001.
 
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 
 #[derive(Serialize, Deserialize)]
 struct CacheEntry {
@@ -46,16 +46,6 @@ struct EcdsaCommitmentEntry {
     message_hash: Vec<u8>,
 }
 
-#[derive(Serialize, Deserialize)]
-struct ProofCache {
-    generated_at: String,
-    entries: HashMap<String, CacheEntry>,
-    #[serde(default)]
-    binding_entries: HashMap<String, BindingCacheEntry>,
-    #[serde(default)]
-    ecdsa_commitments: HashMap<String, EcdsaCommitmentEntry>,
-}
-
 /// Compute a binding cache key — MUST match compute_binding_cache_key in main.rs
 fn binding_cache_key(binding_claim: &str, binding_claim_b: &str) -> String {
     let key_material = format!("binding|{}|{}", binding_claim, binding_claim_b);
@@ -87,6 +77,7 @@ fn fnv_hash(data: &[u8]) -> u64 {
 
 #[tokio::main]
 async fn main() {
+    let force = std::env::args().any(|a| a == "--force");
     let base_url = std::env::var("API_URL").unwrap_or_else(|_| "http://localhost:3001".to_string());
     let client = reqwest::Client::new();
 
@@ -99,12 +90,13 @@ async fn main() {
         }
     }
 
-    let mut cache = ProofCache {
-        generated_at: chrono_now(),
-        entries: HashMap::new(),
-        binding_entries: HashMap::new(),
-        ecdsa_commitments: HashMap::new(),
-    };
+    // Set up per-entry cache directory structure
+    let cache_dir = std::env::var("CACHE_OUTPUT")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|_| std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("proof-cache"));
+    std::fs::create_dir_all(cache_dir.join("predicate")).unwrap();
+    std::fs::create_dir_all(cache_dir.join("binding")).unwrap();
+    std::fs::create_dir_all(cache_dir.join("ecdsa")).unwrap();
 
     let presets: Vec<(&str, serde_json::Value, serde_json::Value, &str)> = vec![
         // PID — age >= 18 + document_number eq (matches contract templates: age_verification, vehicle_sale seller/buyer)
@@ -287,7 +279,7 @@ async fn main() {
     for (i, (cred_type, claims, predicates, issuer)) in presets.iter().enumerate() {
         println!("\n[{}/{}] Pre-warming: {}", i + 1, presets.len(), cred_type);
 
-        // Issue credential
+        // Issue credential (fast — no proving)
         let issue_res: serde_json::Value = client
             .post(format!("{base_url}/issuer/issue"))
             .json(&serde_json::json!({
@@ -304,7 +296,14 @@ async fn main() {
 
         let credential = issue_res["credential"].as_str().unwrap();
         let format = issue_res["format"].as_str().unwrap();
-        println!("  Issued: {} ({})", cred_type, format);
+        let key = cache_key(format, predicates);
+        println!("  Issued: {} ({}) — key: {key}", cred_type, format);
+
+        let pred_path = cache_dir.join("predicate").join(format!("{key}.json"));
+        if pred_path.exists() && !force {
+            println!("  Skipping predicate {key} (cached)");
+            continue;
+        }
 
         // Prove compound
         let t0 = std::time::Instant::now();
@@ -343,16 +342,13 @@ async fn main() {
             .await
             .expect("export parse failed");
 
-        let key = cache_key(format, predicates);
-        println!("  Cache key: {key}");
-
         let hidden_fields: Vec<String> = prove_data["hidden_fields"]
             .as_array()
             .map(|a| a.iter().filter_map(|v| v.as_str().map(String::from)).collect())
             .unwrap_or_default();
         let sub_proofs_count = prove_data["sub_proofs_count"].as_u64().unwrap_or(0) as usize;
 
-        cache.entries.insert(key, CacheEntry {
+        let entry = CacheEntry {
             credential: credential.to_string(),
             format: format.to_string(),
             credential_type: cred_type.to_string(),
@@ -366,91 +362,102 @@ async fn main() {
                 .as_str()
                 .unwrap_or("")
                 .to_string(),
-        });
+        };
+        let entry_json = serde_json::to_string_pretty(&entry).unwrap();
+        std::fs::write(&pred_path, &entry_json).unwrap();
+        println!("  Written to {}", pred_path.display());
     }
 
     // Pre-warm holder binding (vehicle_sale: seller PID ↔ vehicle registration)
     println!("\n[binding] Pre-warming holder binding: document_number ↔ owner_document_number");
     {
-        // Issue fresh PID credential for seller
-        let pid_res: serde_json::Value = client
-            .post(format!("{base_url}/issuer/issue"))
-            .json(&serde_json::json!({
-                "credential_type": "pid",
-                "claims": {
-                    "given_name": "Олександр", "family_name": "Петренко",
-                    "birth_date": "1998-05-14", "age_over_18": "true",
-                    "nationality": "UA", "issuing_country": "UA",
-                    "resident_country": "UA", "resident_city": "Київ",
-                    "gender": "M", "document_number": "UA-1234567890",
-                    "expiry_date": "2035-05-14",
-                    "issuing_authority": "Міністерство цифрової трансформації"
-                },
-                "issuer": "https://diia.gov.ua",
-            }))
-            .send().await.expect("issue PID failed").json().await.expect("parse failed");
+        let key = binding_cache_key("document_number", "owner_document_number");
+        let binding_path = cache_dir.join("binding").join(format!("{key}.json"));
 
-        // Issue fresh vehicle credential
-        let veh_res: serde_json::Value = client
-            .post(format!("{base_url}/issuer/issue"))
-            .json(&serde_json::json!({
-                "credential_type": "vehicle",
-                "claims": {
-                    "owner_name": "Maximilian Schneider",
-                    "owner_document_number": "UA-1234567890",
-                    "plate_number": "B-MS 2847",
-                    "make_model": "Volkswagen Golf",
-                    "vin": "WVWZZZ1JZYW000001",
-                    "insurance_expiry": "2027-01-15",
-                    "registration_date": "2021-06-10"
-                },
-                "issuer": "https://kba.de",
-            }))
-            .send().await.expect("issue vehicle failed").json().await.expect("parse failed");
-
-        let t0 = std::time::Instant::now();
-        let binding_res = client
-            .post(format!("{base_url}/holder/prove-binding"))
-            .json(&serde_json::json!({
-                "sdjwt_a": pid_res["credential"].as_str().unwrap(),
-                "sdjwt_b": veh_res["credential"].as_str().unwrap(),
-                "binding_claim": "document_number",
-                "binding_claim_b": "owner_document_number",
-                "predicates_a": [],
-                "predicates_b": [],
-            }))
-            .send().await.expect("binding prove failed");
-
-        if binding_res.status().is_success() {
-            let data: serde_json::Value = binding_res.json().await.unwrap();
-            println!("  Binding proved in {:.1}s", t0.elapsed().as_secs_f64());
-
-            let key = binding_cache_key("document_number", "owner_document_number");
-            println!("  Binding cache key: {key}");
-
-            let to_entries = |arr: &serde_json::Value| -> Vec<ProofResultEntry> {
-                arr.as_array().unwrap_or(&vec![]).iter().map(|p| ProofResultEntry {
-                    predicate: p["predicate"].as_str().unwrap_or("").to_string(),
-                    proof_json: p["proof_json"].as_str().unwrap_or("").to_string(),
-                    proof_hex: p["proof_hex"].as_str().unwrap_or("").to_string(),
-                    op: p["op"].as_str().unwrap_or("").to_string(),
-                }).collect()
-            };
-
-            cache.binding_entries.insert(key, BindingCacheEntry {
-                proofs_a: to_entries(&data["proofs_a"]),
-                proofs_b: to_entries(&data["proofs_b"]),
-                binding_hash: data["binding_hash"].as_str().unwrap_or("").to_string(),
-                binding_verified: data["binding_verified"].as_bool().unwrap_or(false),
-                hidden_fields_a: data["hidden_fields_a"].as_array()
-                    .map(|a| a.iter().filter_map(|v| v.as_str().map(String::from)).collect())
-                    .unwrap_or_default(),
-                hidden_fields_b: data["hidden_fields_b"].as_array()
-                    .map(|a| a.iter().filter_map(|v| v.as_str().map(String::from)).collect())
-                    .unwrap_or_default(),
-            });
+        if binding_path.exists() && !force {
+            println!("  Skipping binding {key} (cached)");
         } else {
-            eprintln!("  FAILED binding prove: {}", binding_res.text().await.unwrap_or_default());
+            // Issue fresh PID credential for seller
+            let pid_res: serde_json::Value = client
+                .post(format!("{base_url}/issuer/issue"))
+                .json(&serde_json::json!({
+                    "credential_type": "pid",
+                    "claims": {
+                        "given_name": "Олександр", "family_name": "Петренко",
+                        "birth_date": "1998-05-14", "age_over_18": "true",
+                        "nationality": "UA", "issuing_country": "UA",
+                        "resident_country": "UA", "resident_city": "Київ",
+                        "gender": "M", "document_number": "UA-1234567890",
+                        "expiry_date": "2035-05-14",
+                        "issuing_authority": "Міністерство цифрової трансформації"
+                    },
+                    "issuer": "https://diia.gov.ua",
+                }))
+                .send().await.expect("issue PID failed").json().await.expect("parse failed");
+
+            // Issue fresh vehicle credential
+            let veh_res: serde_json::Value = client
+                .post(format!("{base_url}/issuer/issue"))
+                .json(&serde_json::json!({
+                    "credential_type": "vehicle",
+                    "claims": {
+                        "owner_name": "Maximilian Schneider",
+                        "owner_document_number": "UA-1234567890",
+                        "plate_number": "B-MS 2847",
+                        "make_model": "Volkswagen Golf",
+                        "vin": "WVWZZZ1JZYW000001",
+                        "insurance_expiry": "2027-01-15",
+                        "registration_date": "2021-06-10"
+                    },
+                    "issuer": "https://kba.de",
+                }))
+                .send().await.expect("issue vehicle failed").json().await.expect("parse failed");
+
+            let t0 = std::time::Instant::now();
+            let binding_res = client
+                .post(format!("{base_url}/holder/prove-binding"))
+                .json(&serde_json::json!({
+                    "sdjwt_a": pid_res["credential"].as_str().unwrap(),
+                    "sdjwt_b": veh_res["credential"].as_str().unwrap(),
+                    "binding_claim": "document_number",
+                    "binding_claim_b": "owner_document_number",
+                    "predicates_a": [],
+                    "predicates_b": [],
+                }))
+                .send().await.expect("binding prove failed");
+
+            if binding_res.status().is_success() {
+                let data: serde_json::Value = binding_res.json().await.unwrap();
+                println!("  Binding proved in {:.1}s", t0.elapsed().as_secs_f64());
+                println!("  Binding cache key: {key}");
+
+                let to_entries = |arr: &serde_json::Value| -> Vec<ProofResultEntry> {
+                    arr.as_array().unwrap_or(&vec![]).iter().map(|p| ProofResultEntry {
+                        predicate: p["predicate"].as_str().unwrap_or("").to_string(),
+                        proof_json: p["proof_json"].as_str().unwrap_or("").to_string(),
+                        proof_hex: p["proof_hex"].as_str().unwrap_or("").to_string(),
+                        op: p["op"].as_str().unwrap_or("").to_string(),
+                    }).collect()
+                };
+
+                let entry = BindingCacheEntry {
+                    proofs_a: to_entries(&data["proofs_a"]),
+                    proofs_b: to_entries(&data["proofs_b"]),
+                    binding_hash: data["binding_hash"].as_str().unwrap_or("").to_string(),
+                    binding_verified: data["binding_verified"].as_bool().unwrap_or(false),
+                    hidden_fields_a: data["hidden_fields_a"].as_array()
+                        .map(|a| a.iter().filter_map(|v| v.as_str().map(String::from)).collect())
+                        .unwrap_or_default(),
+                    hidden_fields_b: data["hidden_fields_b"].as_array()
+                        .map(|a| a.iter().filter_map(|v| v.as_str().map(String::from)).collect())
+                        .unwrap_or_default(),
+                };
+                let entry_json = serde_json::to_string_pretty(&entry).unwrap();
+                std::fs::write(&binding_path, &entry_json).unwrap();
+                println!("  Written to {}", binding_path.display());
+            } else {
+                eprintln!("  FAILED binding prove: {}", binding_res.text().await.unwrap_or_default());
+            }
         }
     }
 
@@ -495,6 +502,21 @@ async fn main() {
     for (cred_type, claims, predicates, issuer) in &contract_presets {
         println!("\n[ecdsa-warm] Pre-warming ECDSA for {cred_type} contract nullifier");
 
+        let id_field = match *cred_type {
+            "vehicle" => "vin",
+            "student_id" => "student_number",
+            "drivers_license" => "license_number",
+            _ => "document_number",
+        };
+        let doc_val = claims[id_field].as_str().unwrap_or("");
+        let cid = credential_id_u64(doc_val);
+
+        let ecdsa_path = cache_dir.join("ecdsa").join(format!("{cid}.json"));
+        if ecdsa_path.exists() && !force {
+            println!("  Skipping ECDSA for {id_field}={doc_val} (cached)");
+            continue;
+        }
+
         let issue_res: serde_json::Value = client
             .post(format!("{base_url}/issuer/issue"))
             .json(&serde_json::json!({
@@ -530,33 +552,30 @@ async fn main() {
         println!("  ECDSA proved in {:.1}s — nullifier: {}", t0.elapsed().as_secs_f64(),
             data["nullifier"].as_str().unwrap_or("?"));
 
-        // Extract ECDSA commitment from the compound proof and save to cache
-        let id_field = match *cred_type {
-            "vehicle" => "vin",
-            "student_id" => "student_number",
-            "drivers_license" => "license_number",
-            _ => "document_number",
-        };
-        let doc_val = claims[id_field].as_str().unwrap_or("");
-        let cid = credential_id_u64(doc_val);
-
         if let Some(entry) = extract_ecdsa_commitment(&data, id_field) {
+            let entry_json = serde_json::to_string_pretty(&entry).unwrap();
+            std::fs::write(&ecdsa_path, &entry_json).unwrap();
             println!("  Cached ECDSA commitment for {id_field}={doc_val} (cid={cid})");
-            cache.ecdsa_commitments.insert(cid.to_string(), entry);
+            println!("  Written to {}", ecdsa_path.display());
         } else {
             eprintln!("  WARNING: could not extract ECDSA commitment from response");
         }
     }
 
-    // Write cache
-    let cache_path = std::env::var("CACHE_OUTPUT")
-        .map(std::path::PathBuf::from)
-        .unwrap_or_else(|_| std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("proof-cache.json"));
-    let json = serde_json::to_string_pretty(&cache).unwrap();
-    std::fs::write(&cache_path, &json).unwrap();
-    println!("\n✓ Cache written to {} ({} proofs + {} bindings + {} ecdsa, {:.1} KB)",
-        cache_path.display(), cache.entries.len(), cache.binding_entries.len(),
-        cache.ecdsa_commitments.len(), json.len() as f64 / 1024.0);
+    // Summary: count files in each subdirectory
+    let count_files = |subdir: &str| -> usize {
+        let path = cache_dir.join(subdir);
+        std::fs::read_dir(&path)
+            .map(|d| d.flatten().filter(|e| {
+                e.path().extension().is_some_and(|x| x == "json")
+            }).count())
+            .unwrap_or(0)
+    };
+    let n_pred = count_files("predicate");
+    let n_bind = count_files("binding");
+    let n_ecdsa = count_files("ecdsa");
+    println!("\nCache written to {} ({} proofs + {} bindings + {} ecdsa)",
+        cache_dir.display(), n_pred, n_bind, n_ecdsa);
 }
 
 fn json_array_to_bytes(v: &serde_json::Value) -> Vec<u8> {
@@ -603,11 +622,4 @@ fn epoch_days_years_ago(years: i64) -> i64 {
 
 fn eu_countries() -> Vec<&'static str> {
     vec!["UA","DE","FR","IT","ES","PL","NL","BE","AT","SE","CZ","RO","BG","HR","IE","LT","LV","EE","SK","SI","FI","DK","PT","HU","EL","LU","MT","CY"]
-}
-
-fn chrono_now() -> String {
-    let now = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap();
-    format!("{}", now.as_secs())
 }

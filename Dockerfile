@@ -73,7 +73,7 @@ COPY --from=cpp-builder /build/ecdsa_verify /app/circuits/build/ecdsa_verify/ecd
 COPY --from=cpp-builder /build/ecdsa_verify.dat /app/circuits/build/ecdsa_verify/ecdsa_verify_cpp/ecdsa_verify.dat
 
 # Copy pre-built proof cache (generated locally via pre-warm binary)
-COPY demo/api/proof-cache.json /app/proof-cache.json
+COPY demo/api/proof-cache/ /app/proof-cache/
 
 # Copy frontend build + node_modules
 COPY --from=web-builder /app/demo/web/ /app/web/
