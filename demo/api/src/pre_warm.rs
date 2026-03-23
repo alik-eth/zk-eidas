@@ -202,19 +202,19 @@ async fn main() {
             { "claim": "vin", "op": "eq", "value": "WVWZZZ1JZYW000001" }
         ]), "https://kba.de"),
 
-        // PID — buyer in vehicle sale contract (DE document number)
+        // PID — buyer in vehicle sale contract (UA buyer credential)
         ("pid", serde_json::json!({
-            "given_name": "Maximilian", "family_name": "Schneider",
-            "birth_date": "1990-03-22", "age_over_18": "true",
-            "nationality": "DE", "issuing_country": "DE",
-            "resident_country": "DE", "resident_city": "Berlin",
-            "gender": "M", "document_number": "DE-9876543210",
-            "expiry_date": "2033-08-01",
-            "issuing_authority": "Bundesdruckerei"
+            "given_name": "Марія", "family_name": "Коваленко",
+            "birth_date": "1995-11-03", "age_over_18": "true",
+            "nationality": "UA", "issuing_country": "UA",
+            "resident_country": "UA", "resident_city": "Львів",
+            "gender": "F", "document_number": "UA-9876543210",
+            "expiry_date": "2034-11-03",
+            "issuing_authority": "Міністерство цифрової трансформації"
         }), serde_json::json!([
             { "claim": "birth_date", "op": "gte", "value": 18 },
-            { "claim": "document_number", "op": "eq", "value": "DE-9876543210" }
-        ]), "https://bdr.de"),
+            { "claim": "document_number", "op": "eq", "value": "UA-9876543210" }
+        ]), "https://diia.gov.ua"),
 
         // PID — landing page Live Proof (age >= 18 only, no document eq)
         ("pid", serde_json::json!({
@@ -463,6 +463,18 @@ async fn main() {
         ("pid", presets[0].1.clone(), serde_json::json!([
             { "claim": "birth_date", "op": "gte", "value": 18 }
         ]), presets[0].3),
+        // PID buyer — credential_id = document_number (vehicle_sale buyer)
+        ("pid", serde_json::json!({
+            "given_name": "Марія", "family_name": "Коваленко",
+            "birth_date": "1995-11-03", "age_over_18": "true",
+            "nationality": "UA", "issuing_country": "UA",
+            "resident_country": "UA", "resident_city": "Львів",
+            "gender": "F", "document_number": "UA-9876543210",
+            "expiry_date": "2034-11-03",
+            "issuing_authority": "Міністерство цифрової трансформації"
+        }), serde_json::json!([
+            { "claim": "birth_date", "op": "gte", "value": 18 }
+        ]), "https://diia.gov.ua"),
         // Student ID — credential_id = student_number (student_transit)
         ("student_id", presets[2].1.clone(), serde_json::json!([
             { "claim": "valid_until", "op": "gte", "value": epoch_days_today() }
