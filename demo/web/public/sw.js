@@ -1,7 +1,7 @@
 // zk-eidas offline verifier service worker
 // The /verify page must work fully offline after first visit
 
-const CACHE_NAME = 'zk-eidas-v4'
+const CACHE_NAME = 'zk-eidas-v5'
 
 const PRECACHE_URLS = [
   '/trusted-vks.json',
@@ -47,33 +47,29 @@ async function precacheVerifyPage(cache) {
       if (text && url.endsWith('.js')) jsContents.push(text)
     }
 
-    // 4. Scan JS bundles for dynamic import chunks
-    const chunkUrls = new Set()
-    for (const js of jsContents) {
-      // Match patterns like: import("./chunk-xxx.js") or import("/assets/xxx.js")
-      for (const match of js.matchAll(/import\(["'](\.[^"']+\.js)["']\)/g)) {
-        chunkUrls.add('/assets/' + match[1].replace('./', ''))
-      }
-      for (const match of js.matchAll(/import\(["'](\/assets\/[^"']+)["']\)/g)) {
-        chunkUrls.add(match[1])
-      }
-    }
-
-    // 5. Fetch and cache dynamic import chunks (and scan one more level)
-    for (const url of chunkUrls) {
-      if (!assetUrls.has(url)) {
-        const text = await fetchAndCache(cache, url)
-        if (text && url.endsWith('.js')) {
-          // One more level: scan these chunks for their own imports
-          for (const match of text.matchAll(/import\(["'](\.[^"']+\.js)["']\)/g)) {
-            const deepUrl = '/assets/' + match[1].replace('./', '')
-            if (!assetUrls.has(deepUrl) && !chunkUrls.has(deepUrl)) {
-              await fetchAndCache(cache, deepUrl)
-            }
-          }
+    // 4. Recursively discover and cache all dynamic import chunks
+    const cachedUrls = new Set(assetUrls)
+    async function discoverChunks(jsSources) {
+      const newUrls = new Set()
+      for (const js of jsSources) {
+        for (const match of js.matchAll(/import\(["'](\.[^"']+\.js)["']\)/g)) {
+          newUrls.add('/assets/' + match[1].replace('./', ''))
+        }
+        for (const match of js.matchAll(/import\(["'](\/assets\/[^"']+)["']\)/g)) {
+          newUrls.add(match[1])
         }
       }
+      const nextLevel = []
+      for (const url of newUrls) {
+        if (!cachedUrls.has(url)) {
+          cachedUrls.add(url)
+          const text = await fetchAndCache(cache, url)
+          if (text && url.endsWith('.js')) nextLevel.push(text)
+        }
+      }
+      if (nextLevel.length > 0) await discoverChunks(nextLevel)
     }
+    await discoverChunks(jsContents)
   } catch (_) {}
 }
 
