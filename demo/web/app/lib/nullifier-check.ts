@@ -7,6 +7,12 @@
  * - checkNullifier: Poseidon(credential_id, contract_hash, salt) → compare to nullifier
  */
 
+// circomlibjs requires Node.js Buffer in the browser
+import { Buffer } from 'buffer'
+if (typeof globalThis.Buffer === 'undefined') {
+  globalThis.Buffer = Buffer
+}
+
 /** Convert a credential ID string to the u64 BigInt used in the nullifier circuit. */
 export async function stringToCredentialId(s: string): Promise<bigint> {
   const encoded = new TextEncoder().encode(s)

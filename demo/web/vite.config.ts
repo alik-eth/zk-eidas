@@ -4,9 +4,13 @@ import tailwindcss from '@tailwindcss/vite'
 import path from 'path'
 
 export default defineConfig({
+  define: {
+    global: 'globalThis',
+  },
   resolve: {
     alias: {
       'zk-eidas-wasm': path.resolve(__dirname, 'pkg/zk-eidas-wasm.js'),
+      buffer: 'buffer/',
     },
   },
   server: {
