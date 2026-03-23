@@ -1,7 +1,7 @@
 import { createFileRoute, Link } from '@tanstack/react-router'
 import { useState, useCallback, useEffect, useRef } from 'react'
 import { useT, useLocale } from '../i18n'
-import { ChunkCollector, decompressDeflate } from '../lib/qr-chunking'
+import { ChunkCollector, decompressDeflate, TERMS_PROOF_ID, METADATA_PROOF_ID } from '../lib/qr-chunking'
 import { useQrScanner } from '../lib/use-qr-scanner'
 
 export const Route = createFileRoute('/verify')({
@@ -27,7 +27,15 @@ function VerifyPage() {
   const [dragging, setDragging] = useState(false)
   const [wasmReady, setWasmReady] = useState(false)
   const [scanMode, setScanMode] = useState(false)
-  const [scanProgress, setScanProgress] = useState<Map<number, [number, number]>>(new Map())
+  const [scanProgress, setScanProgress] = useState<{ scanned: number; total: number; items: { type: 'terms' | 'metadata' | 'proof'; proofIndex: number; complete: boolean }[] }>({ scanned: 0, total: 0, items: [] })
+  const [contractTerms, setContractTerms] = useState<{ terms: string; timestamp: string } | null>(null)
+  const [contractMeta, setContractMeta] = useState<{ contract_hash: string; parties: { role: string; nullifier: string; salt: string }[] } | null>(null)
+  const [hashCheckResult, setHashCheckResult] = useState<'match' | 'mismatch' | null>(null)
+  const [computedHash, setComputedHash] = useState<string | null>(null)
+  const [partyCheckOpen, setPartyCheckOpen] = useState(false)
+  const [credentialIdInput, setCredentialIdInput] = useState('')
+  const [partyCheckResults, setPartyCheckResults] = useState<{ role: string; matched: boolean }[] | null>(null)
+  const [partyChecking, setPartyChecking] = useState(false)
   const collectorRef = useRef(new ChunkCollector())
 
   // Pre-initialize snarkjs verification backend
@@ -48,6 +56,67 @@ function VerifyPage() {
     })()
     return () => { cancelled = true }
   }, [])
+
+  const runVerificationPipeline = async (
+    proofsToVerify: DecodedProof[],
+    terms: { terms: string; timestamp: string } | null,
+    meta: { contract_hash: string; parties: { role: string; nullifier: string; salt: string }[] } | null,
+  ) => {
+    setVerifying(true)
+    setError(null)
+    try {
+      // Stage 1: Proof verification
+      const { verifyCompoundProof, loadTrustedVks } = await import('@zk-eidas/verifier-sdk')
+      const vks = await loadTrustedVks('/trusted-vks.json')
+      const envelope = {
+        proofs: proofsToVerify.map(p => ({
+          proof_bytes: Array.from(p.proofBytes),
+          public_inputs: p.publicInputs.map(pi => Array.from(pi)),
+          verification_key: [],
+          predicate_op: p.op,
+        })),
+        op: proofsToVerify.length > 1 ? 'and' : 'single',
+      }
+      const chainResult = await verifyCompoundProof(envelope, vks)
+      const results = proofsToVerify.map((p, i) => ({
+        ...p,
+        valid: chainResult.predicateResults[i]?.valid ?? false,
+      }))
+      setProofs(results)
+
+      // Stage 2: Contract hash cross-check
+      if (terms && meta) {
+        const { computeContractHash } = await import('../lib/nullifier-check')
+        const computed = await computeContractHash(terms.terms, terms.timestamp)
+        setComputedHash(computed)
+        setHashCheckResult(computed === meta.contract_hash ? 'match' : 'mismatch')
+      }
+
+      setVerified(true)
+    } catch (e: any) {
+      setError(`Verification failed: ${e.message}`)
+    } finally {
+      setVerifying(false)
+    }
+  }
+
+  const handlePartyCheck = async () => {
+    if (!credentialIdInput.trim() || !contractMeta) return
+    setPartyChecking(true)
+    try {
+      const { checkNullifier } = await import('../lib/nullifier-check')
+      const results = await checkNullifier(
+        credentialIdInput.trim(),
+        contractMeta.contract_hash,
+        contractMeta.parties,
+      )
+      setPartyCheckResults(results)
+    } catch (e: any) {
+      setError(`Nullifier check failed: ${e.message}`)
+    } finally {
+      setPartyChecking(false)
+    }
+  }
 
   const handleFile = useCallback(async (file: File) => {
     setError(null)
@@ -103,18 +172,20 @@ function VerifyPage() {
     const isNew = collector.add(data)
     if (!isNew) return
 
-    // Update progress
-    const progress = new Map<number, [number, number]>()
-    for (const id of collector.proofIds()) {
-      progress.set(id, collector.progress(id))
-    }
-    setScanProgress(new Map(progress))
+    // Update overall progress
+    const ids = collector.proofIds()
+    const firstHeader = ids.length > 0 ? collector.getHeader(ids[0]) : null
+    const total = firstHeader?.proofCount ?? 0
+    const scanned = ids.filter(id => collector.isProofComplete(id)).length
+    setScanProgress({ scanned, total, items: collector.scannedItems() })
 
     // Check if all complete
     if (collector.isAllComplete()) {
       try {
+        // Separate proof data from terms/metadata
         const allProofs: DecodedProof[] = []
         for (const proofId of collector.proofIds()) {
+          if (proofId === TERMS_PROOF_ID || proofId === METADATA_PROOF_ID) continue
           const compressed = collector.reassemble(proofId)!
           const cbor = await decompressDeflate(compressed)
           const { decode } = await import('cbor-x')
@@ -137,15 +208,31 @@ function VerifyPage() {
           }
         }
 
+        // Extract contract data if present
+        const isContract = collector.isContractDocument()
+        let termsData: { terms: string; timestamp: string } | null = null
+        let metaData: { contract_hash: string; parties: { role: string; nullifier: string; salt: string }[] } | null = null
+        if (isContract) {
+          termsData = await collector.getTermsData()
+          metaData = await collector.getMetadataData()
+        }
+
         setScanMode(false)
         stopScanRef.current()
         setProofs(allProofs)
         setFileName('paper-proof (scanned)')
+        setContractTerms(termsData)
+        setContractMeta(metaData)
+
+        // Auto-verify for contract documents
+        if (isContract && allProofs.length > 0) {
+          runVerificationPipeline(allProofs, termsData, metaData)
+        }
       } catch (e: unknown) {
         setError(e instanceof Error ? e.message : 'Proof data corrupted, try re-scanning.')
       } finally {
         collectorRef.current.clear()
-        setScanProgress(new Map())
+        setScanProgress({ scanned: 0, total: 0, items: [] })
       }
     }
   }, [])
@@ -266,21 +353,35 @@ function VerifyPage() {
                   <p className="text-red-400 text-sm">{t('verify.cameraError')}</p>
                 )}
 
-                {scanProgress.size > 0 && (
-                  <div className="space-y-2">
-                    {[...scanProgress.entries()].map(([proofId, [scanned, total]]) => (
-                      <div key={proofId} className="flex items-center gap-2 justify-center">
-                        <div className="w-32 h-2 bg-slate-700 rounded-full overflow-hidden">
-                          <div className="h-full bg-green-500 transition-all" style={{ width: `${(scanned / total) * 100}%` }} />
-                        </div>
-                        <span className="text-xs text-slate-400">{scanned}/{total} {t('verify.scanProgress')}</span>
+                {scanProgress.total > 0 && (
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-3 justify-center">
+                      <div className="w-48 h-2 bg-slate-700 rounded-full overflow-hidden">
+                        <div className="h-full bg-green-500 transition-all" style={{ width: `${(scanProgress.scanned / scanProgress.total) * 100}%` }} />
                       </div>
-                    ))}
+                      <span className="text-xs text-slate-400">
+                        {t('verify.scanOverall').replace('{n}', String(scanProgress.scanned)).replace('{total}', String(scanProgress.total))}
+                      </span>
+                    </div>
+                    <div className="space-y-1">
+                      {scanProgress.items.map((item, i) => (
+                        <div key={i} className="flex items-center gap-2 justify-center text-xs">
+                          <span className={item.complete ? 'text-green-400' : 'text-slate-500'}>
+                            {item.complete ? '\u2713' : '\u25CB'}
+                          </span>
+                          <span className={item.complete ? 'text-slate-300' : 'text-slate-500'}>
+                            {item.type === 'terms' ? t('verify.termsQr')
+                              : item.type === 'metadata' ? t('verify.metadataQr')
+                              : t('verify.proofN').replace('{n}', String(item.proofIndex + 1))}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 )}
 
                 <button
-                  onClick={() => { scanner.stop(); setScanMode(false); setScanProgress(new Map()); collectorRef.current.clear() }}
+                  onClick={() => { scanner.stop(); setScanMode(false); setScanProgress({ scanned: 0, total: 0, items: [] }); collectorRef.current.clear() }}
                   className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white text-sm font-medium rounded-lg transition-colors"
                 >
                   {t('verify.stopScanning')}
@@ -325,7 +426,16 @@ function VerifyPage() {
                         {p.predicate}
                       </p>
                       <p className="text-xs text-slate-500 mt-0.5">
-                        {p.op} &middot; {p.proofBytes.length.toLocaleString()} bytes
+                        {p.op}
+                        {p.publicInputs.length > 0 && (
+                          <span className="ml-1">
+                            — [{p.publicInputs.map(pi => {
+                              const hex = Array.from(pi).map(b => b.toString(16).padStart(2, '0')).join('')
+                              return hex.length > 16 ? hex.slice(0, 16) + '\u2026' : hex
+                            }).join(', ')}]
+                          </span>
+                        )}
+                        <span className="ml-2">&middot; {p.proofBytes.length.toLocaleString()} bytes</span>
                       </p>
                     </div>
                     {p.valid !== null && (
@@ -340,7 +450,48 @@ function VerifyPage() {
               </div>
             </div>
 
-            {!verified && (
+            {/* Stage 2: Contract Integrity */}
+            {hashCheckResult && (
+              <div className={`rounded-lg border px-6 py-4 ${
+                hashCheckResult === 'match'
+                  ? 'bg-green-900/20 border-green-700/40'
+                  : 'bg-red-900/20 border-red-700/40'
+              }`}>
+                <h3 className="text-sm font-semibold uppercase tracking-wider mb-2 text-slate-300">
+                  {t('verify.contractIntegrity')}
+                </h3>
+                {hashCheckResult === 'match' ? (
+                  <div className="space-y-1">
+                    <p className="text-green-300 text-sm">{'\u2713'} {t('verify.hashMatch')}</p>
+                    <p className="text-xs text-slate-500 font-mono">{computedHash}</p>
+                  </div>
+                ) : (
+                  <p className="text-red-300 text-sm">{'\u2717'} {t('verify.hashMismatch')}</p>
+                )}
+              </div>
+            )}
+
+            {/* Stage 3: Party Summary */}
+            {contractMeta && contractMeta.parties.length > 0 && (
+              <div className="bg-slate-800 rounded-lg border border-slate-700 px-6 py-4">
+                <h3 className="text-sm font-semibold uppercase tracking-wider mb-3 text-slate-300">
+                  {t('verify.parties')}
+                </h3>
+                <div className="space-y-2">
+                  {contractMeta.parties.map((party, i) => (
+                    <div key={i} className="flex items-start gap-4 text-sm">
+                      <span className="text-slate-400 font-semibold uppercase w-20">{party.role}</span>
+                      <div className="flex-1 font-mono text-xs text-slate-400 space-y-0.5">
+                        <p>nullifier: {party.nullifier}</p>
+                        <p>salt: {party.salt}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {!verified && !contractMeta && (
               <button
                 onClick={handleVerify}
                 disabled={verifying || !wasmReady}
@@ -362,8 +513,63 @@ function VerifyPage() {
               </div>
             )}
 
+            {/* Nullifier Calculator */}
+            {contractMeta && contractMeta.parties.length > 0 && verified && (
+              <div className="bg-slate-800 rounded-lg border border-slate-700 overflow-hidden">
+                <button
+                  onClick={() => setPartyCheckOpen(!partyCheckOpen)}
+                  className="w-full px-6 py-3 flex items-center justify-between hover:bg-slate-700/50 transition-colors"
+                >
+                  <h3 className="text-sm font-semibold uppercase tracking-wider text-slate-300">
+                    {partyCheckOpen ? '\u25BE' : '\u25B8'} {t('verify.verifyParty')}
+                  </h3>
+                </button>
+                {partyCheckOpen && (
+                  <div className="px-6 pb-4 space-y-3">
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        placeholder={t('verify.documentNumber')}
+                        value={credentialIdInput}
+                        onChange={e => setCredentialIdInput(e.target.value)}
+                        onKeyDown={e => e.key === 'Enter' && handlePartyCheck()}
+                        className="flex-1 bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-blue-500"
+                      />
+                      <button
+                        onClick={handlePartyCheck}
+                        disabled={partyChecking || !credentialIdInput.trim()}
+                        className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-600 text-white text-sm font-medium rounded-lg transition-colors"
+                      >
+                        {partyChecking ? '...' : t('verify.check')}
+                      </button>
+                    </div>
+                    {partyCheckResults && (
+                      <div className="space-y-2">
+                        {partyCheckResults.some(r => r.matched) ? (
+                          partyCheckResults.filter(r => r.matched).map((r, i) => (
+                            <div key={i} className="bg-green-900/20 border border-green-700/40 rounded-lg px-4 py-3">
+                              <p className="text-green-300 text-sm font-semibold">
+                                {'\u2713'} {t('verify.partyMatch').replace('{role}', r.role.toUpperCase())}
+                              </p>
+                              <p className="text-xs text-slate-500 mt-1">
+                                Poseidon(credential_id, contract_hash, salt) = nullifier {'\u2713'}
+                              </p>
+                            </div>
+                          ))
+                        ) : (
+                          <div className="bg-slate-700/30 border border-slate-600 rounded-lg px-4 py-3">
+                            <p className="text-slate-400 text-sm">{t('verify.noMatch')}</p>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+
             <button
-              onClick={() => { setProofs([]); setVerified(false); setFileName(null); setError(null) }}
+              onClick={() => { setProofs([]); setVerified(false); setFileName(null); setError(null); setContractTerms(null); setContractMeta(null); setHashCheckResult(null); setComputedHash(null); setPartyCheckOpen(false); setCredentialIdInput(''); setPartyCheckResults(null) }}
               className="w-full bg-slate-700 hover:bg-slate-600 text-white font-semibold py-3 rounded-lg transition-colors"
             >
               {t('verify.verifyAnother')}
