@@ -19,6 +19,7 @@ interface CredentialData {
   compoundOp: string | null
   hiddenFields: string[]
   predicateDescriptions: string[]
+  qrDataUrls: string[]
 }
 
 interface BindingResult {
@@ -367,6 +368,7 @@ function CredentialStep({ state, setState, t }: { state: ContractWizardState; se
         compoundOp: null,
         hiddenFields: [],
         predicateDescriptions: [],
+        qrDataUrls: [],
       }
 
       const nextIndex = state.credentialIndex + 1
@@ -613,6 +615,7 @@ function ProveStep({ state, setState, t }: { state: ContractWizardState; setStat
           compoundOp: proveData.op,
           hiddenFields: proveData.hidden_fields,
           predicateDescriptions,
+          qrDataUrls: qrUrlsForThisCredential,
         }
 
         // Store per-party nullifier data
@@ -851,119 +854,102 @@ function DocumentStep({ state, setState, t }: { state: ContractWizardState; setS
             <h1 className="text-xl font-bold text-center mb-1">{tLang(template.titleKey, 'en')}</h1>
             <p className="text-base text-gray-500 italic text-center mb-6">{tLang(template.titleKey, 'uk')}</p>
 
-            {/* Parties — one per credential */}
-            {template.credentials.map((req, ci) => {
-              const cred = state.credentials[ci]
-              if (!cred) return null
-              const config = CREDENTIAL_TYPES.find(ct => ct.id === req.credentialType)
-              const templatePredicates = req.predicateIds
-                .map(pid => config?.predicates.find(p => p.id === pid))
-                .filter((p): p is NonNullable<typeof p> => p !== undefined)
-
-              return (
-                <div key={req.role} className="mb-5">
-                  <p className="text-xs font-semibold text-gray-500 mb-2">{t(req.roleLabelKey)}:</p>
-
-                  {/* Proved predicates */}
-                  <div className="space-y-2">
-                    {templatePredicates.map((p, i) => (
-                      <div key={p.id} className="flex items-center gap-2">
-                        <span className="text-green-600 font-bold text-sm">&#10003;</span>
-                        <span className="text-sm text-gray-800">{t(p.labelKey)}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )
-            })}
-
             {/* Bilingual body — always both languages */}
             <div className="space-y-3 mb-6">
               <p className="text-sm text-gray-800 leading-relaxed">{t(template.bodyKey_en)}</p>
               <p className="text-sm text-gray-500 italic leading-relaxed">{t(template.bodyKey_uk)}</p>
             </div>
 
-            {/* Per-party proof blocks */}
-            {state.partyProofs.map((party) => (
-              <div key={party.role} className="mb-5 border border-gray-300 rounded-lg p-4 print:border-black/30">
-                <p className="text-xs font-semibold text-gray-500 mb-3 uppercase tracking-wider">
-                  {t(party.roleLabelKey)}
-                </p>
-                <div className="space-y-1.5">
-                  <div>
-                    <span className="text-[10px] text-gray-400 font-medium">{t('contracts.nullifier')}</span>
-                    <p className="text-xs text-gray-700 font-mono break-all">{party.nullifier}</p>
-                  </div>
-                  <div>
-                    <span className="text-[10px] text-gray-400 font-medium">{t('contracts.salt')}</span>
-                    <p className="text-xs text-gray-700 font-mono break-all">{party.salt}</p>
-                  </div>
-                  <div>
-                    <span className="text-[10px] text-gray-400 font-medium">{t('contracts.issuer')}</span>
-                    <p className="text-xs text-gray-700 font-mono break-all">{party.issuer}</p>
-                  </div>
-                </div>
-                {party.qrDataUrls.length > 0 && (
-                  <div className="mt-3">
-                    <div className="grid grid-cols-3 gap-2 justify-items-center">
-                      {party.qrDataUrls.map((url, qi) => (
-                        <div key={qi} className="text-center">
-                          <img
-                            src={url}
-                            alt={`QR ${qi + 1}/${party.qrDataUrls.length}`}
-                            className="w-28 h-28 print:w-[50mm] print:h-[50mm]"
-                          />
-                          <p className="text-[9px] text-gray-400 -mt-0.5">{qi + 1}/{party.qrDataUrls.length}</p>
+            {/* Unified credential blocks — one per role */}
+            {(() => {
+              let globalQrIndex = 0
+              const totalQrs = state.qrDataUrls.length
+
+              return template.credentials.map((req, ci) => {
+                const cred = state.credentials[ci]
+                if (!cred) return null
+                const config = CREDENTIAL_TYPES.find(ct => ct.id === req.credentialType)
+                const party = state.partyProofs.find(p => p.role === req.role)
+                const isParty = !!req.nullifierField
+                const templatePredicates = req.predicateIds
+                  .map(pid => config?.predicates.find(p => p.id === pid))
+                  .filter((p): p is NonNullable<typeof p> => p !== undefined)
+
+                // Find bindings where this role is roleB (the "bound" credential)
+                const roleBindings = template.bindings
+                  ?.map((b, bi) => ({ binding: b, result: state.bindings[bi] }))
+                  .filter(({ binding }) => binding.roleB === req.role) ?? []
+
+                // QR global numbering
+                const credQrs = cred.qrDataUrls
+                const qrGlobalStart = globalQrIndex
+                globalQrIndex += credQrs.length
+
+                return (
+                  <div key={req.role} className="mb-5 border border-gray-300 rounded-lg p-4 print:border-black/30">
+                    <p className="text-xs font-semibold text-gray-500 mb-3 uppercase tracking-wider">
+                      {t(req.roleLabelKey)}
+                    </p>
+
+                    {/* Proved predicates */}
+                    <div className="space-y-1 mb-3">
+                      {templatePredicates.map(p => (
+                        <div key={p.id} className="flex items-center gap-2">
+                          <span className="text-green-600 font-bold text-sm print:text-black">&#10003;</span>
+                          <span className="text-sm text-gray-800">{t(p.labelKey)}</span>
                         </div>
                       ))}
                     </div>
-                  </div>
-                )}
-              </div>
-            ))}
 
-            {/* QR codes for credentials WITHOUT nullifiers (e.g. vehicle) */}
-            {(() => {
-              const partyQrCount = state.partyProofs.reduce((sum, p) => sum + p.qrDataUrls.length, 0)
-              const remainingQrs = state.qrDataUrls.slice(partyQrCount)
-              if (remainingQrs.length === 0) return null
-              return (
-                <div className="mb-5">
-                  <div className="grid grid-cols-3 gap-2 justify-items-center">
-                    {remainingQrs.map((url, qi) => (
-                      <div key={qi} className="text-center">
-                        <img
-                          src={url}
-                          alt={`QR ${partyQrCount + qi + 1}/${state.qrDataUrls.length}`}
-                          className="w-28 h-28 print:w-[50mm] print:h-[50mm]"
-                        />
-                        <p className="text-[9px] text-gray-400 -mt-0.5">{partyQrCount + qi + 1}/{state.qrDataUrls.length}</p>
+                    {/* Holder binding (if this role is the bound credential) */}
+                    {roleBindings.map(({ binding, result }) => (
+                      <div key={binding.labelKey} className="flex items-center gap-2 mb-3">
+                        <span className="text-green-600 font-bold text-sm print:text-black">
+                          {result?.verified ? '🔗 ✓' : '✗'}
+                        </span>
+                        <span className="text-sm text-gray-800">{t(binding.labelKey)}</span>
                       </div>
                     ))}
-                  </div>
-                </div>
-              )
-            })()}
 
-            {/* Holder bindings */}
-            {state.bindings.length > 0 && (
-              <div className="mb-5 border border-gray-300 rounded-lg p-4 print:border-black/30">
-                <p className="text-xs font-semibold text-gray-500 mb-2 uppercase tracking-wider">{t('contracts.binding.hashMatch')}</p>
-                {state.bindings.map((binding, bi) => (
-                  <div key={bi} className="flex items-center gap-2 mb-1">
-                    <span className="text-green-600 font-bold text-sm print:text-black">
-                      {binding.verified ? '🔗 ✓' : '✗'}
-                    </span>
-                    <span className="text-sm text-gray-800">{t(binding.labelKey)}</span>
+                    {/* Nullifier + salt + issuer (party credentials only) */}
+                    {isParty && party && (
+                      <div className="space-y-1.5 mb-3 border-t border-gray-200 pt-3">
+                        <div>
+                          <span className="text-[10px] text-gray-400 font-medium">{t('contracts.nullifier')}</span>
+                          <p className="text-xs text-gray-700 font-mono break-all">{party.nullifier}</p>
+                        </div>
+                        <div>
+                          <span className="text-[10px] text-gray-400 font-medium">{t('contracts.salt')}</span>
+                          <p className="text-xs text-gray-700 font-mono break-all">{party.salt}</p>
+                        </div>
+                        <div>
+                          <span className="text-[10px] text-gray-400 font-medium">{t('contracts.issuer')}</span>
+                          <p className="text-xs text-gray-700 font-mono break-all">{party.issuer}</p>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* QR codes with global numbering */}
+                    {credQrs.length > 0 && (
+                      <div className="mt-2">
+                        <div className="grid grid-cols-3 gap-2 justify-items-center">
+                          {credQrs.map((url, qi) => (
+                            <div key={qi} className="text-center">
+                              <img
+                                src={url}
+                                alt={`QR ${qrGlobalStart + qi + 1}/${totalQrs}`}
+                                className="w-28 h-28 print:w-[50mm] print:h-[50mm]"
+                              />
+                              <p className="text-[9px] text-gray-400 -mt-0.5">{qrGlobalStart + qi + 1}/{totalQrs}</p>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
-                ))}
-                {state.bindings.filter(b => b.verified).map((binding, bi) => (
-                  <p key={bi} className="text-[10px] text-gray-400 font-mono mt-1 print:text-gray-600">
-                    SHA-256 binding: {binding.bindingHash}
-                  </p>
-                ))}
-              </div>
-            )}
+                )
+              })
+            })()}
 
             {/* Shared section */}
             {state.contractHash && (
