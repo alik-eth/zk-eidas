@@ -130,6 +130,33 @@ function VerifyPage() {
       const { decode } = await import('cbor-x')
       const envelope = decode(bytes)
 
+      if (envelope && envelope.version === 2 && Array.isArray(envelope.proof_envelopes)) {
+        // V2 bundle format from /contracts
+        const allProofs: DecodedProof[] = []
+        for (const env of envelope.proof_envelopes) {
+          if (env && Array.isArray(env.proofs)) {
+            for (const p of env.proofs) {
+              allProofs.push({
+                predicate: p.predicate || 'unknown',
+                proofBytes: p.proof_bytes instanceof Uint8Array ? p.proof_bytes : new Uint8Array(p.proof_bytes),
+                publicInputs: (p.public_inputs || []).map((pi: any) => pi instanceof Uint8Array ? pi : new Uint8Array(pi)),
+                op: p.op || 'unknown',
+                valid: null,
+              })
+            }
+          }
+        }
+        setProofs(allProofs)
+        const termsData = envelope.terms ?? null
+        const metaData = envelope.metadata ?? null
+        setContractTerms(termsData)
+        setContractMeta(metaData)
+        if (termsData && metaData && allProofs.length > 0) {
+          runVerificationPipeline(allProofs, termsData, metaData)
+        }
+        return
+      }
+
       if (!envelope || !Array.isArray(envelope.proofs)) {
         throw new Error('Invalid proof envelope: missing proofs array')
       }

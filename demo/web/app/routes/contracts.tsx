@@ -51,6 +51,7 @@ interface ContractWizardState {
   contractHash: string | null
   termsQrUrl: string | null
   metadataQrUrl: string | null
+  bundleCborUrl: string | null
 }
 
 const API_URL = typeof window !== 'undefined' && window.location.hostname === 'localhost' ? 'http://localhost:3001' : ''
@@ -69,6 +70,7 @@ const INITIAL_STATE: ContractWizardState = {
   contractHash: null,
   termsQrUrl: null,
   metadataQrUrl: null,
+  bundleCborUrl: null,
 }
 
 export const Route = createFileRoute('/contracts')({
@@ -661,6 +663,34 @@ function ProveStep({ state, setState, t }: { state: ContractWizardState; setStat
         width: 280,
       })
 
+      // Build CBOR bundle for download
+      const { decode, encode } = await import('cbor-x')
+      const proofEnvelopes = []
+      for (const cred of updatedCredentials) {
+        if (!cred.compoundProofJson) continue
+        const expRes = await fetch(`${API_URL}/holder/proof-export-compound?compress=true`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ compound_proof_json: cred.compoundProofJson }),
+        })
+        if (!expRes.ok) continue
+        const expData = await expRes.json()
+        const comp = Uint8Array.from(atob(expData.compressed_cbor_base64), c => c.charCodeAt(0))
+        const { decompressDeflate } = await import('../lib/qr-chunking')
+        const cbor = await decompressDeflate(comp)
+        proofEnvelopes.push(decode(cbor))
+      }
+      const bundle = encode({
+        version: 2,
+        proof_envelopes: proofEnvelopes,
+        terms: { terms: termsString, timestamp },
+        metadata: {
+          contract_hash: sharedContractHash,
+          parties: partyProofs.map(p => ({ role: p.role, nullifier: p.nullifier, salt: p.salt })),
+        },
+      })
+      const bundleCborUrl = `data:application/cbor;base64,${btoa(String.fromCharCode(...new Uint8Array(bundle)))}`
+
       // Prove holder bindings if any
       const bindingResults: BindingResult[] = []
       if (template.bindings) {
@@ -711,6 +741,7 @@ function ProveStep({ state, setState, t }: { state: ContractWizardState; setStat
           contractHash: sharedContractHash,
           termsQrUrl,
           metadataQrUrl,
+          bundleCborUrl,
         }))
       }, 600)
     } catch (e: unknown) {
@@ -1054,6 +1085,18 @@ function DocumentStep({ state, setState, t }: { state: ContractWizardState; setS
           </svg>
           {t('contracts.print')}
         </button>
+        {state.bundleCborUrl && (
+          <a
+            href={state.bundleCborUrl}
+            download={`zk-eidas-contract-${state.templateId}.cbor`}
+            className="flex items-center justify-center gap-2 flex-1 py-3 bg-slate-700 hover:bg-slate-600 text-white font-semibold rounded-lg transition-colors"
+          >
+            <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+            </svg>
+            .cbor
+          </a>
+        )}
         <button
           onClick={() => setState(prev => ({ ...prev, step: 5 }))}
           className="flex items-center justify-center gap-2 flex-1 py-3 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg transition-colors"
