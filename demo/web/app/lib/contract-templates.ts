@@ -107,7 +107,7 @@ export const CONTRACT_TEMPLATES: ContractTemplate[] = [
       {
         role: 'buyer',
         roleLabelKey: 'contracts.role.buyer',
-        credentialType: 'pid',
+        credentialType: 'pid_buyer',
         predicateIds: ['age'],
         disclosedField: 'document_number',
         nullifierField: 'document_number',
