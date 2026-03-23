@@ -3,7 +3,7 @@ import React, { useEffect, useRef, useState } from 'react'
 import { StepWizard } from '../components/StepWizard'
 import { ProveMethodToggle, type ProveMethod } from '../components/ProveMethodToggle'
 import { useT, useLocale, tLang } from '../i18n'
-import { CREDENTIAL_TYPES, type FieldDisplay } from '../lib/credential-types'
+import { CREDENTIAL_TYPES, resolveVariant, type FieldDisplay } from '../lib/credential-types'
 import { CONTRACT_TEMPLATES } from '../lib/contract-templates'
 
 // Types
@@ -281,23 +281,28 @@ function TemplateStep({ setState, t }: { setState: React.Dispatch<React.SetState
 // === Step 2: Credential Issuer (multi-credential, one at a time) ===
 
 function CredentialStep({ state, setState, t }: { state: ContractWizardState; setState: React.Dispatch<React.SetStateAction<ContractWizardState>>; t: (key: string) => string }) {
+  const { locale } = useLocale()
   const template = CONTRACT_TEMPLATES.find(tpl => tpl.id === state.templateId)
   const currentReq = template?.credentials[state.credentialIndex]
   const config = currentReq ? CREDENTIAL_TYPES.find(ct => ct.id === currentReq.credentialType) : null
+  const isSecondary = template && currentReq
+    ? template.credentials.slice(0, state.credentialIndex).some(r => r.credentialType === currentReq.credentialType)
+    : false
+  const variant = config ? resolveVariant(config, locale === 'uk' ? 'uk' : 'en', isSecondary) : null
 
   const [formValues, setFormValues] = useState<Record<string, string>>(() =>
-    config ? Object.fromEntries(config.fields.map(f => [f.name, f.defaultValue])) : {}
+    variant ? Object.fromEntries(variant.fields.map(f => [f.name, f.defaultValue])) : {}
   )
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   // Reset form values when credential index or template changes
   useEffect(() => {
-    if (config) {
-      setFormValues(Object.fromEntries(config.fields.map(f => [f.name, f.defaultValue])))
+    if (variant) {
+      setFormValues(Object.fromEntries(variant.fields.map(f => [f.name, f.defaultValue])))
     }
     setError(null)
-  }, [state.credentialIndex, state.templateId]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [state.credentialIndex, state.templateId, locale]) // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!template) return null
 
@@ -353,7 +358,7 @@ function CredentialStep({ state, setState, t }: { state: ContractWizardState; se
         body: JSON.stringify({
           credential_type: config.id,
           claims: formValues,
-          issuer: config.issuer,
+          issuer: variant?.issuer,
         }),
       })
       if (!res.ok) throw new Error(await res.text())
@@ -366,7 +371,7 @@ function CredentialStep({ state, setState, t }: { state: ContractWizardState; se
         credential: data.credential,
         format: data.format,
         fields: data.credential_display.fields.map((f: FieldDisplay) => {
-          const fieldConfig = config.fields.find(cf => cf.name === f.name)
+          const fieldConfig = variant?.fields.find(cf => cf.name === f.name)
           return { ...f, label: fieldConfig ? t(fieldConfig.labelKey) : f.label }
         }),
         credentialId,
@@ -442,13 +447,13 @@ function CredentialStep({ state, setState, t }: { state: ContractWizardState; se
       {/* Issuer form */}
       <div className="bg-slate-800 rounded-lg border border-slate-700 overflow-hidden">
         <div className="bg-blue-700 px-6 py-3">
-          <h3 className="text-base font-semibold">{t(config.issuerTitleKey)}</h3>
-          <p className="text-sm text-blue-200">{t(config.issuerSubtitleKey)}</p>
+          <h3 className="text-base font-semibold">{t(variant!.issuerTitleKey)}</h3>
+          <p className="text-sm text-blue-200">{t(variant!.issuerSubtitleKey)}</p>
         </div>
         <div className="p-6">
           <p className="text-slate-400 text-sm mb-4">{t(config.credLabelKey)}</p>
           <div className="grid grid-cols-2 gap-4">
-            {config.fields.map(field => (
+            {variant!.fields.map(field => (
               <div key={field.name} className={field.colSpan === 2 ? 'col-span-2' : ''}>
                 <label className="block text-xs text-slate-400 mb-1">{t(field.labelKey)}</label>
                 <input
@@ -505,6 +510,7 @@ function CredentialStep({ state, setState, t }: { state: ContractWizardState; se
 // === Step 3: Prove (all credentials at once) ===
 
 function ProveStep({ state, setState, t }: { state: ContractWizardState; setState: React.Dispatch<React.SetStateAction<ContractWizardState>>; t: (key: string) => string }) {
+  const { locale } = useLocale()
   const template = CONTRACT_TEMPLATES.find(tpl => tpl.id === state.templateId)
 
   const [loading, setLoading] = useState(false)
@@ -634,7 +640,7 @@ function ProveStep({ state, setState, t }: { state: ContractWizardState; setStat
             roleLabelKey: req.roleLabelKey,
             nullifier: proveData.nullifier,
             salt: proveData.salt,
-            issuer: config?.issuer ?? '',
+            issuer: config ? resolveVariant(config, locale === 'uk' ? 'uk' : 'en').issuer : '',
             qrDataUrls: qrUrlsForThisCredential,
           })
         }

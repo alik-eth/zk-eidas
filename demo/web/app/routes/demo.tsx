@@ -4,7 +4,7 @@ import { Tooltip } from '../components/Tooltip'
 import { StepWizard } from '../components/StepWizard'
 import { ProveMethodToggle, type ProveMethod } from '../components/ProveMethodToggle'
 import { useT, useLocale } from '../i18n'
-import { CREDENTIAL_TYPES, type FieldDisplay } from '../lib/credential-types'
+import { CREDENTIAL_TYPES, resolveVariant, type FieldDisplay } from '../lib/credential-types'
 import { proveCompoundInBrowser, getCacheStats, type BrowserProofResult } from '../lib/snarkjs-prover'
 
 // Types
@@ -142,11 +142,13 @@ function Demo() {
 // === Step 1: Issuer ===
 
 function IssuerStep({ setState, t }: { state: WizardState; setState: React.Dispatch<React.SetStateAction<WizardState>>; t: (key: string) => string }) {
+  const { locale } = useLocale()
   const [loading, setLoading] = useState(false)
   const [activeType, setActiveType] = useState('pid')
   const config = CREDENTIAL_TYPES.find(ct => ct.id === activeType)!
+  const variant = resolveVariant(config, locale === 'uk' ? 'uk' : 'en')
   const [formValues, setFormValues] = useState<Record<string, string>>(() =>
-    Object.fromEntries(config.fields.map(f => [f.name, f.defaultValue]))
+    Object.fromEntries(variant.fields.map(f => [f.name, f.defaultValue]))
   )
 
   const handleIssue = async () => {
@@ -158,7 +160,7 @@ function IssuerStep({ setState, t }: { state: WizardState; setState: React.Dispa
         body: JSON.stringify({
           credential_type: config.id,
           claims: formValues,
-          issuer: config.issuer,
+          issuer: variant.issuer,
         }),
       })
       if (!res.ok) throw new Error(await res.text())
@@ -170,7 +172,7 @@ function IssuerStep({ setState, t }: { state: WizardState; setState: React.Dispa
         credential: data.credential,
         format: data.format,
         fields: data.credential_display.fields.map((f: FieldDisplay) => {
-          const fieldConfig = config.fields.find(cf => cf.name === f.name)
+          const fieldConfig = variant.fields.find(cf => cf.name === f.name)
           return { ...f, label: fieldConfig ? t(fieldConfig.labelKey) : f.label }
         }),
         credentialId: formValues.document_number || formValues.license_number || formValues.vin || config.id,
@@ -190,7 +192,8 @@ function IssuerStep({ setState, t }: { state: WizardState; setState: React.Dispa
         onChange={e => {
           const ct = CREDENTIAL_TYPES.find(c => c.id === e.target.value)!
           setActiveType(ct.id)
-          setFormValues(Object.fromEntries(ct.fields.map(f => [f.name, f.defaultValue])))
+          const v = resolveVariant(ct, locale === 'uk' ? 'uk' : 'en')
+          setFormValues(Object.fromEntries(v.fields.map(f => [f.name, f.defaultValue])))
         }}
         className="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2.5 text-sm font-medium text-slate-200 focus:outline-none focus:border-blue-500"
       >
@@ -200,13 +203,13 @@ function IssuerStep({ setState, t }: { state: WizardState; setState: React.Dispa
       </select>
       <div className="bg-slate-800 rounded-lg border border-slate-700 overflow-hidden">
         <div className="bg-blue-700 px-6 py-3">
-          <h2 className="text-lg font-semibold">{t(config.issuerTitleKey)}</h2>
-          <p className="text-sm text-blue-200">{t(config.issuerSubtitleKey)}</p>
+          <h2 className="text-lg font-semibold">{t(variant.issuerTitleKey)}</h2>
+          <p className="text-sm text-blue-200">{t(variant.issuerSubtitleKey)}</p>
         </div>
         <div className="p-6">
           <p className="text-slate-400 text-sm mb-4">{t(config.credLabelKey)}</p>
           <div className="grid grid-cols-2 gap-4">
-            {config.fields.map(field => (
+            {variant.fields.map(field => (
               <div key={field.name} className={field.colSpan === 2 ? 'col-span-2' : ''}>
                 <label className="block text-xs text-slate-400 mb-1">{t(field.labelKey)}</label>
                 <input
@@ -873,7 +876,7 @@ function VerifierStep({ state, setState, t }: { state: WizardState; setState: Re
           for (let pi = 0; pi < compound.proofs.length; pi++) {
             const matched = selectedPreds[pi]
             if (matched) {
-              const fieldConfig = config.fields.find(f => f.name === matched.predicate.claim)
+              const fieldConfig = resolveVariant(config, 'uk').fields.find(f => f.name === matched.predicate.claim)
               predicates.push({
                 claim: fieldConfig ? t(fieldConfig.labelKey) : matched.predicate.claim,
                 claimKey: fieldConfig?.labelKey,

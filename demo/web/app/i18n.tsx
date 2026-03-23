@@ -516,6 +516,16 @@ const translations: Record<string, Record<Locale, string>> = {
   "demo.issuerSubtitleStudentId": { en: "Uniwersytet Warszawski \u2014 Poland", uk: "Uniwersytet Warszawski \u2014 Польща" },
   "demo.issuerTitleVehicle": { en: "Credential Issuer \u2014 KBA", uk: "Видавець посвідчення \u2014 KBA" },
   "demo.issuerSubtitleVehicle": { en: "Kraftfahrt-Bundesamt \u2014 Germany", uk: "Федеральне відомство автотранспорту \u2014 Німеччина" },
+  "demo.issuerTitlePidDe": { en: "Bundesdruckerei", uk: "Bundesdruckerei" },
+  "demo.issuerSubtitlePidDe": { en: "Federal Printing Office \u2014 Germany", uk: "Федеральна друкарня \u2014 Німеччина" },
+  "demo.issuerTitleDriversUa": { en: "HSC MVS", uk: "ГСЦ МВС" },
+  "demo.issuerSubtitleDriversUa": { en: "Main Service Centre of MIA \u2014 Ukraine", uk: "Головний сервісний центр МВС України" },
+  "demo.issuerTitleStudentIdUa": { en: "Taras Shevchenko KNU", uk: "КНУ ім. Шевченка" },
+  "demo.issuerSubtitleStudentIdUa": { en: "Taras Shevchenko National University \u2014 Ukraine", uk: "Київський національний університет ім. Тараса Шевченка" },
+  "demo.issuerTitleDiplomaUa": { en: "Igor Sikorsky KPI", uk: "КПІ ім. Сікорського" },
+  "demo.issuerSubtitleDiplomaUa": { en: "Igor Sikorsky Kyiv Polytechnic Institute \u2014 Ukraine", uk: "Київський політехнічний інститут ім. Ігоря Сікорського" },
+  "demo.issuerTitleVehicleUa": { en: "MVS Ukraine", uk: "МВС України" },
+  "demo.issuerSubtitleVehicleUa": { en: "Ministry of Internal Affairs \u2014 Ukraine", uk: "Міністерство внутрішніх справ України" },
 
   // ── Credential labels ──────────────────────────────────────────────────
   "demo.credLabelPid": { en: "Personal Identification Data (PID)", uk: "Персональні ідентифікаційні дані (PID)" },
