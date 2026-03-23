@@ -112,7 +112,7 @@ struct FieldDisplay {
 async fn issue_credential(
     Json(req): Json<IssueRequest>,
 ) -> Result<Json<IssueResponse>, (StatusCode, String)> {
-    let known_types = ["pid", "drivers_license", "diploma", "vehicle", "student_id"];
+    let known_types = ["pid", "pid_buyer", "drivers_license", "diploma", "vehicle", "student_id"];
     if !known_types.contains(&req.credential_type.as_str()) {
         return Err((
             StatusCode::BAD_REQUEST,
