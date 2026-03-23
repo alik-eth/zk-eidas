@@ -181,4 +181,76 @@ describe('qr-chunking', () => {
       expect(decoded.parties).toEqual(parties)
     })
   })
+
+  describe('ChunkCollector contract document support', () => {
+    it('detects terms and metadata QRs', async () => {
+      const termsChunk = await encodeTermsQr('{"id":"test"}', '2026-03-23T00:00:00.000Z', 3)
+      const metaChunk = await encodeMetadataQr('0xabc', [{ role: 'holder', nullifier: '0x1', salt: '0x2' }], 3)
+      const proofChunk = encodeProofChunks(new Uint8Array(100), 1, 0, 3, LogicalOpFlag.Single)[0]
+
+      const collector = new ChunkCollector()
+      expect(collector.hasTerms()).toBe(false)
+      expect(collector.hasMetadata()).toBe(false)
+      expect(collector.isContractDocument()).toBe(false)
+
+      collector.add(termsChunk)
+      expect(collector.hasTerms()).toBe(true)
+      expect(collector.isContractDocument()).toBe(false)
+
+      collector.add(metaChunk)
+      expect(collector.hasMetadata()).toBe(true)
+      expect(collector.isContractDocument()).toBe(true)
+
+      collector.add(proofChunk)
+      expect(collector.isAllComplete()).toBe(true)
+    })
+
+    it('extracts terms data after scanning', async () => {
+      const terms = '{"id":"age_verification"}'
+      const timestamp = '2026-03-23T14:30:00.000Z'
+      const chunk = await encodeTermsQr(terms, timestamp, 1)
+
+      const collector = new ChunkCollector()
+      collector.add(chunk)
+      const data = await collector.getTermsData()
+      expect(data).not.toBeNull()
+      expect(data!.terms).toBe(terms)
+      expect(data!.timestamp).toBe(timestamp)
+    })
+
+    it('extracts metadata after scanning', async () => {
+      const parties = [{ role: 'seller', nullifier: '0xabc', salt: '0xdef' }]
+      const chunk = await encodeMetadataQr('0xdeadbeef', parties, 1)
+
+      const collector = new ChunkCollector()
+      collector.add(chunk)
+      const data = await collector.getMetadataData()
+      expect(data).not.toBeNull()
+      expect(data!.contract_hash).toBe('0xdeadbeef')
+      expect(data!.parties).toEqual(parties)
+    })
+
+    it('returns null for terms/metadata when not yet scanned', async () => {
+      const collector = new ChunkCollector()
+      expect(await collector.getTermsData()).toBeNull()
+      expect(await collector.getMetadataData()).toBeNull()
+    })
+
+    it('scannedItems returns dynamic checklist entries', async () => {
+      const termsChunk = await encodeTermsQr('t', 'ts', 3)
+      const proofChunk = encodeProofChunks(new Uint8Array(100), 1, 0, 3, LogicalOpFlag.Single)[0]
+      const metaChunk = await encodeMetadataQr('0x1', [{ role: 'h', nullifier: '0x2', salt: '0x3' }], 3)
+
+      const collector = new ChunkCollector()
+      collector.add(proofChunk)
+      collector.add(termsChunk)
+      collector.add(metaChunk)
+
+      const items = collector.scannedItems()
+      expect(items).toHaveLength(3)
+      expect(items.some(i => i.type === 'terms')).toBe(true)
+      expect(items.some(i => i.type === 'metadata')).toBe(true)
+      expect(items.some(i => i.type === 'proof' && i.proofIndex === 0)).toBe(true)
+    })
+  })
 })

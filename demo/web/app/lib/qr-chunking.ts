@@ -294,4 +294,54 @@ export class ChunkCollector {
     this.totals.clear()
     this.headers.clear()
   }
+
+  /** Check if terms QR (proofId 0xFFFE) has been collected. */
+  hasTerms(): boolean {
+    return this.isProofComplete(TERMS_PROOF_ID)
+  }
+
+  /** Check if metadata QR (proofId 0xFFFF) has been collected. */
+  hasMetadata(): boolean {
+    return this.isProofComplete(METADATA_PROOF_ID)
+  }
+
+  /** Returns true if both terms and metadata QRs are present (new-style contract document). */
+  isContractDocument(): boolean {
+    return this.hasTerms() && this.hasMetadata()
+  }
+
+  /** Extract and decode terms data. Returns null if not yet collected. */
+  async getTermsData(): Promise<{ terms: string; timestamp: string } | null> {
+    const compressed = this.reassemble(TERMS_PROOF_ID)
+    if (!compressed) return null
+    const cbor = await decompressDeflate(compressed)
+    const { decode } = await import('cbor-x')
+    return decode(cbor) as { terms: string; timestamp: string }
+  }
+
+  /** Extract and decode metadata. Returns null if not yet collected. */
+  async getMetadataData(): Promise<{ contract_hash: string; parties: ContractPartyMeta[] } | null> {
+    const compressed = this.reassemble(METADATA_PROOF_ID)
+    if (!compressed) return null
+    const cbor = await decompressDeflate(compressed)
+    const { decode } = await import('cbor-x')
+    return decode(cbor) as { contract_hash: string; parties: ContractPartyMeta[] }
+  }
+
+  /** Get a dynamic checklist of scanned items for progress display. */
+  scannedItems(): { type: 'terms' | 'metadata' | 'proof'; proofIndex: number; complete: boolean }[] {
+    const items: { type: 'terms' | 'metadata' | 'proof'; proofIndex: number; complete: boolean }[] = []
+    for (const [proofId] of this.headers) {
+      const header = this.headers.get(proofId)!
+      const complete = this.isProofComplete(proofId)
+      if (header.proofIndex === TERMS_PROOF_INDEX) {
+        items.push({ type: 'terms', proofIndex: header.proofIndex, complete })
+      } else if (header.proofIndex === METADATA_PROOF_INDEX) {
+        items.push({ type: 'metadata', proofIndex: header.proofIndex, complete })
+      } else {
+        items.push({ type: 'proof', proofIndex: header.proofIndex, complete })
+      }
+    }
+    return items
+  }
 }
