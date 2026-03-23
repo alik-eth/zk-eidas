@@ -6,6 +6,13 @@ import {
   ChunkCollector,
   LogicalOpFlag,
   PROTOCOL_VERSION,
+  TERMS_PROOF_INDEX,
+  METADATA_PROOF_INDEX,
+  TERMS_PROOF_ID,
+  METADATA_PROOF_ID,
+  encodeTermsQr,
+  encodeMetadataQr,
+  decompressDeflate,
 } from './qr-chunking'
 
 describe('qr-chunking', () => {
@@ -114,6 +121,64 @@ describe('qr-chunking', () => {
       fake[3] = 1
       fake[4] = 99 // different total
       expect(collector.add(fake)).toBe(false)
+    })
+  })
+
+  describe('contract QR encoding', () => {
+    it('exports reserved constants', () => {
+      expect(TERMS_PROOF_INDEX).toBe(0xfe)
+      expect(METADATA_PROOF_INDEX).toBe(0xff)
+      expect(TERMS_PROOF_ID).toBe(0xfffe)
+      expect(METADATA_PROOF_ID).toBe(0xffff)
+    })
+
+    it('encodes terms QR with correct header fields', async () => {
+      const chunk = await encodeTermsQr('{"id":"test"}', '2026-03-23T14:00:00.000Z', 5)
+      const header = parseHeader(chunk)!
+      expect(header.proofId).toBe(TERMS_PROOF_ID)
+      expect(header.proofIndex).toBe(TERMS_PROOF_INDEX)
+      expect(header.proofCount).toBe(5)
+      expect(header.seq).toBe(0)
+      expect(header.total).toBe(1)
+      expect(header.compressed).toBe(true)
+    })
+
+    it('encodes metadata QR with correct header fields', async () => {
+      const parties = [
+        { role: 'seller', nullifier: '0xabc', salt: '0xdef' },
+        { role: 'buyer', nullifier: '0x123', salt: '0x456' },
+      ]
+      const chunk = await encodeMetadataQr('0xdeadbeef', parties, 5)
+      const header = parseHeader(chunk)!
+      expect(header.proofId).toBe(METADATA_PROOF_ID)
+      expect(header.proofIndex).toBe(METADATA_PROOF_INDEX)
+      expect(header.proofCount).toBe(5)
+      expect(header.seq).toBe(0)
+      expect(header.total).toBe(1)
+      expect(header.compressed).toBe(true)
+    })
+
+    it('terms QR roundtrips through compress/decompress', async () => {
+      const { decode } = await import('cbor-x')
+      const terms = '{"id":"age_verification","titleKey":"test"}'
+      const timestamp = '2026-03-23T14:30:00.000Z'
+      const chunk = await encodeTermsQr(terms, timestamp, 3)
+      const payload = extractPayload(chunk)
+      const decompressed = await decompressDeflate(payload)
+      const decoded = decode(decompressed)
+      expect(decoded.terms).toBe(terms)
+      expect(decoded.timestamp).toBe(timestamp)
+    })
+
+    it('metadata QR roundtrips through compress/decompress', async () => {
+      const { decode } = await import('cbor-x')
+      const parties = [{ role: 'holder', nullifier: '0xabc', salt: '0xdef' }]
+      const chunk = await encodeMetadataQr('0xdeadbeef', parties, 3)
+      const payload = extractPayload(chunk)
+      const decompressed = await decompressDeflate(payload)
+      const decoded = decode(decompressed)
+      expect(decoded.contract_hash).toBe('0xdeadbeef')
+      expect(decoded.parties).toEqual(parties)
     })
   })
 })

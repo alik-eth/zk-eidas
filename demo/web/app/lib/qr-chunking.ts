@@ -13,6 +13,11 @@ const MAX_PAYLOAD = QR_MAX_BINARY - HEADER_SIZE // 2945
 
 export const PROTOCOL_VERSION = 1
 
+export const TERMS_PROOF_INDEX = 0xfe
+export const METADATA_PROOF_INDEX = 0xff
+export const TERMS_PROOF_ID = 0xfffe
+export const METADATA_PROOF_ID = 0xffff
+
 export const enum LogicalOpFlag {
   Single = 0b00,
   And = 0b01,
@@ -33,6 +38,12 @@ export interface ChunkHeader {
 export interface ProofChunk {
   header: ChunkHeader
   payload: Uint8Array
+}
+
+export interface ContractPartyMeta {
+  role: string
+  nullifier: string
+  salt: string
 }
 
 /** Encode a header into 8 bytes. */
@@ -105,6 +116,34 @@ export function encodeProofChunks(
     chunks.push(chunk)
   }
   return chunks
+}
+
+/** Encode contract terms into a single QR-ready chunk. */
+export async function encodeTermsQr(
+  terms: string,
+  timestamp: string,
+  proofCount: number,
+): Promise<Uint8Array> {
+  const { encode } = await import('cbor-x')
+  const cbor = encode({ terms, timestamp })
+  const compressed = await compressDeflate(new Uint8Array(cbor))
+  const chunks = encodeProofChunks(compressed, TERMS_PROOF_ID, TERMS_PROOF_INDEX, proofCount, LogicalOpFlag.Single)
+  if (chunks.length !== 1) throw new Error(`Terms QR requires ${chunks.length} chunks (expected 1)`)
+  return chunks[0]
+}
+
+/** Encode contract metadata into a single QR-ready chunk. */
+export async function encodeMetadataQr(
+  contractHash: string,
+  parties: ContractPartyMeta[],
+  proofCount: number,
+): Promise<Uint8Array> {
+  const { encode } = await import('cbor-x')
+  const cbor = encode({ contract_hash: contractHash, parties })
+  const compressed = await compressDeflate(new Uint8Array(cbor))
+  const chunks = encodeProofChunks(compressed, METADATA_PROOF_ID, METADATA_PROOF_INDEX, proofCount, LogicalOpFlag.Single)
+  if (chunks.length !== 1) throw new Error(`Metadata QR requires ${chunks.length} chunks (expected 1)`)
+  return chunks[0]
 }
 
 /** Compress bytes using browser's DeflateRaw (matches Rust flate2 deflate). */
