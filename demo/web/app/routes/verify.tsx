@@ -509,10 +509,10 @@ function VerifyPage() {
                 <div className="space-y-2">
                   {contractMeta.parties.map((party, i) => (
                     <div key={i} className="flex items-start gap-4 text-sm">
-                      <span className="text-slate-400 font-semibold uppercase w-20">{party.role}</span>
-                      <div className="flex-1 font-mono text-xs text-slate-400 space-y-0.5">
-                        <p>nullifier: {party.nullifier}</p>
-                        <p>salt: {party.salt}</p>
+                      <span className="text-slate-400 font-semibold uppercase w-20 shrink-0">{party.role}</span>
+                      <div className="flex-1 min-w-0 font-mono text-xs text-slate-400 space-y-0.5">
+                        <p className="break-all">nullifier: {party.nullifier}</p>
+                        <p className="break-all">salt: {party.salt}</p>
                       </div>
                     </div>
                   ))}
@@ -555,19 +555,19 @@ function VerifyPage() {
                 </button>
                 {partyCheckOpen && (
                   <div className="px-6 pb-4 space-y-3">
-                    <div className="flex gap-2">
+                    <div className="space-y-2">
                       <input
                         type="text"
                         placeholder={t('verify.documentNumber')}
                         value={credentialIdInput}
                         onChange={e => setCredentialIdInput(e.target.value)}
                         onKeyDown={e => e.key === 'Enter' && handlePartyCheck()}
-                        className="flex-1 bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-blue-500"
+                        className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-blue-500"
                       />
                       <button
                         onClick={handlePartyCheck}
                         disabled={partyChecking || !credentialIdInput.trim()}
-                        className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-600 text-white text-sm font-medium rounded-lg transition-colors"
+                        className="w-full py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-600 text-white text-sm font-medium rounded-lg transition-colors"
                       >
                         {partyChecking ? '...' : t('verify.check')}
                       </button>
