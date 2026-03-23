@@ -49,6 +49,8 @@ interface ContractWizardState {
   cached: boolean
   partyProofs: PartyProof[]
   contractHash: string | null
+  termsQrUrl: string | null
+  metadataQrUrl: string | null
 }
 
 const API_URL = typeof window !== 'undefined' && window.location.hostname === 'localhost' ? 'http://localhost:3001' : ''
@@ -65,6 +67,8 @@ const INITIAL_STATE: ContractWizardState = {
   cached: false,
   partyProofs: [],
   contractHash: null,
+  termsQrUrl: null,
+  metadataQrUrl: null,
 }
 
 export const Route = createFileRoute('/contracts')({
@@ -535,9 +539,9 @@ function ProveStep({ state, setState, t }: { state: ContractWizardState; setStat
       let sharedContractHash: string | null = null
       const timestamp = new Date().toISOString()
 
-      const { encodeProofChunks, LogicalOpFlag } = await import('../lib/qr-chunking')
+      const { encodeProofChunks, LogicalOpFlag, encodeTermsQr, encodeMetadataQr } = await import('../lib/qr-chunking')
       const QRCode = (await import('qrcode')).default
-      const proofCount = template.credentials.length
+      const proofCount = template.credentials.length + 2 // proofs + terms + metadata
 
       for (let ci = 0; ci < template.credentials.length; ci++) {
         setCurrentProvingIndex(ci)
@@ -634,6 +638,29 @@ function ProveStep({ state, setState, t }: { state: ContractWizardState; setStat
         }
       }
 
+      // Generate terms QR (page 1)
+      const selectedTemplateForTerms = CONTRACT_TEMPLATES.find(tpl => tpl.id === state.templateId)
+      const termsString = JSON.stringify(selectedTemplateForTerms)
+      const termsQrChunk = await encodeTermsQr(termsString, timestamp, proofCount)
+      const termsQrUrl = await QRCode.toDataURL([{ data: termsQrChunk, mode: 'byte' as const }], {
+        errorCorrectionLevel: 'L',
+        margin: 1,
+        width: 280,
+      })
+
+      // Generate metadata QR (page 2 shared section)
+      if (!sharedContractHash) throw new Error('No contract hash — template must have at least one nullifierField credential')
+      const metadataQrChunk = await encodeMetadataQr(
+        sharedContractHash,
+        partyProofs.map(p => ({ role: p.role, nullifier: p.nullifier, salt: p.salt })),
+        proofCount,
+      )
+      const metadataQrUrl = await QRCode.toDataURL([{ data: metadataQrChunk, mode: 'byte' as const }], {
+        errorCorrectionLevel: 'L',
+        margin: 1,
+        width: 280,
+      })
+
       // Prove holder bindings if any
       const bindingResults: BindingResult[] = []
       if (template.bindings) {
@@ -682,6 +709,8 @@ function ProveStep({ state, setState, t }: { state: ContractWizardState; setStat
           cached: anyCached,
           partyProofs,
           contractHash: sharedContractHash,
+          termsQrUrl,
+          metadataQrUrl,
         }))
       }, 600)
     } catch (e: unknown) {
@@ -860,6 +889,16 @@ function DocumentStep({ state, setState, t }: { state: ContractWizardState; setS
               <p className="text-sm text-gray-500 italic leading-relaxed">{t(template.bodyKey_uk)}</p>
             </div>
 
+            {/* Terms QR — page 1 (for verifier cross-check) */}
+            {state.termsQrUrl && (
+              <div className="flex justify-end mb-4">
+                <div className="text-center">
+                  <img src={state.termsQrUrl} alt="Terms QR" className="w-20 h-20 print:w-[30mm] print:h-[30mm]" />
+                  <p className="text-[8px] text-gray-400">{t('verify.termsQr')}</p>
+                </div>
+              </div>
+            )}
+
             {/* Unified credential blocks — one per role */}
             {(() => {
               let globalQrIndex = 0
@@ -966,6 +1005,14 @@ function DocumentStep({ state, setState, t }: { state: ContractWizardState; setS
                   </div>
                 </div>
                 <p className="text-[9px] text-gray-400 mt-2 leading-relaxed italic">{t('contracts.nullifierTooltip')}</p>
+                {state.metadataQrUrl && (
+                  <div className="flex justify-end mt-2">
+                    <div className="text-center">
+                      <img src={state.metadataQrUrl} alt="Metadata QR" className="w-20 h-20 print:w-[30mm] print:h-[30mm]" />
+                      <p className="text-[8px] text-gray-400">{t('verify.metadataQr')}</p>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 
