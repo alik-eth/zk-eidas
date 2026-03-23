@@ -124,7 +124,7 @@ export function StepWizard({ steps, currentStep, onStepBack }: StepWizardProps) 
           style={{ width: `${scrollPct * 100}%` }}
         />
       </div>
-      <div ref={scrollRef} className="flex-1 flex overflow-x-auto scroll-smooth no-scrollbar">
+      <div ref={scrollRef} className="flex-1 flex overflow-x-auto scroll-smooth no-scrollbar snap-x snap-mandatory sm:snap-none">
         {steps.map((step, i) => {
           const num = i + 1
           const isLocked = currentStep < num
@@ -138,7 +138,7 @@ export function StepWizard({ steps, currentStep, onStepBack }: StepWizardProps) 
               className={`shrink-0 flex flex-col transition-all duration-500 border-r border-slate-800 last:border-r-0 ${
                 isLocked
                   ? 'w-0 min-w-0 overflow-hidden opacity-0'
-                  : 'min-w-[min(460px,100vw)] flex-1'
+                  : 'min-w-[min(460px,100vw)] flex-1 snap-start'
               }`}
             >
               {/* Step title bar */}

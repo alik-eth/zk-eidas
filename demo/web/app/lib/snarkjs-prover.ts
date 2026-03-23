@@ -94,7 +94,7 @@ export async function proveCompoundInBrowser(
 
   // Step 1: Load WASM for on-device credential parsing
   onProgress?.("preparing", "Loading WASM module...");
-  const { default: init, prepare_inputs } = await import("../../pkg/zk-eidas-wasm.js");
+  const { default: init, prepare_inputs } = await import("zk-eidas-wasm");
   await init();
 
   // Step 2: Group predicates by claim and generate one ECDSA proof per unique claim

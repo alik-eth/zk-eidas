@@ -1,8 +1,14 @@
 import { defineConfig } from 'vite'
 import { tanstackStart } from '@tanstack/react-start/plugin/vite'
 import tailwindcss from '@tailwindcss/vite'
+import path from 'path'
 
 export default defineConfig({
+  resolve: {
+    alias: {
+      'zk-eidas-wasm': path.resolve(__dirname, 'pkg/zk-eidas-wasm.js'),
+    },
+  },
   server: {
     port: 3000,
     strictPort: true,
