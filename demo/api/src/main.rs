@@ -1755,14 +1755,45 @@ mod tests {
     }
 
     static FIXTURE: OnceLock<TestFixture> = OnceLock::new();
+    static FIXTURE_MUTEX: std::sync::Mutex<bool> = std::sync::Mutex::new(false);
 
     /// Returns a shared test fixture. The server is started once in a background
     /// thread with its own tokio runtime (survives across all test runtimes).
+    ///
+    /// Uses a mutex to ensure only one thread runs initialization, preventing
+    /// races where multiple threads start duplicate servers and prove calls.
     async fn setup() -> &'static TestFixture {
         if let Some(f) = FIXTURE.get() {
             return f;
         }
 
+        // Acquire mutex — other threads block here until init completes.
+        // We must drop the guard before any .await, so do the async work
+        // in a separate scope that checks the flag.
+        let needs_init = {
+            let mut guard = FIXTURE_MUTEX.lock().unwrap();
+            if !*guard {
+                *guard = true;
+                true
+            } else {
+                false
+            }
+        };
+
+        if needs_init {
+            setup_inner().await;
+        }
+
+        // Spin-wait for FIXTURE to be set (the initializing thread is doing async work)
+        loop {
+            if let Some(f) = FIXTURE.get() {
+                return f;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        }
+    }
+
+    async fn setup_inner() {
         // Start server in a dedicated thread with its own runtime
         let (tx, rx) = std::sync::mpsc::channel::<String>();
         std::thread::spawn(move || {
@@ -1849,15 +1880,13 @@ mod tests {
             .collect();
         let nullifier = prove_res["nullifier"].as_str().map(|s| s.to_string());
 
-        FIXTURE.set(TestFixture {
+        let _ = FIXTURE.set(TestFixture {
             base_url,
             credential,
             proof_json,
             hidden_fields,
             nullifier,
         }).ok();
-
-        FIXTURE.get().unwrap()
     }
 
     // === Issue ===
