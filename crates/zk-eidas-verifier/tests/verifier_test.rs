@@ -1,9 +1,7 @@
-use serial_test::serial;
 use zk_eidas_verifier::Verifier;
 use zk_eidas_types::predicate::PredicateOp;
 
 #[test]
-#[serial]
 fn verify_with_missing_circuit_returns_error() {
     let verifier = Verifier::new("/nonexistent");
 
@@ -21,7 +19,6 @@ fn verify_with_missing_circuit_returns_error() {
 }
 
 #[test]
-#[serial]
 fn verify_with_op_missing_circuit_returns_error() {
     let verifier = Verifier::new("/nonexistent");
 
@@ -39,7 +36,6 @@ fn verify_with_op_missing_circuit_returns_error() {
 }
 
 #[test]
-#[serial]
 fn verify_all_ops_fail_gracefully_with_missing_circuits() {
     let verifier = Verifier::new("/nonexistent");
     let ops = [
