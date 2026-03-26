@@ -54,12 +54,19 @@ async fn pid_age_over_18_boolean() {
 #[ignore = "requires compiled Circom circuit artifacts"]
 #[serial]
 async fn pid_minor_fails_age_check() {
-    let sdjwt = synthetic::eudi_pid::eudi_pid_minor();
-    let result = ZkCredential::from_sdjwt(&sdjwt, CIRCUITS)
-        .unwrap()
-        .predicate("birth_date", Predicate::gte(18))
-        .prove();
-    assert!(result.is_err(), "minor should fail age >= 18 proof generation");
+    // ark-circom panics via debug_assert on unsatisfied constraints rather
+    // than returning Err, so we need to catch the panic in debug builds.
+    let result = std::panic::catch_unwind(|| {
+        let sdjwt = synthetic::eudi_pid::eudi_pid_minor();
+        ZkCredential::from_sdjwt(&sdjwt, CIRCUITS)
+            .unwrap()
+            .predicate("birth_date", Predicate::gte(18))
+            .prove()
+    });
+    assert!(
+        result.is_err() || result.unwrap().is_err(),
+        "minor should fail age >= 18 proof generation"
+    );
 }
 
 // === Nationality / issuing country ===
