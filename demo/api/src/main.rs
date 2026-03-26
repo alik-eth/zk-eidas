@@ -2388,7 +2388,6 @@ mod tests {
     }
 
     #[tokio::test]
-    #[serial]
     async fn prepare_inputs_age_gte_returns_lte_circuit() {
         let (url, cred) = issue_test_credential(serde_json::json!({
             "given_name": "Test", "birth_date": "1998-05-14"
@@ -2408,7 +2407,6 @@ mod tests {
     }
 
     #[tokio::test]
-    #[serial]
     async fn prepare_inputs_age_lte_returns_gte_circuit() {
         let (url, cred) = issue_test_credential(serde_json::json!({
             "given_name": "Test", "birth_date": "1998-05-14"
@@ -2422,7 +2420,6 @@ mod tests {
     }
 
     #[tokio::test]
-    #[serial]
     async fn prepare_inputs_expiry_date_gte_passes_through() {
         let (url, cred) = issue_test_credential(serde_json::json!({
             "given_name": "Test", "birth_date": "1998-05-14", "expiry_date": "2035-05-14"
@@ -2440,7 +2437,6 @@ mod tests {
     }
 
     #[tokio::test]
-    #[serial]
     async fn prepare_inputs_eq_string() {
         let (url, cred) = issue_test_credential(serde_json::json!({
             "given_name": "Test", "birth_date": "1998-05-14", "document_number": "UA-123"
@@ -2454,7 +2450,6 @@ mod tests {
     }
 
     #[tokio::test]
-    #[serial]
     async fn prepare_inputs_set_member() {
         let (url, cred) = issue_test_credential(serde_json::json!({
             "given_name": "Test", "birth_date": "1998-05-14", "nationality": "UA"
@@ -2469,7 +2464,6 @@ mod tests {
     }
 
     #[tokio::test]
-    #[serial]
     async fn prepare_inputs_neq() {
         let (url, cred) = issue_test_credential(serde_json::json!({
             "given_name": "Test", "birth_date": "1998-05-14", "document_number": "UA-123"
@@ -2482,7 +2476,6 @@ mod tests {
     }
 
     #[tokio::test]
-    #[serial]
     async fn prepare_inputs_ecdsa_inputs_have_required_fields() {
         let (url, cred) = issue_test_credential(serde_json::json!({
             "given_name": "Test", "birth_date": "1998-05-14"
@@ -2511,7 +2504,6 @@ mod tests {
     }
 
     #[tokio::test]
-    #[serial]
     async fn prepare_inputs_missing_claim_returns_400() {
         let (url, cred) = issue_test_credential(serde_json::json!({
             "given_name": "Test", "birth_date": "1998-05-14"
@@ -2529,7 +2521,6 @@ mod tests {
     }
 
     #[tokio::test]
-    #[serial]
     async fn prepare_inputs_no_predicates_returns_400() {
         let (url, cred) = issue_test_credential(serde_json::json!({
             "given_name": "Test", "birth_date": "1998-05-14"
@@ -2635,7 +2626,6 @@ mod tests {
     }
 
     #[tokio::test]
-    #[serial]
     async fn contract_prove_route_is_reachable() {
         let url = light_setup().await;
         let client = reqwest::Client::new();

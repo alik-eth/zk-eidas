@@ -10,6 +10,3 @@ zk-eidas-prover = { workspace = true }
 thiserror = { workspace = true }
 serde_json = { workspace = true }
 rust-rapidsnark = "0.1.3"
-
-[dev-dependencies]
-serial_test = "3.4.0"
