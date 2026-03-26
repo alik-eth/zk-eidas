@@ -5,7 +5,6 @@
 
 mod synthetic;
 
-use serial_test::serial;
 use zk_eidas::openid4vp::{
     FieldConstraint, InputDescriptor, PresentationDefinition, PresentationSubmission, VPToken,
 };
@@ -30,7 +29,6 @@ fn rebuild_predicate(p: &Predicate) -> Predicate {
 /// Scenario: Online alcohol purchase -- verifier requires age >= 18.
 #[tokio::test]
 #[ignore = "requires compiled Circom circuit artifacts"]
-#[serial]
 async fn e2e_age_verification_single_predicate() {
     // === VERIFIER: Create Presentation Definition ===
     let pd = PresentationDefinition {
@@ -91,7 +89,6 @@ async fn e2e_age_verification_single_predicate() {
 /// Scenario: Cross-border regulated service requiring age 21+ and EU residency.
 #[tokio::test]
 #[ignore = "requires compiled Circom circuit artifacts"]
-#[serial]
 async fn e2e_multi_predicate_age_and_nationality() {
     // === VERIFIER ===
     let pd = PresentationDefinition {
@@ -153,7 +150,6 @@ async fn e2e_multi_predicate_age_and_nationality() {
 /// Scenario: Italian citizen accessing a German government portal.
 #[tokio::test]
 #[ignore = "requires compiled Circom circuit artifacts"]
-#[serial]
 async fn e2e_cross_border_italian_in_germany() {
     let pd = PresentationDefinition {
         id: "de-gov-portal-001".to_string(),
@@ -189,7 +185,6 @@ async fn e2e_cross_border_italian_in_germany() {
 /// Minor wallet should fail age >= 18 through the full OpenID4VP flow.
 #[tokio::test]
 #[ignore = "requires compiled Circom circuit artifacts"]
-#[serial]
 async fn e2e_minor_fails_age_check() {
     let pd = PresentationDefinition {
         id: "age-check-minor".to_string(),
@@ -223,7 +218,6 @@ async fn e2e_minor_fails_age_check() {
 /// is verified inside the ZK circuit.
 #[tokio::test]
 #[ignore = "requires compiled Circom circuit artifacts"]
-#[serial]
 async fn e2e_signed_age_verification() {
     let pd = PresentationDefinition {
         id: "signed-age-check-001".to_string(),
@@ -260,7 +254,6 @@ async fn e2e_signed_age_verification() {
 /// Signed credential with multiple predicates: age + issuing_country.
 #[tokio::test]
 #[ignore = "requires compiled Circom circuit artifacts"]
-#[serial]
 async fn e2e_signed_multi_predicate() {
     let pd = PresentationDefinition {
         id: "signed-multi-001".to_string(),
@@ -309,7 +302,6 @@ async fn e2e_signed_multi_predicate() {
 /// Compound AND: age between 18 and 65 (working age verification).
 #[tokio::test]
 #[ignore = "requires compiled Circom circuit artifacts"]
-#[serial]
 async fn e2e_compound_age_range() {
     let sdjwt = synthetic::pid_credential::french_citizen(); // age 30
     let proof = ZkCredential::from_sdjwt(&sdjwt, CIRCUITS)
@@ -329,7 +321,6 @@ async fn e2e_compound_age_range() {
 /// Compound OR: issuing_country is FR or DE — Italian should fail.
 #[tokio::test]
 #[ignore = "requires compiled Circom circuit artifacts"]
-#[serial]
 async fn e2e_compound_country_or_fails() {
     let sdjwt = synthetic::pid_credential::italian_citizen(); // IT
     let result = ZkCredential::from_sdjwt(&sdjwt, CIRCUITS)
@@ -352,7 +343,6 @@ async fn e2e_compound_country_or_fails() {
 /// TODO(Task 6): rewrite with actual circuit artifacts and contract_nullifier API
 #[tokio::test]
 #[ignore = "requires compiled Circom circuit artifacts — rewrite in Task 6"]
-#[serial]
 async fn e2e_nullifier_determinism() {
     let sdjwt = synthetic::pid_credential::french_citizen();
 
@@ -369,7 +359,6 @@ async fn e2e_nullifier_determinism() {
 /// Holder binding: two credentials with matching given_name produce same binding hash.
 #[tokio::test]
 #[ignore = "requires compiled Circom circuit artifacts"]
-#[serial]
 async fn e2e_holder_binding_same_holder() {
     let (sdjwt_a, _key_a) = zk_eidas_parser::test_utils::build_ecdsa_signed_sdjwt(
         serde_json::json!({
@@ -420,7 +409,6 @@ async fn e2e_holder_binding_same_holder() {
 /// Different holders produce different binding hashes.
 #[tokio::test]
 #[ignore = "requires compiled Circom circuit artifacts"]
-#[serial]
 async fn e2e_holder_binding_different_holders() {
     let sdjwt_a = synthetic::pid_credential::french_citizen_signed(); // Jean
     let sdjwt_b = synthetic::pid_credential::eu_citizen_signed(); // Hans
@@ -446,7 +434,6 @@ async fn e2e_holder_binding_different_holders() {
 /// Edge case: barely adult (turned 18+ recently).
 #[tokio::test]
 #[ignore = "requires compiled Circom circuit artifacts"]
-#[serial]
 async fn e2e_barely_adult_passes_age_check() {
     let sdjwt = synthetic::pid_credential::spanish_citizen_barely_adult();
     let proof = ZkCredential::from_sdjwt(&sdjwt, CIRCUITS)
@@ -461,7 +448,6 @@ async fn e2e_barely_adult_passes_age_check() {
 /// Equality check: verify issuing_country == "IT".
 #[tokio::test]
 #[ignore = "requires compiled Circom circuit artifacts"]
-#[serial]
 async fn e2e_issuing_country_eq() {
     let sdjwt = synthetic::pid_credential::italian_citizen_signed();
     let proof = ZkCredential::from_sdjwt(&sdjwt, CIRCUITS)
@@ -479,7 +465,6 @@ async fn e2e_issuing_country_eq() {
 /// Neq check: verify issuing_country != "RU".
 #[tokio::test]
 #[ignore = "requires compiled Circom circuit artifacts"]
-#[serial]
 async fn e2e_issuing_country_neq() {
     let sdjwt = synthetic::pid_credential::french_citizen_signed();
     let proof = ZkCredential::from_sdjwt(&sdjwt, CIRCUITS)
@@ -493,7 +478,6 @@ async fn e2e_issuing_country_neq() {
 
 /// Invalid predicate op in PresentationDefinition should return error.
 #[test]
-#[serial]
 fn e2e_invalid_predicate_op_rejected() {
     let pd = PresentationDefinition {
         id: "bad-request".to_string(),
@@ -516,7 +500,6 @@ fn e2e_invalid_predicate_op_rejected() {
 /// VPToken with mismatched proof count should fail.
 #[tokio::test]
 #[ignore = "requires compiled Circom circuit artifacts"]
-#[serial]
 async fn e2e_vp_token_proof_count_mismatch() {
     let pd = PresentationDefinition {
         id: "two-requirements".to_string(),
@@ -558,7 +541,6 @@ async fn e2e_vp_token_proof_count_mismatch() {
 /// Full JSON round-trip: serialize everything, deserialize, verify proofs still valid.
 #[tokio::test]
 #[ignore = "requires compiled Circom circuit artifacts"]
-#[serial]
 async fn e2e_full_json_roundtrip() {
     let pd = PresentationDefinition {
         id: "roundtrip-test".to_string(),

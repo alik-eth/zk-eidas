@@ -1,11 +1,9 @@
 mod synthetic;
 
-use serial_test::serial;
 use zk_eidas::{Predicate, ZkCredential, ZkVerifier};
 
 #[tokio::test]
 #[ignore = "requires compiled Circom circuit artifacts"]
-#[serial]
 async fn test_age_verification_over_18() {
     let sdjwt = synthetic::pid_credential::adult_citizen();
     let proof = ZkCredential::from_sdjwt(&sdjwt, "../../circuits/build")
@@ -21,7 +19,6 @@ async fn test_age_verification_over_18() {
 
 #[tokio::test]
 #[ignore = "requires compiled Circom circuit artifacts"]
-#[serial]
 async fn test_age_verification_minor_fails() {
     let sdjwt = synthetic::pid_credential::minor_citizen();
     let result = ZkCredential::from_sdjwt(&sdjwt, "../../circuits/build")
@@ -33,7 +30,6 @@ async fn test_age_verification_minor_fails() {
 
 #[tokio::test]
 #[ignore = "requires compiled Circom circuit artifacts"]
-#[serial]
 async fn test_french_citizen_age_verification() {
     let sdjwt = synthetic::pid_credential::french_citizen();
     let proof = ZkCredential::from_sdjwt(&sdjwt, "../../circuits/build")
@@ -49,7 +45,6 @@ async fn test_french_citizen_age_verification() {
 
 #[tokio::test]
 #[ignore = "requires compiled Circom circuit artifacts"]
-#[serial]
 async fn test_dutch_citizen_nationality_set_member() {
     let sdjwt = synthetic::pid_credential::dutch_citizen();
     let proof = ZkCredential::from_sdjwt(&sdjwt, "../../circuits/build")

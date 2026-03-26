@@ -1,0 +1,4 @@
+[env]
+# Limit parallel test threads to prevent OOM from concurrent ECDSA proving.
+# Each ECDSA prove peaks at ~2GB RAM; 8 threads × 2GB = 16GB < 32GB available.
+RUST_TEST_THREADS = "8"

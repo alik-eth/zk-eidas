@@ -3,7 +3,6 @@
 //! Tests the specific predicate combinations used by each credential type
 //! in the demo wizard: PID, Driver's License (mdoc), Diploma, Vehicle.
 
-use serial_test::serial;
 use zk_eidas::{Predicate, ZkCredential, ZkVerifier};
 use zk_eidas_mdoc::MdocParser;
 use zk_eidas_types::credential::ClaimValue;
@@ -27,7 +26,6 @@ fn verify_proof(proof: &zk_eidas_types::proof::ZkProof) {
 
 #[tokio::test]
 #[ignore = "requires compiled Circom circuit artifacts"]
-#[serial]
 async fn drivers_license_category_eq() {
     let (mdoc_bytes, pkx, pky) = zk_eidas_mdoc::test_utils::build_ecdsa_signed_mdoc(
         vec![
@@ -46,7 +44,6 @@ async fn drivers_license_category_eq() {
 
 #[tokio::test]
 #[ignore = "requires compiled Circom circuit artifacts"]
-#[serial]
 async fn drivers_license_expiry_date_gte_epoch_days() {
     // expiry_date stored as epoch days integer (not ClaimValue::Date)
     let expiry_epoch_days = zk_eidas_utils::date_to_epoch_days(2034, 3, 22);
@@ -71,7 +68,6 @@ async fn drivers_license_expiry_date_gte_epoch_days() {
 
 #[tokio::test]
 #[ignore = "requires compiled Circom circuit artifacts"]
-#[serial]
 async fn drivers_license_issue_date_lte_epoch_days() {
     // issue_date as epoch days, proving it was issued at least 2 years ago
     let issue_epoch_days = zk_eidas_utils::date_to_epoch_days(2019, 3, 22);
@@ -98,7 +94,6 @@ async fn drivers_license_issue_date_lte_epoch_days() {
 
 #[tokio::test]
 #[ignore = "requires compiled Circom circuit artifacts"]
-#[serial]
 async fn drivers_license_restrictions_eq_none() {
     let (mdoc_bytes, pkx, pky) = zk_eidas_mdoc::test_utils::build_ecdsa_signed_mdoc(
         vec![("restrictions", ClaimValue::String("None".into()))],
@@ -116,7 +111,6 @@ async fn drivers_license_restrictions_eq_none() {
 
 #[tokio::test]
 #[ignore = "requires compiled Circom circuit artifacts"]
-#[serial]
 async fn diploma_field_of_study_set_member() {
     let sdjwt = build_signed_sdjwt(serde_json::json!({
         "field_of_study": "Computer Science",
@@ -142,7 +136,6 @@ async fn diploma_field_of_study_set_member() {
 
 #[tokio::test]
 #[ignore = "requires compiled Circom circuit artifacts"]
-#[serial]
 async fn diploma_graduation_year_gte() {
     let sdjwt = build_signed_sdjwt(serde_json::json!({
         "graduation_year": 2023,
@@ -158,7 +151,6 @@ async fn diploma_graduation_year_gte() {
 
 #[tokio::test]
 #[ignore = "requires compiled Circom circuit artifacts"]
-#[serial]
 async fn diploma_degree_set_member() {
     let sdjwt = build_signed_sdjwt(serde_json::json!({
         "degree": "Master (M2)",
@@ -177,7 +169,6 @@ async fn diploma_degree_set_member() {
 
 #[tokio::test]
 #[ignore = "requires compiled Circom circuit artifacts"]
-#[serial]
 async fn diploma_university_eq() {
     let sdjwt = build_signed_sdjwt(serde_json::json!({
         "university": "Sorbonne Universit\u{00e9}",
@@ -195,7 +186,6 @@ async fn diploma_university_eq() {
 
 #[tokio::test]
 #[ignore = "requires compiled Circom circuit artifacts"]
-#[serial]
 async fn vehicle_insurance_expiry_gte_epoch_days() {
     // insurance_expiry stored as epoch days for direct comparison
     let expiry_epoch_days = zk_eidas_utils::date_to_epoch_days(2027, 1, 15) as i64;
@@ -220,7 +210,6 @@ async fn vehicle_insurance_expiry_gte_epoch_days() {
 
 #[tokio::test]
 #[ignore = "requires compiled Circom circuit artifacts"]
-#[serial]
 async fn vehicle_make_model_set_member() {
     let sdjwt = build_signed_sdjwt(serde_json::json!({
         "make_model": "Volkswagen Golf",
@@ -245,7 +234,6 @@ async fn vehicle_make_model_set_member() {
 
 #[tokio::test]
 #[ignore = "requires compiled Circom circuit artifacts"]
-#[serial]
 async fn vehicle_vin_neq_revoked() {
     let sdjwt = build_signed_sdjwt(serde_json::json!({
         "vin": "WVWZZZ1JZYW000001",
@@ -263,7 +251,6 @@ async fn vehicle_vin_neq_revoked() {
 
 #[tokio::test]
 #[ignore = "requires compiled Circom circuit artifacts"]
-#[serial]
 async fn diploma_compound_and_stem_recent_grad() {
     let sdjwt = build_signed_sdjwt(serde_json::json!({
         "field_of_study": "Computer Science",
@@ -297,7 +284,6 @@ async fn diploma_compound_and_stem_recent_grad() {
 
 #[tokio::test]
 #[ignore = "requires compiled Circom circuit artifacts"]
-#[serial]
 async fn drivers_license_compound_category_and_valid() {
     let expiry_epoch_days = zk_eidas_utils::date_to_epoch_days(2034, 3, 22);
     let today_epoch_days = {

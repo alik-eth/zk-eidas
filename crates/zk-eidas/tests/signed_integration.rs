@@ -3,7 +3,6 @@
 //! These tests require compiled signed Noir circuits (checked into repo)
 //! and download Barretenberg's SRS on first run.
 
-use serial_test::serial;
 use zk_eidas::{Predicate, ZkCredential, ZkVerifier};
 
 const CIRCUITS_PATH: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../../circuits/build");
@@ -17,7 +16,6 @@ fn build_signed_sdjwt(claims: serde_json::Value) -> String {
 
 #[tokio::test]
 #[ignore = "requires compiled Circom circuit artifacts"]
-#[serial]
 async fn signed_gte_proof_end_to_end() {
     let sdjwt = build_signed_sdjwt(serde_json::json!({ "age": 25 }));
 
@@ -35,7 +33,6 @@ async fn signed_gte_proof_end_to_end() {
 
 #[tokio::test]
 #[ignore = "requires compiled Circom circuit artifacts"]
-#[serial]
 async fn signed_lte_proof_end_to_end() {
     let sdjwt = build_signed_sdjwt(serde_json::json!({ "score": 42 }));
 
@@ -53,7 +50,6 @@ async fn signed_lte_proof_end_to_end() {
 
 #[tokio::test]
 #[ignore = "requires compiled Circom circuit artifacts"]
-#[serial]
 async fn signed_eq_proof_end_to_end() {
     let sdjwt = build_signed_sdjwt(serde_json::json!({ "country": "DE" }));
 
@@ -71,7 +67,6 @@ async fn signed_eq_proof_end_to_end() {
 
 #[tokio::test]
 #[ignore = "requires compiled Circom circuit artifacts"]
-#[serial]
 async fn signed_neq_proof_end_to_end() {
     let sdjwt = build_signed_sdjwt(serde_json::json!({ "country": "DE" }));
 
@@ -89,7 +84,6 @@ async fn signed_neq_proof_end_to_end() {
 
 #[tokio::test]
 #[ignore = "requires compiled Circom circuit artifacts"]
-#[serial]
 async fn signed_set_member_proof_end_to_end() {
     let sdjwt = build_signed_sdjwt(serde_json::json!({ "country": "DE" }));
 
@@ -107,7 +101,6 @@ async fn signed_set_member_proof_end_to_end() {
 
 #[tokio::test]
 #[ignore = "requires compiled Circom circuit artifacts"]
-#[serial]
 async fn signed_range_proof_end_to_end() {
     let sdjwt = build_signed_sdjwt(serde_json::json!({ "score": 75 }));
 
@@ -125,7 +118,6 @@ async fn signed_range_proof_end_to_end() {
 
 #[tokio::test]
 #[ignore = "requires compiled Circom circuit artifacts"]
-#[serial]
 async fn signed_compound_and_proof() {
     let sdjwt = build_signed_sdjwt(serde_json::json!({ "age": 25, "score": 80 }));
 
