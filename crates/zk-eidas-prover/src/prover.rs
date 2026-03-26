@@ -78,46 +78,47 @@ impl Prover {
     ) -> Result<(ZkProof, EcdsaCommitment, Vec<u8>, Vec<u8>), ProverError> {
         let artifacts = self.loader.load(PredicateOp::Ecdsa)?;
 
-        let mut builder = create_builder(&artifacts)?;
-
-        // Private inputs: signature_r[6], signature_s[6], message_hash[6]
-        let r_limbs = SignedProofInput::to_43bit_limbs(&input.signature_r);
-        let s_limbs = SignedProofInput::to_43bit_limbs(&input.signature_s);
-        let msg_limbs = SignedProofInput::to_43bit_limbs(&input.message_hash);
-
-        for limb in &r_limbs {
-            builder.push_input("signature_r", limb.clone());
-        }
-        for limb in &s_limbs {
-            builder.push_input("signature_s", limb.clone());
-        }
-        for limb in &msg_limbs {
-            builder.push_input("message_hash", limb.clone());
-        }
-
-        // Private inputs: claim_value, disclosure_hash, sd_array[16]
-        builder.push_input("claim_value", BigInt::from(input.claim_value));
-        builder.push_input("disclosure_hash", BigInt::from(input.disclosure_hash));
-        for val in &input.sd_array {
-            builder.push_input("sd_array", BigInt::from(*val));
-        }
-
-        // Public inputs: pub_key_x[6], pub_key_y[6]
-        let pkx_limbs = SignedProofInput::to_43bit_limbs(&input.pub_key_x);
-        let pky_limbs = SignedProofInput::to_43bit_limbs(&input.pub_key_y);
-
-        for limb in &pkx_limbs {
-            builder.push_input("pub_key_x", limb.clone());
-        }
-        for limb in &pky_limbs {
-            builder.push_input("pub_key_y", limb.clone());
-        }
-
-        // Generate proof: use C++ witness generator if available (much faster than WASM)
+        // Generate proof: use C++ witness generator if available (much faster than WASM,
+        // and avoids loading the 452MB R1CS + 18MB WASM into memory via wasmer)
         let (proof, public_inputs, vk_bytes) = if let Some(cpp_bin) = &artifacts.cpp_witness_bin {
             let wtns_bytes = generate_cpp_witness(cpp_bin, input)?;
             prove_with_wtns(&artifacts, wtns_bytes)?
         } else {
+            let mut builder = create_builder(&artifacts)?;
+
+            // Private inputs: signature_r[6], signature_s[6], message_hash[6]
+            let r_limbs = SignedProofInput::to_43bit_limbs(&input.signature_r);
+            let s_limbs = SignedProofInput::to_43bit_limbs(&input.signature_s);
+            let msg_limbs = SignedProofInput::to_43bit_limbs(&input.message_hash);
+
+            for limb in &r_limbs {
+                builder.push_input("signature_r", limb.clone());
+            }
+            for limb in &s_limbs {
+                builder.push_input("signature_s", limb.clone());
+            }
+            for limb in &msg_limbs {
+                builder.push_input("message_hash", limb.clone());
+            }
+
+            // Private inputs: claim_value, disclosure_hash, sd_array[16]
+            builder.push_input("claim_value", BigInt::from(input.claim_value));
+            builder.push_input("disclosure_hash", BigInt::from(input.disclosure_hash));
+            for val in &input.sd_array {
+                builder.push_input("sd_array", BigInt::from(*val));
+            }
+
+            // Public inputs: pub_key_x[6], pub_key_y[6]
+            let pkx_limbs = SignedProofInput::to_43bit_limbs(&input.pub_key_x);
+            let pky_limbs = SignedProofInput::to_43bit_limbs(&input.pub_key_y);
+
+            for limb in &pkx_limbs {
+                builder.push_input("pub_key_x", limb.clone());
+            }
+            for limb in &pky_limbs {
+                builder.push_input("pub_key_y", limb.clone());
+            }
+
             generate_proof(&artifacts, builder)?
         };
 
