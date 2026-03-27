@@ -60,7 +60,7 @@ The [verify page](https://zk-eidas.com/verify) is a PWA — install it once, ver
 | `zk-eidas-types` | Shared types — credentials, proofs, predicates |
 | `zk-eidas-parser` | SD-JWT VC parser — claims, disclosures, key extraction |
 | `zk-eidas-mdoc` | mdoc/mDL parser — ISO 18013-5 CBOR credentials |
-| `zk-eidas-prover` | Witness generation + Groth16 proving (ark-circom) |
+| `zk-eidas-prover` | Witness generation (C++ binaries) + Groth16 proving (rapidsnark) |
 | `zk-eidas-verifier` | Proof verification + trusted circuit registry |
 | `zk-eidas-utils` | Date conversion, age calculation, field arithmetic |
 | `zk-eidas-wasm` | WASM bindings for browser |
