@@ -15,15 +15,13 @@ pub enum CircuitError {
 /// Paths to compiled Circom circuit artifacts for a single circuit.
 #[derive(Debug, Clone)]
 pub struct CircuitArtifacts {
-    pub r1cs_path: PathBuf,
-    pub wasm_path: PathBuf,
     pub zkey_path: PathBuf,
     pub vk_json_path: PathBuf,
-    /// Path to native C++ witness generator binary (if available).
-    /// Only populated for ECDSA circuit when the compiled binary exists.
-    pub cpp_witness_bin: Option<PathBuf>,
+    pub cpp_witness_bin: PathBuf,
     /// Path to the .dat file needed by the C++ witness generator.
-    pub cpp_witness_dat: Option<PathBuf>,
+    /// Checked for existence at load time; the binary locates it by convention
+    /// (same directory, same stem) so callers do not need to pass it explicitly.
+    pub cpp_witness_dat: PathBuf,
 }
 
 /// Loads compiled Circom circuit artifacts from a base directory.
@@ -32,17 +30,15 @@ pub struct CircuitArtifacts {
 /// ```text
 /// <base_path>/
 ///   gte/
-///     gte.r1cs
-///     gte_js/gte.wasm
 ///     gte.zkey
-///   lte/
-///     lte.r1cs
-///     lte_js/lte.wasm
-///     lte.zkey
+///     vk.json
+///     gte_cpp/gte
+///     gte_cpp/gte.dat
 ///   ecdsa_verify/
-///     ecdsa_verify.r1cs
-///     ecdsa_verify_js/ecdsa_verify.wasm
 ///     ecdsa_verify.zkey
+///     vk.json
+///     ecdsa_verify_cpp/ecdsa_verify
+///     ecdsa_verify_cpp/ecdsa_verify.dat
 ///   ...
 /// ```
 pub struct CircuitLoader {
@@ -65,7 +61,7 @@ impl CircuitLoader {
     /// Loads the paths to compiled Circom circuit artifacts for a given predicate operation.
     ///
     /// Maps each `PredicateOp` to its circuit directory name and returns paths to
-    /// the `.r1cs`, `.wasm` (witness generator), and `.zkey` (proving key) files.
+    /// the `.zkey` (proving key), `vk.json`, and the C++ witness generator binary/dat files.
     pub fn load(&self, op: PredicateOp) -> Result<CircuitArtifacts, CircuitError> {
         let name = match op {
             PredicateOp::Ecdsa => "ecdsa_verify",
@@ -80,41 +76,26 @@ impl CircuitLoader {
         };
 
         let dir = self.base_path.join(name);
-        let r1cs_path = dir.join(format!("{name}.r1cs"));
-        let wasm_path = dir.join(format!("{name}_js/{name}.wasm"));
         let zkey_path = dir.join(format!("{name}.zkey"));
         let vk_json_path = dir.join("vk.json");
+        let cpp_witness_bin = dir.join(format!("{name}_cpp/{name}"));
+        let cpp_witness_dat = dir.join(format!("{name}_cpp/{name}.dat"));
 
-        // Check that the essential files exist
-        if !r1cs_path.exists() {
-            return Err(CircuitError::NotFound(r1cs_path));
-        }
-        if !wasm_path.exists() {
-            return Err(CircuitError::NotFound(wasm_path));
-        }
+        // Check files exist
         if !zkey_path.exists() {
             return Err(CircuitError::NotFound(zkey_path));
         }
         if !vk_json_path.exists() {
             return Err(CircuitError::NotFound(vk_json_path));
         }
-
-        // Check for native C++ witness generator (ECDSA only, much faster than WASM)
-        let (cpp_witness_bin, cpp_witness_dat) = if matches!(op, PredicateOp::Ecdsa) {
-            let cpp_bin = dir.join(format!("{name}_cpp/{name}"));
-            let cpp_dat = dir.join(format!("{name}_cpp/{name}.dat"));
-            if cpp_bin.exists() && cpp_dat.exists() {
-                (Some(cpp_bin), Some(cpp_dat))
-            } else {
-                (None, None)
-            }
-        } else {
-            (None, None)
-        };
+        if !cpp_witness_bin.exists() {
+            return Err(CircuitError::NotFound(cpp_witness_bin));
+        }
+        if !cpp_witness_dat.exists() {
+            return Err(CircuitError::NotFound(cpp_witness_dat));
+        }
 
         Ok(CircuitArtifacts {
-            r1cs_path,
-            wasm_path,
             zkey_path,
             vk_json_path,
             cpp_witness_bin,

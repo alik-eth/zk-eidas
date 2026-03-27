@@ -1,7 +1,8 @@
 //! Zero-knowledge proof generation using Circom circuits and the Groth16 backend.
 //!
-//! This crate handles circuit loading, witness construction, and Groth16 proof
-//! generation for all predicate types using ark-circom and arkworks.
+//! This crate handles circuit loading, witness construction (via native C++ binaries
+//! compiled from Circom `--c` output), and Groth16 proof generation for all predicate
+//! types using rapidsnark.
 //!
 //! ## Two-stage architecture
 //!

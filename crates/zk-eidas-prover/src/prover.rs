@@ -1,8 +1,6 @@
 use std::path::Path;
 use std::process::Command;
 
-use ark_bn254::Fr;
-use ark_circom::{CircomBuilder, CircomConfig};
 use num_bigint::BigInt;
 use rust_rapidsnark::groth16_prover_zkey_file_wrapper;
 
@@ -38,8 +36,8 @@ pub enum ProverError {
 /// - **Stage 1**: `prove_ecdsa()` verifies an ECDSA signature and outputs a Poseidon commitment.
 /// - **Stage 2**: `prove_gte()`, `prove_lte()`, etc. consume the commitment and prove predicates.
 ///
-/// Witness generation uses ark-circom (WASM-based). Proof generation uses rapidsnark
-/// for ~10x speedup over pure arkworks Groth16.
+/// Witness generation uses native C++ binaries compiled from Circom `--c` output.
+/// Proof generation uses rapidsnark for ~10x speedup over pure arkworks Groth16.
 pub struct Prover {
     loader: CircuitLoader,
 }
@@ -78,49 +76,9 @@ impl Prover {
     ) -> Result<(ZkProof, EcdsaCommitment, Vec<u8>, Vec<u8>), ProverError> {
         let artifacts = self.loader.load(PredicateOp::Ecdsa)?;
 
-        // Generate proof: use C++ witness generator if available (much faster than WASM,
-        // and avoids loading the 452MB R1CS + 18MB WASM into memory via wasmer)
-        let (proof, public_inputs, vk_bytes) = if let Some(cpp_bin) = &artifacts.cpp_witness_bin {
-            let wtns_bytes = generate_cpp_witness(cpp_bin, input)?;
-            prove_with_wtns(&artifacts, wtns_bytes)?
-        } else {
-            let mut builder = create_builder(&artifacts)?;
-
-            // Private inputs: signature_r[6], signature_s[6], message_hash[6]
-            let r_limbs = SignedProofInput::to_43bit_limbs(&input.signature_r);
-            let s_limbs = SignedProofInput::to_43bit_limbs(&input.signature_s);
-            let msg_limbs = SignedProofInput::to_43bit_limbs(&input.message_hash);
-
-            for limb in &r_limbs {
-                builder.push_input("signature_r", limb.clone());
-            }
-            for limb in &s_limbs {
-                builder.push_input("signature_s", limb.clone());
-            }
-            for limb in &msg_limbs {
-                builder.push_input("message_hash", limb.clone());
-            }
-
-            // Private inputs: claim_value, disclosure_hash, sd_array[16]
-            builder.push_input("claim_value", BigInt::from(input.claim_value));
-            builder.push_input("disclosure_hash", BigInt::from(input.disclosure_hash));
-            for val in &input.sd_array {
-                builder.push_input("sd_array", BigInt::from(*val));
-            }
-
-            // Public inputs: pub_key_x[6], pub_key_y[6]
-            let pkx_limbs = SignedProofInput::to_43bit_limbs(&input.pub_key_x);
-            let pky_limbs = SignedProofInput::to_43bit_limbs(&input.pub_key_y);
-
-            for limb in &pkx_limbs {
-                builder.push_input("pub_key_x", limb.clone());
-            }
-            for limb in &pky_limbs {
-                builder.push_input("pub_key_y", limb.clone());
-            }
-
-            generate_proof(&artifacts, builder)?
-        };
+        let input_value = build_ecdsa_input_value(input);
+        let wtns_bytes = generate_cpp_witness(&artifacts.cpp_witness_bin, &input_value)?;
+        let (proof, public_inputs, vk_bytes) = prove_with_wtns(&artifacts, wtns_bytes)?;
 
         // Public outputs order (Circom convention: outputs first, then public inputs):
         //   [0] = commitment
@@ -155,12 +113,10 @@ impl Prover {
         message_hash: &[u8],
     ) -> Result<ZkProof, ProverError> {
         let artifacts = self.loader.load(PredicateOp::Gte)?;
-        let mut builder = create_builder(&artifacts)?;
-
-        push_commitment_inputs(&mut builder, claim_value, sd_array_hash, message_hash, commitment);
-        builder.push_input("threshold", BigInt::from(threshold));
-
-        let (proof, public_inputs, vk_bytes) = generate_proof(&artifacts, builder)?;
+        let mut input = build_commitment_json(claim_value, sd_array_hash, message_hash, commitment);
+        input.insert("threshold".into(), serde_json::json!(threshold.to_string()));
+        let wtns_bytes = generate_cpp_witness(&artifacts.cpp_witness_bin, &serde_json::Value::Object(input))?;
+        let (proof, public_inputs, vk_bytes) = prove_with_wtns(&artifacts, wtns_bytes)?;
         Ok(ZkProof::new(proof, public_inputs, vk_bytes, PredicateOp::Gte))
     }
 
@@ -174,12 +130,10 @@ impl Prover {
         message_hash: &[u8],
     ) -> Result<ZkProof, ProverError> {
         let artifacts = self.loader.load(PredicateOp::Lte)?;
-        let mut builder = create_builder(&artifacts)?;
-
-        push_commitment_inputs(&mut builder, claim_value, sd_array_hash, message_hash, commitment);
-        builder.push_input("threshold", BigInt::from(threshold));
-
-        let (proof, public_inputs, vk_bytes) = generate_proof(&artifacts, builder)?;
+        let mut input = build_commitment_json(claim_value, sd_array_hash, message_hash, commitment);
+        input.insert("threshold".into(), serde_json::json!(threshold.to_string()));
+        let wtns_bytes = generate_cpp_witness(&artifacts.cpp_witness_bin, &serde_json::Value::Object(input))?;
+        let (proof, public_inputs, vk_bytes) = prove_with_wtns(&artifacts, wtns_bytes)?;
         Ok(ZkProof::new(proof, public_inputs, vk_bytes, PredicateOp::Lte))
     }
 
@@ -193,12 +147,10 @@ impl Prover {
         message_hash: &[u8],
     ) -> Result<ZkProof, ProverError> {
         let artifacts = self.loader.load(PredicateOp::Eq)?;
-        let mut builder = create_builder(&artifacts)?;
-
-        push_commitment_inputs(&mut builder, claim_value, sd_array_hash, message_hash, commitment);
-        builder.push_input("expected", BigInt::from(expected));
-
-        let (proof, public_inputs, vk_bytes) = generate_proof(&artifacts, builder)?;
+        let mut input = build_commitment_json(claim_value, sd_array_hash, message_hash, commitment);
+        input.insert("expected".into(), serde_json::json!(expected.to_string()));
+        let wtns_bytes = generate_cpp_witness(&artifacts.cpp_witness_bin, &serde_json::Value::Object(input))?;
+        let (proof, public_inputs, vk_bytes) = prove_with_wtns(&artifacts, wtns_bytes)?;
         Ok(ZkProof::new(proof, public_inputs, vk_bytes, PredicateOp::Eq))
     }
 
@@ -212,12 +164,10 @@ impl Prover {
         message_hash: &[u8],
     ) -> Result<ZkProof, ProverError> {
         let artifacts = self.loader.load(PredicateOp::Neq)?;
-        let mut builder = create_builder(&artifacts)?;
-
-        push_commitment_inputs(&mut builder, claim_value, sd_array_hash, message_hash, commitment);
-        builder.push_input("expected", BigInt::from(expected));
-
-        let (proof, public_inputs, vk_bytes) = generate_proof(&artifacts, builder)?;
+        let mut input = build_commitment_json(claim_value, sd_array_hash, message_hash, commitment);
+        input.insert("expected".into(), serde_json::json!(expected.to_string()));
+        let wtns_bytes = generate_cpp_witness(&artifacts.cpp_witness_bin, &serde_json::Value::Object(input))?;
+        let (proof, public_inputs, vk_bytes) = prove_with_wtns(&artifacts, wtns_bytes)?;
         Ok(ZkProof::new(proof, public_inputs, vk_bytes, PredicateOp::Neq))
     }
 
@@ -232,13 +182,11 @@ impl Prover {
         message_hash: &[u8],
     ) -> Result<ZkProof, ProverError> {
         let artifacts = self.loader.load(PredicateOp::Range)?;
-        let mut builder = create_builder(&artifacts)?;
-
-        push_commitment_inputs(&mut builder, claim_value, sd_array_hash, message_hash, commitment);
-        builder.push_input("low", BigInt::from(low));
-        builder.push_input("high", BigInt::from(high));
-
-        let (proof, public_inputs, vk_bytes) = generate_proof(&artifacts, builder)?;
+        let mut input = build_commitment_json(claim_value, sd_array_hash, message_hash, commitment);
+        input.insert("low".into(), serde_json::json!(low.to_string()));
+        input.insert("high".into(), serde_json::json!(high.to_string()));
+        let wtns_bytes = generate_cpp_witness(&artifacts.cpp_witness_bin, &serde_json::Value::Object(input))?;
+        let (proof, public_inputs, vk_bytes) = prove_with_wtns(&artifacts, wtns_bytes)?;
         Ok(ZkProof::new(proof, public_inputs, vk_bytes, PredicateOp::Range))
     }
 
@@ -253,15 +201,11 @@ impl Prover {
         message_hash: &[u8],
     ) -> Result<ZkProof, ProverError> {
         let artifacts = self.loader.load(PredicateOp::SetMember)?;
-        let mut builder = create_builder(&artifacts)?;
-
-        push_commitment_inputs(&mut builder, claim_value, sd_array_hash, message_hash, commitment);
-        for val in set {
-            builder.push_input("set", BigInt::from(*val));
-        }
-        builder.push_input("set_len", BigInt::from(set_len));
-
-        let (proof, public_inputs, vk_bytes) = generate_proof(&artifacts, builder)?;
+        let mut input = build_commitment_json(claim_value, sd_array_hash, message_hash, commitment);
+        input.insert("set".into(), serde_json::json!(set.iter().map(|v| v.to_string()).collect::<Vec<_>>()));
+        input.insert("set_len".into(), serde_json::json!(set_len.to_string()));
+        let wtns_bytes = generate_cpp_witness(&artifacts.cpp_witness_bin, &serde_json::Value::Object(input))?;
+        let (proof, public_inputs, vk_bytes) = prove_with_wtns(&artifacts, wtns_bytes)?;
         Ok(ZkProof::new(proof, public_inputs, vk_bytes, PredicateOp::SetMember))
     }
 
@@ -280,19 +224,18 @@ impl Prover {
         message_hash: &[u8],
     ) -> Result<ZkProof, ProverError> {
         let artifacts = self.loader.load(PredicateOp::Nullifier)?;
-        let mut builder = create_builder(&artifacts)?;
 
-        // Private inputs
-        builder.push_input("credential_id", BigInt::from(credential_id));
-        builder.push_input("sd_array_hash", bytes_to_bigint(sd_array_hash));
-        builder.push_input("message_hash", bytes_to_bigint(message_hash));
+        let input = serde_json::json!({
+            "credential_id": credential_id.to_string(),
+            "sd_array_hash": bytes_to_decimal_string(sd_array_hash),
+            "message_hash": bytes_to_decimal_string(message_hash),
+            "commitment": bytes_to_decimal_string(commitment.value()),
+            "contract_hash": contract_hash.to_string(),
+            "salt": salt.to_string(),
+        });
 
-        // Public inputs
-        builder.push_input("commitment", bytes_to_bigint(commitment.value()));
-        builder.push_input("contract_hash", BigInt::from(contract_hash));
-        builder.push_input("salt", BigInt::from(salt));
-
-        let (proof, public_inputs, vk_bytes) = generate_proof(&artifacts, builder)?;
+        let wtns_bytes = generate_cpp_witness(&artifacts.cpp_witness_bin, &input)?;
+        let (proof, public_inputs, vk_bytes) = prove_with_wtns(&artifacts, wtns_bytes)?;
 
         // Public output [0] = nullifier (circuit output)
         let nullifier_str = public_inputs.first()
@@ -321,17 +264,16 @@ impl Prover {
         message_hash: &[u8],
     ) -> Result<ZkProof, ProverError> {
         let artifacts = self.loader.load(PredicateOp::HolderBinding)?;
-        let mut builder = create_builder(&artifacts)?;
 
-        // Private inputs
-        builder.push_input("claim_value", BigInt::from(claim_value));
-        builder.push_input("sd_array_hash", bytes_to_bigint(sd_array_hash));
-        builder.push_input("message_hash", bytes_to_bigint(message_hash));
+        let input = serde_json::json!({
+            "claim_value": claim_value.to_string(),
+            "sd_array_hash": bytes_to_decimal_string(sd_array_hash),
+            "message_hash": bytes_to_decimal_string(message_hash),
+            "commitment": bytes_to_decimal_string(commitment.value()),
+        });
 
-        // Public input
-        builder.push_input("commitment", bytes_to_bigint(commitment.value()));
-
-        let (proof, public_inputs, vk_bytes) = generate_proof(&artifacts, builder)?;
+        let wtns_bytes = generate_cpp_witness(&artifacts.cpp_witness_bin, &input)?;
+        let (proof, public_inputs, vk_bytes) = prove_with_wtns(&artifacts, wtns_bytes)?;
 
         // Public outputs order: [0] = binding_hash, [1] = commitment
         let binding_hash_bytes = public_inputs.first().cloned().unwrap_or_default();
@@ -351,114 +293,69 @@ impl Prover {
 // Internal helpers
 // ---------------------------------------------------------------
 
-/// Create a `CircomBuilder` from circuit artifacts (loads WASM + R1CS).
-fn create_builder(artifacts: &CircuitArtifacts) -> Result<CircomBuilder<Fr>, ProverError> {
-    let cfg = CircomConfig::<Fr>::new(
-        &artifacts.wasm_path,
-        &artifacts.r1cs_path,
-    )
-    .map_err(|e| ProverError::ProvingFailed(format!("failed to load circuit config: {e}")))?;
-
-    Ok(CircomBuilder::new(cfg))
-}
-
-/// Push the standard commitment-chain private/public inputs shared by all Stage 2 circuits.
+/// Build the standard commitment-chain JSON inputs shared by all Stage 2 circuits.
 ///
 /// Private: claim_value, sd_array_hash, message_hash
 /// Public: commitment
-fn push_commitment_inputs(
-    builder: &mut CircomBuilder<Fr>,
+fn build_commitment_json(
     claim_value: u64,
     sd_array_hash: &[u8],
     message_hash: &[u8],
     commitment: &EcdsaCommitment,
-) {
-    // Private inputs (order matches circom signal declaration order)
-    builder.push_input("claim_value", BigInt::from(claim_value));
-    builder.push_input("sd_array_hash", bytes_to_bigint(sd_array_hash));
-    builder.push_input("message_hash", bytes_to_bigint(message_hash));
-
-    // Public input
-    builder.push_input("commitment", bytes_to_bigint(commitment.value()));
+) -> serde_json::Map<String, serde_json::Value> {
+    let mut map = serde_json::Map::new();
+    map.insert("claim_value".into(), serde_json::json!(claim_value.to_string()));
+    map.insert("sd_array_hash".into(), serde_json::json!(bytes_to_decimal_string(sd_array_hash)));
+    map.insert("message_hash".into(), serde_json::json!(bytes_to_decimal_string(message_hash)));
+    map.insert("commitment".into(), serde_json::json!(bytes_to_decimal_string(commitment.value())));
+    map
 }
 
-/// Convert bytes to a BigInt for use as a circuit input.
+/// Convert bytes to a decimal string for use as a circuit input.
 /// If the bytes are a valid UTF-8 decimal string (from rapidsnark public signals),
 /// parse as decimal. Otherwise treat as big-endian binary.
-fn bytes_to_bigint(bytes: &[u8]) -> BigInt {
+fn bytes_to_decimal_string(bytes: &[u8]) -> String {
     if let Ok(s) = std::str::from_utf8(bytes) {
-        if let Ok(n) = s.parse::<BigInt>() {
-            return n;
+        if s.parse::<num_bigint::BigInt>().is_ok() {
+            return s.to_string();
         }
     }
-    BigInt::from_signed_bytes_be(bytes)
+    num_bigint::BigInt::from_signed_bytes_be(bytes).to_string()
 }
 
-/// Convert witness field elements (from ark-circom) to .wtns binary format
-/// compatible with rapidsnark.
+/// Generate witness using native C++ binary.
 ///
-/// The .wtns format is:
-/// - 4 bytes magic: "wtns"
-/// - 4 bytes version: 2 (little-endian u32)
-/// - 4 bytes num_sections: 2 (little-endian u32)
-/// - Section 1 (field info):
-///   - 4 bytes section_id: 1 (little-endian u32)
-///   - 8 bytes section_size (little-endian u64)
-///   - 4 bytes field_size: 32 (little-endian u32)
-///   - 32 bytes prime (bn254 prime, little-endian)
-///   - 4 bytes num_witness (little-endian u32)
-/// - Section 2 (witness values):
-///   - 4 bytes section_id: 2 (little-endian u32)
-///   - 8 bytes section_size (little-endian u64)
-///   - witness values, each 32 bytes (little-endian)
-fn witness_to_wtns(witness: &[Fr]) -> Vec<u8> {
-    use ark_serialize::CanonicalSerialize;
+/// The C++ witness generator is compiled from Circom's `--c` output.
+/// Usage: ./<circuit> <input.json> <witness.wtns>
+fn generate_cpp_witness(
+    cpp_bin: &Path,
+    input_json: &serde_json::Value,
+) -> Result<Vec<u8>, ProverError> {
+    let tmp_dir = tempfile::tempdir()
+        .map_err(|e| ProverError::WitnessGenFailed(format!("failed to create temp dir: {e}")))?;
+    let input_path = tmp_dir.path().join("input.json");
+    let output_path = tmp_dir.path().join("witness.wtns");
 
-    let field_size: u32 = 32;
-    let num_witness = witness.len() as u32;
+    std::fs::write(&input_path, input_json.to_string())
+        .map_err(|e| ProverError::WitnessGenFailed(format!("failed to write input.json: {e}")))?;
 
-    // BN254 prime in little-endian bytes
-    let prime: [u8; 32] = [
-        0x01, 0x00, 0x00, 0xf0, 0x93, 0xf5, 0xe1, 0x43,
-        0x91, 0x70, 0xb9, 0x79, 0x48, 0xe8, 0x33, 0x28,
-        0x5d, 0x58, 0x81, 0x81, 0xb6, 0x45, 0x50, 0xb8,
-        0x29, 0xa0, 0x31, 0xe1, 0x72, 0x4e, 0x64, 0x30,
-    ];
+    let result = Command::new(cpp_bin)
+        .arg(&input_path)
+        .arg(&output_path)
+        .output()
+        .map_err(|e| ProverError::WitnessGenFailed(format!("failed to run C++ witness generator: {e}")))?;
 
-    let section1_size: u64 = (4 + 32 + 4) as u64; // field_size + prime + num_witness
-    let section2_size: u64 = (num_witness as u64) * (field_size as u64);
-
-    let total_size = 4 + 4 + 4 // magic + version + num_sections
-        + 4 + 8 + section1_size as usize // section 1 header + data
-        + 4 + 8 + section2_size as usize; // section 2 header + data
-
-    let mut buf = Vec::with_capacity(total_size);
-
-    // Header
-    buf.extend_from_slice(b"wtns");
-    buf.extend_from_slice(&2u32.to_le_bytes()); // version
-    buf.extend_from_slice(&2u32.to_le_bytes()); // num_sections
-
-    // Section 1: field info
-    buf.extend_from_slice(&1u32.to_le_bytes()); // section_id
-    buf.extend_from_slice(&section1_size.to_le_bytes()); // section_size
-    buf.extend_from_slice(&field_size.to_le_bytes()); // field_size
-    buf.extend_from_slice(&prime); // prime
-    buf.extend_from_slice(&num_witness.to_le_bytes()); // num_witness
-
-    // Section 2: witness values
-    buf.extend_from_slice(&2u32.to_le_bytes()); // section_id
-    buf.extend_from_slice(&section2_size.to_le_bytes()); // section_size
-
-    for w in witness {
-        let mut elem_bytes = Vec::with_capacity(32);
-        w.serialize_compressed(&mut elem_bytes)
-            .expect("field element serialization should not fail");
-        // ark-serialize compressed for Fr is 32 bytes little-endian
-        buf.extend_from_slice(&elem_bytes);
+    if !result.status.success() {
+        let stderr = String::from_utf8_lossy(&result.stderr);
+        return Err(ProverError::WitnessGenFailed(format!(
+            "C++ witness generation failed (exit {}): {}",
+            result.status.code().unwrap_or(-1),
+            stderr.lines().last().unwrap_or("unknown error")
+        )));
     }
 
-    buf
+    std::fs::read(&output_path)
+        .map_err(|e| ProverError::WitnessGenFailed(format!("failed to read witness output: {e}")))
 }
 
 /// Run rapidsnark Groth16 prover on pre-computed witness bytes.
@@ -493,64 +390,8 @@ fn prove_with_wtns(
     Ok((proof_json_bytes, pub_inputs_bytes, vk_json_bytes))
 }
 
-/// Generate a Groth16 proof using WASM witness generation (ark-circom) + rapidsnark.
-///
-/// Used for predicate circuits (fast, <1s witness generation).
-fn generate_proof(
-    artifacts: &CircuitArtifacts,
-    builder: CircomBuilder<Fr>,
-) -> Result<(Vec<u8>, Vec<Vec<u8>>, Vec<u8>), ProverError> {
-    let circom = builder
-        .build()
-        .map_err(|e| ProverError::ProvingFailed(format!("witness generation failed: {e}")))?;
-
-    let witness = circom
-        .witness
-        .ok_or_else(|| ProverError::ProvingFailed("no witness generated".into()))?;
-
-    let wtns_bytes = witness_to_wtns(&witness);
-    prove_with_wtns(artifacts, wtns_bytes)
-}
-
-/// Generate witness using native C++ binary — much faster than WASM for ECDSA.
-///
-/// The C++ witness generator is compiled from Circom's `--c` output.
-/// Usage: ./ecdsa_verify <input.json> <witness.wtns>
-fn generate_cpp_witness(
-    cpp_bin: &Path,
-    input: &SignedProofInput,
-) -> Result<Vec<u8>, ProverError> {
-    let input_json = build_ecdsa_input_json(input);
-
-    let tmp_dir = tempfile::tempdir()
-        .map_err(|e| ProverError::ProvingFailed(format!("failed to create temp dir: {e}")))?;
-    let input_path = tmp_dir.path().join("input.json");
-    let output_path = tmp_dir.path().join("witness.wtns");
-
-    std::fs::write(&input_path, &input_json)
-        .map_err(|e| ProverError::ProvingFailed(format!("failed to write input.json: {e}")))?;
-
-    let result = Command::new(cpp_bin)
-        .arg(&input_path)
-        .arg(&output_path)
-        .output()
-        .map_err(|e| ProverError::ProvingFailed(format!("failed to run C++ witness generator: {e}")))?;
-
-    if !result.status.success() {
-        let stderr = String::from_utf8_lossy(&result.stderr);
-        return Err(ProverError::ProvingFailed(format!(
-            "C++ witness generation failed (exit {}): {}",
-            result.status.code().unwrap_or(-1),
-            stderr.lines().last().unwrap_or("unknown error")
-        )));
-    }
-
-    std::fs::read(&output_path)
-        .map_err(|e| ProverError::ProvingFailed(format!("failed to read witness output: {e}")))
-}
-
-/// Build the input JSON for the ECDSA circuit (used by C++ witness gen and browser proving).
-pub fn build_ecdsa_input_json(input: &SignedProofInput) -> String {
+/// Build the input JSON value for the ECDSA circuit.
+fn build_ecdsa_input_value(input: &SignedProofInput) -> serde_json::Value {
     let r_limbs = SignedProofInput::to_43bit_limbs(&input.signature_r);
     let s_limbs = SignedProofInput::to_43bit_limbs(&input.signature_s);
     let msg_limbs = SignedProofInput::to_43bit_limbs(&input.message_hash);
@@ -561,7 +402,7 @@ pub fn build_ecdsa_input_json(input: &SignedProofInput) -> String {
         limbs.iter().map(|l| l.to_string()).collect()
     };
 
-    let json = serde_json::json!({
+    serde_json::json!({
         "signature_r": to_strings(&r_limbs),
         "signature_s": to_strings(&s_limbs),
         "message_hash": to_strings(&msg_limbs),
@@ -570,9 +411,12 @@ pub fn build_ecdsa_input_json(input: &SignedProofInput) -> String {
         "claim_value": input.claim_value.to_string(),
         "disclosure_hash": input.disclosure_hash.to_string(),
         "sd_array": input.sd_array.iter().map(|v| v.to_string()).collect::<Vec<_>>(),
-    });
+    })
+}
 
-    json.to_string()
+/// Build the input JSON for the ECDSA circuit (used by C++ witness gen and browser proving).
+pub fn build_ecdsa_input_json(input: &SignedProofInput) -> String {
+    build_ecdsa_input_value(input).to_string()
 }
 
 #[cfg(test)]
@@ -664,28 +508,6 @@ mod tests {
         };
         let result = prover.prove_ecdsa(&input);
         assert!(result.is_err());
-    }
-
-    #[test]
-    fn bytes_to_bigint_roundtrip() {
-        let bytes = [0u8, 0, 0, 0, 0, 0, 0, 42];
-        let bi = bytes_to_bigint(&bytes);
-        assert_eq!(bi, BigInt::from(42));
-    }
-
-    #[test]
-    fn witness_to_wtns_header_correct() {
-        // Create a minimal witness with one element (value 0)
-        use ark_bn254::Fr;
-        let witness = vec![Fr::from(0u64)];
-        let wtns = witness_to_wtns(&witness);
-
-        // Check magic
-        assert_eq!(&wtns[0..4], b"wtns");
-        // Check version = 2
-        assert_eq!(u32::from_le_bytes(wtns[4..8].try_into().unwrap()), 2);
-        // Check num_sections = 2
-        assert_eq!(u32::from_le_bytes(wtns[8..12].try_into().unwrap()), 2);
     }
 
     /// Integration test: prove + verify a GTE predicate.
