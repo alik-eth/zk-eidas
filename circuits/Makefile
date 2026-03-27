@@ -1,5 +1,4 @@
 CIRCOM ?= circom
-CIRCOM_CVM ?= circom
 SNARKJS ?= snarkjs
 NODE ?= node
 BUILD_DIR := build
@@ -47,7 +46,8 @@ define STAGE2_RULE
 $(BUILD_DIR)/$(1)/$(1).zkey: $(if $(filter $(PREDICATE_CIRCUITS),$(1)),predicates/$(1).circom,$(1)/$(1).circom) $(PTAU)
 	@echo "==> Building $(1)..."
 	@mkdir -p $(BUILD_DIR)/$(1)
-	$(CIRCOM) $$< --r1cs --wasm --output $(BUILD_DIR)/$(1)/ -l node_modules
+	$(CIRCOM) $$< --r1cs --wasm --c --output $(BUILD_DIR)/$(1)/ -l node_modules
+	make -C $(BUILD_DIR)/$(1)/$(1)_cpp/
 	$(SNARKJS) groth16 setup $(BUILD_DIR)/$(1)/$(1).r1cs $(PTAU) $(BUILD_DIR)/$(1)/$(1)_0.zkey
 	$(SNARKJS) zkey contribute $(BUILD_DIR)/$(1)/$(1)_0.zkey $(BUILD_DIR)/$(1)/$(1).zkey --name="zk-eidas" -e="zk-eidas-dev-entropy"
 	$(SNARKJS) zkey export verificationkey $(BUILD_DIR)/$(1)/$(1).zkey $(BUILD_DIR)/$(1)/vk.json
@@ -62,21 +62,13 @@ predicates: $(foreach c,$(PREDICATE_CIRCUITS),$(BUILD_DIR)/$(c)/$(c).zkey)
 specials: $(foreach c,$(SPECIAL_CIRCUITS),$(BUILD_DIR)/$(c)/$(c).zkey)
 
 # ECDSA circuit (needs pot22 + extra memory for Node.js)
-# Also generates CVM file for fast witness generation via circom-witnesscalc
 ecdsa: $(BUILD_DIR)/$(ECDSA_CIRCUIT)/$(ECDSA_CIRCUIT).zkey
 
 $(BUILD_DIR)/$(ECDSA_CIRCUIT)/$(ECDSA_CIRCUIT).zkey: $(ECDSA_CIRCUIT)/$(ECDSA_CIRCUIT).circom $(PTAU_ECDSA)
 	@echo "==> Building ECDSA circuit (this takes ~15 minutes and needs 16GB RAM)..."
 	@mkdir -p $(BUILD_DIR)/$(ECDSA_CIRCUIT)
-	$(CIRCOM) $< --r1cs --wasm --output $(BUILD_DIR)/$(ECDSA_CIRCUIT)/ -l node_modules
-	@# If circom_cvm is available, also generate CVM witness file for faster proving
-	@if command -v $(CIRCOM_CVM) >/dev/null 2>&1 && [ "$(CIRCOM_CVM)" != "$(CIRCOM)" ]; then \
-		echo "==> Generating CVM witness file..."; \
-		$(CIRCOM_CVM) $< --cvm --output $(BUILD_DIR)/$(ECDSA_CIRCUIT)/ -l node_modules; \
-		mkdir -p $(BUILD_DIR)/ecdsa_verify_cvm; \
-		mv $(BUILD_DIR)/$(ECDSA_CIRCUIT)/$(ECDSA_CIRCUIT)_cvm/$(ECDSA_CIRCUIT).cvm $(BUILD_DIR)/ecdsa_verify_cvm/; \
-		rm -rf $(BUILD_DIR)/$(ECDSA_CIRCUIT)/$(ECDSA_CIRCUIT)_cvm; \
-	fi
+	$(CIRCOM) $< --r1cs --wasm --c --output $(BUILD_DIR)/$(ECDSA_CIRCUIT)/ -l node_modules
+	make -C $(BUILD_DIR)/$(ECDSA_CIRCUIT)/$(ECDSA_CIRCUIT)_cpp/
 	$(NODE) $(NODE_MEM) $$(which $(SNARKJS)) groth16 setup $(BUILD_DIR)/$(ECDSA_CIRCUIT)/$(ECDSA_CIRCUIT).r1cs $(PTAU_ECDSA) $(BUILD_DIR)/$(ECDSA_CIRCUIT)/$(ECDSA_CIRCUIT)_0.zkey
 	$(NODE) $(NODE_MEM) $$(which $(SNARKJS)) zkey contribute $(BUILD_DIR)/$(ECDSA_CIRCUIT)/$(ECDSA_CIRCUIT)_0.zkey $(BUILD_DIR)/$(ECDSA_CIRCUIT)/$(ECDSA_CIRCUIT).zkey --name="zk-eidas" -e="zk-eidas-dev-entropy"
 	$(SNARKJS) zkey export verificationkey $(BUILD_DIR)/$(ECDSA_CIRCUIT)/$(ECDSA_CIRCUIT).zkey $(BUILD_DIR)/$(ECDSA_CIRCUIT)/vk.json
