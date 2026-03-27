@@ -1,8 +1,9 @@
-# Stage 1: Build Rust API
+# Stage 1: Build Rust API + WASM module
 FROM ubuntu:24.04 AS rust-builder
 RUN apt-get update && apt-get install -y curl build-essential pkg-config libssl-dev clang git libgmp-dev nasm unzip && rm -rf /var/lib/apt/lists/*
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain 1.93.0
 ENV PATH="/root/.cargo/bin:${PATH}"
+RUN rustup target add wasm32-unknown-unknown && cargo install wasm-pack
 WORKDIR /app
 
 # Layer 1: cache dependencies (only rebuilds when Cargo.toml/Cargo.lock change)
@@ -24,6 +25,9 @@ RUN touch demo/api/src/main.rs && \
            target/release/deps/zk_eidas_demo_api-* && \
     cargo build --release -p zk-eidas-demo-api --bin zk-eidas-demo-api --bin pre-warm
 
+# Layer 3: build WASM module for on-device browser proving
+RUN wasm-pack build crates/zk-eidas-wasm --target web --out-dir ../../demo/web/pkg
+
 # Stage 2: Build frontend
 FROM node:22-slim AS web-builder
 WORKDIR /app/demo/web
@@ -33,6 +37,9 @@ COPY packages/verifier-sdk/ /app/packages/verifier-sdk/
 RUN cd /app/packages/verifier-sdk && npm install && npm run build
 RUN npm install
 COPY demo/web/ ./
+# Copy real WASM module and replace stub with re-export for on-device browser proving
+COPY --from=rust-builder /app/demo/web/pkg/ ./pkg/
+RUN echo 'export { default } from "./zk_eidas_wasm.js"; export * from "./zk_eidas_wasm.js";' > ./pkg/zk-eidas-wasm.js
 RUN npm run build
 
 # Stage 3: Compile C++ witness generator for ECDSA circuit (native speed)

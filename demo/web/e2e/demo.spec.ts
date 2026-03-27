@@ -27,10 +27,11 @@ async function selectOnlyPredicates(page: Page, labels: string[]) {
 }
 
 async function generateProofAndWait(page: Page) {
-  await page.getByRole('button', { name: /Згенерувати доказ|Generate/ }).click()
+  // Match both server ("Згенерувати доказ/Generate") and on-device ("Довести у браузері/Prove in browser") buttons
+  await page.getByRole('button', { name: /Згенерувати доказ|Generate|Довести у браузері|Prove in browser/ }).click()
   await expect(
     page.getByText(/Доказ успішно згенеровано|Proof generated/).first()
-  ).toBeVisible({ timeout: 180_000 })
+  ).toBeVisible({ timeout: 600_000 })
 }
 
 // ---------------------------------------------------------------------------
