@@ -91,6 +91,31 @@ test.describe('Demo — E2E Proof', () => {
 })
 
 // ---------------------------------------------------------------------------
+// Demo — On-Device Proof (browser-side proving via snarkjs)
+// ---------------------------------------------------------------------------
+
+test.describe('Demo — On-Device Proof', () => {
+  // Skip by default: ECDSA proving takes ~3 min in the browser.
+  // Run manually: E2E_ON_DEVICE=1 npx playwright test --grep "On-Device"
+  test.skip(() => !process.env.E2E_ON_DEVICE, 'slow: set E2E_ON_DEVICE=1 to run')
+
+  test('PID: issue → on-device prove age >= 18 → verified', async ({ page }) => {
+    test.setTimeout(600_000) // 10 min — ECDSA circuit is heavy in browser
+    await page.goto('/demo')
+    await issueDefaultPid(page)
+
+    // Toggle to "On Device" proving
+    await page.getByRole('button', { name: /On Device/ }).click()
+
+    await selectOnlyPredicates(page, ['щонайменше 18|at least 18'])
+    await generateProofAndWait(page)
+    await expect(page.getByText(/birth_date|age_over_18|Дата народж|Вік понад 18/).first()).toBeVisible()
+    await expect(page.getByText('██████').first()).toBeVisible()
+    await expect(page.getByRole('link', { name: /Зберегти доказ|Save proof/ })).toBeVisible()
+  })
+})
+
+// ---------------------------------------------------------------------------
 // Demo — Print (QR codes)
 // ---------------------------------------------------------------------------
 
