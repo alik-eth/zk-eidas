@@ -2037,7 +2037,6 @@ mod tests {
     // === Prove + Verify ===
 
     #[tokio::test]
-    #[serial]
     async fn prove_and_verify_round_trip() {
         let f = setup().await;
         let client = reqwest::Client::new();
@@ -2185,7 +2184,6 @@ mod tests {
     // === Compound Prove + Verify + Export ===
 
     #[tokio::test]
-    #[serial]
     async fn compound_prove_and_verify() {
         let f = setup().await;
         let client = reqwest::Client::new();
@@ -2245,7 +2243,6 @@ mod tests {
     // === Holder Binding with different claim names ===
 
     #[tokio::test]
-    #[serial]
     async fn holder_binding_different_claim_names() {
         let f = setup().await;
         let client = reqwest::Client::new();
@@ -2357,7 +2354,6 @@ mod tests {
     // === Proof Cache ===
 
     #[tokio::test]
-    #[serial]
     async fn compound_prove_returns_cached_false_without_cache() {
         let f = setup().await;
         let client = reqwest::Client::new();
@@ -2383,7 +2379,6 @@ mod tests {
     }
 
     #[tokio::test]
-    #[serial]
     async fn compound_prove_skip_cache_works() {
         let f = setup().await;
         let client = reqwest::Client::new();
@@ -2657,7 +2652,6 @@ mod tests {
     // === contract-prove endpoint tests ===
 
     #[tokio::test]
-    #[serial]
     async fn contract_prove_returns_nullifier_and_proof() {
         let (url, cred) = issue_test_credential(serde_json::json!({
             "given_name": "Test", "birth_date": "1998-05-14", "document_number": "UA-TEST-001"
@@ -2694,7 +2688,6 @@ mod tests {
     }
 
     #[tokio::test]
-    #[serial]
     async fn contract_prove_different_salt_different_nullifier() {
         let (url, cred) = issue_test_credential(serde_json::json!({
             "given_name": "Test", "birth_date": "1998-05-14", "document_number": "UA-TEST-002"
@@ -2725,7 +2718,6 @@ mod tests {
     }
 
     #[tokio::test]
-    #[serial]
     async fn contract_prove_no_predicates_returns_error() {
         let (url, cred) = issue_test_credential(serde_json::json!({
             "given_name": "Test", "birth_date": "1998-05-14", "document_number": "UA-TEST-003"
@@ -2743,7 +2735,6 @@ mod tests {
     }
 
     #[tokio::test]
-    #[serial]
     async fn contract_prove_same_terms_same_hash() {
         let (url, cred) = issue_test_credential(serde_json::json!({
             "given_name": "Test", "birth_date": "1998-05-14", "document_number": "UA-HASH-001"
@@ -2776,7 +2767,6 @@ mod tests {
     }
 
     #[tokio::test]
-    #[serial]
     async fn contract_prove_with_nullifier_field_and_role() {
         let (url, cred) = issue_test_credential(serde_json::json!({
             "given_name": "Test", "birth_date": "1998-05-14", "document_number": "UA-ROLE-001"
@@ -2798,7 +2788,6 @@ mod tests {
     }
 
     #[tokio::test]
-    #[serial]
     async fn contract_prove_defaults_role_to_holder() {
         let (url, cred) = issue_test_credential(serde_json::json!({
             "given_name": "Test", "birth_date": "1998-05-14", "document_number": "UA-ROLE-002"

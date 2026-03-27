@@ -80,7 +80,8 @@ impl Verifier {
                 "failed to serialize public inputs: {e}"
             )))?;
 
-        // 5. Verify with rapidsnark
+        // 5. Verify with rapidsnark (serialized: ffiasm Engine is not thread-safe)
+        let _guard = zk_eidas_prover::RAPIDSNARK_LOCK.lock().unwrap();
         let valid = groth16_verify_wrapper(proof_json, &inputs_json, &vk_json)
             .map_err(|e| VerifierError::VerificationFailed(format!(
                 "rapidsnark verify failed: {e}"

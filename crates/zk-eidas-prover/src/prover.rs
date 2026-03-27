@@ -394,13 +394,6 @@ fn bytes_to_bigint(bytes: &[u8]) -> BigInt {
     BigInt::from_signed_bytes_be(bytes)
 }
 
-/// Convert a u64 to a 32-byte big-endian array (for ZkProof metadata).
-fn u64_to_32bytes(val: u64) -> [u8; 32] {
-    let mut result = [0u8; 32];
-    result[24..].copy_from_slice(&val.to_be_bytes());
-    result
-}
-
 /// Convert witness field elements (from ark-circom) to .wtns binary format
 /// compatible with rapidsnark.
 ///
@@ -476,6 +469,7 @@ fn prove_with_wtns(
     wtns_bytes: Vec<u8>,
 ) -> Result<(Vec<u8>, Vec<Vec<u8>>, Vec<u8>), ProverError> {
     let zkey_path = artifacts.zkey_path.to_string_lossy().to_string();
+    let _guard = crate::RAPIDSNARK_LOCK.lock().unwrap();
     let proof_result = groth16_prover_zkey_file_wrapper(&zkey_path, wtns_bytes)
         .map_err(|e| ProverError::ProvingFailed(format!("rapidsnark prove failed: {e}")))?;
 
@@ -677,13 +671,6 @@ mod tests {
         let bytes = [0u8, 0, 0, 0, 0, 0, 0, 42];
         let bi = bytes_to_bigint(&bytes);
         assert_eq!(bi, BigInt::from(42));
-    }
-
-    #[test]
-    fn u64_to_32bytes_correct() {
-        let result = u64_to_32bytes(42);
-        assert_eq!(result[31], 42);
-        assert_eq!(result[..24], [0u8; 24]);
     }
 
     #[test]
