@@ -186,6 +186,33 @@ test.describe('Contracts — E2E', () => {
 })
 
 // ---------------------------------------------------------------------------
+// Contracts — On-Device E2E
+// ---------------------------------------------------------------------------
+
+test.describe('Contracts — On-Device E2E', () => {
+  test.skip(() => !process.env.E2E_ON_DEVICE, 'slow: set E2E_ON_DEVICE=1 to run')
+
+  test('Age Verification: on-device prove → document', async ({ page }) => {
+    test.setTimeout(600_000)
+    await page.goto('/contracts')
+    await page.waitForTimeout(2000)
+    await page.locator('button', { hasText: /Перевірка віку/ }).first().click()
+    await expect(page.getByRole('button', { name: /Почати спочатку|Start over/ })).toBeVisible({ timeout: 15_000 })
+
+    const issueBtn = page.getByRole('button', { name: /Видати посвідчення|Issue/ })
+    await issueBtn.scrollIntoViewIfNeeded()
+    await issueBtn.click()
+    await expect(page.getByText(/Доведені предикати|Proven predicates/i).first()).toBeVisible({ timeout: 30_000 })
+
+    // Toggle to On Device
+    await page.getByRole('button', { name: /On Device/ }).click()
+
+    await generateProofAndWait(page)
+    await expect(page.getByRole('button', { name: /Друкувати|Print/i })).toBeVisible({ timeout: 600_000 })
+  })
+})
+
+// ---------------------------------------------------------------------------
 // i18n
 // ---------------------------------------------------------------------------
 
