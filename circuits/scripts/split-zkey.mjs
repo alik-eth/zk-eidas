@@ -3,11 +3,11 @@
 //
 // Usage: node scripts/split-zkey.mjs <input.zkey> [output-base-name]
 // Example: node scripts/split-zkey.mjs build/ecdsa_verify/ecdsa_verify.zkey
-//   → produces ecdsa_verify.zkeya, ecdsa_verify.zkeyb, ... ecdsa_verify.zkeyj
+//   → produces ecdsa_verify.zkeyb, ecdsa_verify.zkeyc, ... ecdsa_verify.zkeyk
+//   (section IDs 1-10 map to suffixes b-k via sectionName)
 
 import * as binFileUtils from "@iden3/binfileutils";
 import { createBinFile } from "@iden3/binfileutils";
-import fs from "fs";
 
 function sectionName(sectionId) {
   return String.fromCharCode("a".charCodeAt(0) + sectionId);
