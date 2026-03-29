@@ -1,6 +1,7 @@
-// Web Worker for snarkjs Groth16 proving
-// Runs in a separate thread so the UI stays responsive
-importScripts("https://cdn.jsdelivr.net/npm/snarkjs@0.7.6/build/snarkjs.min.js");
+// Web Worker for snarkjs Groth16 proving (chunked fork)
+// Uses sampritipanda/snarkjs fork that reads zkey sections from localforage (IndexedDB).
+// Runs in a separate thread so the UI stays responsive.
+importScripts("/snarkjs-chunked.min.js");
 
 self.onmessage = async (e) => {
   const { type, circuitName, inputs, wasmUrl, zkeyUrl, vkUrl } = e.data;
@@ -14,8 +15,9 @@ self.onmessage = async (e) => {
     if (!wasmResp.ok) throw new Error(`Failed to fetch WASM: ${wasmResp.status}`);
     const wasmBuffer = new Uint8Array(await wasmResp.arrayBuffer());
 
-    // Pass zkey URL as string — snarkjs fetches it internally.
-    // This avoids holding both the fetch response AND the Uint8Array copy in memory.
+    // The chunked fork's groth16.fullProve reads zkey sections from localforage
+    // using the circuit name (e.g. "ecdsa_verify.zkey"). Section files must already
+    // be stored in localforage by the chunked-zkey-loader before this worker runs.
     self.postMessage({ type: "progress", detail: `Generating ${circuitName} proof...` });
     const proveStart = performance.now();
     const { proof, publicSignals } = await snarkjs.groth16.fullProve(
