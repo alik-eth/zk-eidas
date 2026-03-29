@@ -180,103 +180,82 @@ test.describe('Contracts', () => {
 // Contracts — E2E (Age Verification)
 // ---------------------------------------------------------------------------
 
-test.describe('Contracts — E2E', () => {
-  async function contractFlow(page: Page, templatePattern: RegExp, credentialCount = 1) {
-    await page.goto('/contracts')
-    await page.waitForTimeout(2000)
-    await page.locator('button', { hasText: templatePattern }).first().click()
-    await expect(page.getByRole('button', { name: /Почати спочатку|Start over/ })).toBeVisible({ timeout: 15_000 })
-    for (let i = 0; i < credentialCount; i++) {
-      const issueBtn = page.getByRole('button', { name: /Видати посвідчення|Issue/ })
-      await issueBtn.scrollIntoViewIfNeeded()
-      await issueBtn.click()
-      if (i < credentialCount - 1) {
-        // Wait for next credential form to appear
-        await page.waitForTimeout(1000)
-      }
-    }
-    await expect(page.getByText(/Доведені предикати|Proven predicates/i).first()).toBeVisible({ timeout: 30_000 })
-  }
-
-  test('Age Verification: template → issue → prove → document', async ({ page }) => {
-    await contractFlow(page, /Перевірка віку/)
-    await page.getByRole('button', { name: /Згенерувати доказ|Generate proof/i }).click()
-    await expect(page.getByRole('button', { name: /Друкувати|Print/i })).toBeVisible({ timeout: 180_000 })
-  })
-
-  test('Student Transit: template → issue → prove → document', async ({ page }) => {
-    await contractFlow(page, /Студентський проїзний|Student Transit/)
-    await page.getByRole('button', { name: /Згенерувати доказ|Generate proof/i }).click()
-    await expect(page.getByRole('button', { name: /Друкувати|Print/i })).toBeVisible({ timeout: 180_000 })
-  })
-
-  test('Driver Employment: template → issue → prove → document', async ({ page }) => {
-    await contractFlow(page, /найму водія|Driver Employment/)
-    await page.getByRole('button', { name: /Згенерувати доказ|Generate proof/i }).click()
-    await expect(page.getByRole('button', { name: /Друкувати|Print/i })).toBeVisible({ timeout: 180_000 })
-  })
-
-  test('Vehicle Sale: template → issue 3 creds → prove → document', async ({ page }) => {
-    test.setTimeout(300_000)
-    await contractFlow(page, /купівлі-продажу|Vehicle Sale/, 3)
-    await page.getByRole('button', { name: /Згенерувати доказ|Generate proof/i }).click()
-    await expect(page.getByRole('button', { name: /Друкувати|Print/i })).toBeVisible({ timeout: 180_000 })
-  })
-})
-
 // ---------------------------------------------------------------------------
-// Contracts — On-Device E2E
+// Contracts — E2E (all 4 templates, server + on-device modes with benchmarks)
 // ---------------------------------------------------------------------------
 
-test.describe('Contracts — On-Device E2E', () => {
-  test.skip(() => !process.env.E2E_ON_DEVICE, 'slow: set E2E_ON_DEVICE=1 to run')
+const ON_DEVICE = !!process.env.E2E_ON_DEVICE
+const CONTRACT_TEMPLATES = [
+  { name: 'Age Verification', pattern: /Перевірка віку/, creds: 1 },
+  { name: 'Student Transit', pattern: /Студентський проїзний|Student Transit/, creds: 1 },
+  { name: 'Driver Employment', pattern: /найму водія|Driver Employment/, creds: 1 },
+  { name: 'Vehicle Sale', pattern: /купівлі-продажу|Vehicle Sale/, creds: 3 },
+]
 
-  async function contractOnDeviceFlow(page: Page, templatePattern: RegExp, credentialCount = 1) {
-    enableConsoleLogs(page)
-    await page.goto('/contracts')
-    await page.waitForTimeout(2000)
-    await page.locator('button', { hasText: templatePattern }).first().click()
-    await expect(page.getByRole('button', { name: /Почати спочатку|Start over/ })).toBeVisible({ timeout: 15_000 })
-    for (let i = 0; i < credentialCount; i++) {
-      const issueBtn = page.getByRole('button', { name: /Видати посвідчення|Issue/ })
-      await issueBtn.scrollIntoViewIfNeeded()
-      await issueBtn.click()
-      if (i < credentialCount - 1) {
-        await page.waitForTimeout(1000)
-      }
+for (const tpl of CONTRACT_TEMPLATES) {
+  const mode = ON_DEVICE ? 'on-device' : 'server'
+
+  test.describe(`Contract: ${tpl.name} (${mode})`, () => {
+    if (ON_DEVICE) {
+      test.skip(() => !process.env.E2E_ON_DEVICE, 'slow: set E2E_ON_DEVICE=1 to run')
     }
-    await expect(page.getByText(/Доведені предикати|Proven predicates/i).first()).toBeVisible({ timeout: 30_000 })
-    await page.getByRole('button', { name: /On Device/ }).click()
-  }
 
-  test('Age Verification: on-device prove → document', async ({ page }) => {
-    test.setTimeout(600_000)
-    await contractOnDeviceFlow(page, /Перевірка віку/)
-    await generateProofAndWait(page)
-    await expect(page.getByRole('button', { name: /Друкувати|Print/i })).toBeVisible({ timeout: 600_000 })
-  })
+    test(`${tpl.name}: issue ${tpl.creds} cred(s) → prove → document`, async ({ page }) => {
+      test.setTimeout(ON_DEVICE ? 600_000 : 300_000)
+      if (ON_DEVICE) enableConsoleLogs(page)
 
-  test('Student Transit: on-device prove → document', async ({ page }) => {
-    test.setTimeout(600_000)
-    await contractOnDeviceFlow(page, /Студентський проїзний|Student Transit/)
-    await generateProofAndWait(page)
-    await expect(page.getByRole('button', { name: /Друкувати|Print/i })).toBeVisible({ timeout: 600_000 })
-  })
+      // Collect benchmark timings from browser console
+      const timings: string[] = []
+      page.on('console', msg => {
+        const text = msg.text()
+        if (text.includes('Proof generated') || text.includes('Verification:')) {
+          timings.push(text)
+        }
+      })
 
-  test('Driver Employment: on-device prove → document', async ({ page }) => {
-    test.setTimeout(600_000)
-    await contractOnDeviceFlow(page, /найму водія|Driver Employment/)
-    await generateProofAndWait(page)
-    await expect(page.getByRole('button', { name: /Друкувати|Print/i })).toBeVisible({ timeout: 600_000 })
-  })
+      // 1. Select template
+      await page.goto('/contracts')
+      await page.waitForTimeout(2000)
+      await page.locator('button', { hasText: tpl.pattern }).first().click()
+      await expect(page.getByRole('button', { name: /Почати спочатку|Start over/ })).toBeVisible({ timeout: 15_000 })
 
-  test('Vehicle Sale: on-device prove 3 creds → document', async ({ page }) => {
-    test.setTimeout(600_000)
-    await contractOnDeviceFlow(page, /купівлі-продажу|Vehicle Sale/, 3)
-    await generateProofAndWait(page)
-    await expect(page.getByRole('button', { name: /Друкувати|Print/i })).toBeVisible({ timeout: 600_000 })
+      // 2. Issue credential(s)
+      const issueStart = Date.now()
+      for (let i = 0; i < tpl.creds; i++) {
+        const issueBtn = page.getByRole('button', { name: /Видати посвідчення|Issue/ })
+        await issueBtn.scrollIntoViewIfNeeded()
+        await issueBtn.click()
+        if (i < tpl.creds - 1) await page.waitForTimeout(1000)
+      }
+      await expect(page.getByText(/Доведені предикати|Proven predicates/i).first()).toBeVisible({ timeout: 30_000 })
+      const issueMs = Date.now() - issueStart
+
+      // 3. Toggle mode if on-device
+      if (ON_DEVICE) {
+        await page.getByRole('button', { name: /On Device/ }).click()
+      }
+
+      // 4. Prove
+      const proveStart = Date.now()
+      await generateProofAndWait(page)
+      const proveMs = Date.now() - proveStart
+
+      // 5. Verify document generated
+      await expect(page.getByRole('button', { name: /Друкувати|Print/i })).toBeVisible({ timeout: 600_000 })
+
+      // 6. Print benchmarks
+      const totalMs = issueMs + proveMs
+      console.log(`\n  ⏱  ${tpl.name} (${mode}) benchmarks:`)
+      console.log(`     Issuance:  ${(issueMs / 1000).toFixed(1)}s`)
+      console.log(`     Proving:   ${(proveMs / 1000).toFixed(1)}s`)
+      console.log(`     Total:     ${(totalMs / 1000).toFixed(1)}s`)
+      if (timings.length > 0) {
+        console.log(`     Details:`)
+        for (const t of timings) console.log(`       ${t.replace(/^\[worker\] /, '')}`)
+      }
+    })
   })
-})
+}
 
 // ---------------------------------------------------------------------------
 // i18n
