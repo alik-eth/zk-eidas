@@ -19,7 +19,7 @@ vi.mock('localforage', () => ({
 
 // Mock fetch
 const mockFetchResponses: Record<string, ArrayBuffer> = {}
-global.fetch = vi.fn((url: string) => {
+globalThis.fetch = vi.fn((url: string) => {
   const buf = mockFetchResponses[url]
   if (!buf) return Promise.resolve({ ok: false, status: 404 } as Response)
   return Promise.resolve({
@@ -78,7 +78,7 @@ describe('chunked-zkey-loader', () => {
         'ecdsa_verify',
         'https://cdn.example.com',
         SECTION_SUFFIXES,
-        (detail) => progress.push(detail),
+        (detail: string) => progress.push(detail),
       )
 
       for (const suffix of SECTION_SUFFIXES) {
@@ -98,7 +98,7 @@ describe('chunked-zkey-loader', () => {
         SECTION_SUFFIXES,
       )
 
-      expect(global.fetch).not.toHaveBeenCalled()
+      expect(globalThis.fetch).not.toHaveBeenCalled()
     })
 
     it('only downloads missing chunks', async () => {
@@ -115,8 +115,8 @@ describe('chunked-zkey-loader', () => {
         SECTION_SUFFIXES,
       )
 
-      expect(global.fetch).toHaveBeenCalledTimes(1)
-      expect(global.fetch).toHaveBeenCalledWith('https://cdn.example.com/ecdsa_verify.zkeye')
+      expect(globalThis.fetch).toHaveBeenCalledTimes(1)
+      expect(globalThis.fetch).toHaveBeenCalledWith('https://cdn.example.com/ecdsa_verify.zkeye')
     })
   })
 
