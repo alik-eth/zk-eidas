@@ -372,352 +372,265 @@ function CredentialShowcase() {
   );
 }
 
-/* === Capabilities Triptych — 3 animated cards === */
+/* === Section: The Unlinkability Gap === */
 
-/* ── Capabilities Triptych — animated cards ──────────────────────────── */
-// Durations: build-up phases, then hold, fade-out, relax
-const WASM_DURATIONS = [800, 600, 2000, 800, 600];
-const PAPER_DURATIONS = [1400, 1200, 1000, 2000, 800, 600];
-const CONTRACTS_DURATIONS = [1200, 1000, 800, 2000, 800, 600];
+const COMPARISON_DATA: { rowKey: string; sdjwt: boolean | "partial"; bbs: boolean; batch: boolean | "partial"; zk: boolean }[] = [
+  { rowKey: "problem.row1", sdjwt: true, bbs: false, batch: true, zk: true },
+  { rowKey: "problem.row2", sdjwt: true, bbs: false, batch: true, zk: true },
+  { rowKey: "problem.row3", sdjwt: false, bbs: true, batch: false, zk: true },
+  { rowKey: "problem.row4", sdjwt: true, bbs: true, batch: "partial", zk: true },
+  { rowKey: "problem.row5", sdjwt: false, bbs: false, batch: false, zk: true },
+  { rowKey: "problem.row6", sdjwt: true, bbs: false, batch: false, zk: true },
+];
 
-// Phase model: 0..N-3 = build-up phases (accumulative), N-2 = hold, N-1 = fade-out, then reset after relax
-function useCardPhase(durations: number[], startDelay: number, visible: boolean) {
-  const [phase, setPhase] = useState(-1);
-  const fadePhase = durations.length - 2; // fade-out phase index
-  const relaxDuration = durations[durations.length - 1]; // relax pause after fade
-
-  useEffect(() => {
-    if (!visible) return;
-    const timer = setTimeout(() => setPhase(0), startDelay);
-    return () => clearTimeout(timer);
-  }, [visible, startDelay]);
-
-  useEffect(() => {
-    if (phase < 0) return;
-    if (phase < durations.length - 1) {
-      // Advance to next phase after current duration
-      const timer = setTimeout(() => setPhase((p) => p + 1), durations[phase]);
-      return () => clearTimeout(timer);
-    }
-    // Last phase (relax): wait, then reset to 0
-    const timer = setTimeout(() => setPhase(0), relaxDuration);
-    return () => clearTimeout(timer);
-  }, [phase, durations, relaxDuration]);
-
-  return { phase, fadePhase };
-}
-
-/* Card 1 — Client-Side Verification
-   Story: proof bytes stream into the browser → device processes locally → instant verified
-   Phases: 0=proof stream, 1=device processing, 2=flash, 3=verified+timing, 4=hold */
-function WasmCard({ startDelay, visible }: { startDelay: number; visible: boolean }) {
-  const t = useT();
-  const { phase, fadePhase } = useCardPhase(WASM_DURATIONS, startDelay, visible);
-  const isFading = phase >= fadePhase;
-
+function CheckIcon() {
   return (
-    <div className="bg-slate-800/50 rounded-xl border border-slate-700/50 p-5 flex flex-col group hover:border-slate-600/80 transition-colors">
-      <div className="bg-slate-900/60 rounded-lg h-40 flex items-center justify-center mb-4 overflow-hidden relative">
-        {/* Subtle grid background */}
-        <div className="absolute inset-0 opacity-[0.03]" style={{
-          backgroundImage: 'linear-gradient(rgba(255,255,255,0.1) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.1) 1px, transparent 1px)',
-          backgroundSize: '12px 12px',
-        }} />
-
-        <div className="flex flex-col items-center gap-2 transition-opacity duration-700" style={{ opacity: isFading ? 0 : 1 }}>
-          {/* Phase 0: Phone appears */}
-          {phase >= 0 && (
-            <div className="flex items-center gap-3" style={{ animation: 'fadeIn 0.4s ease-out' }}>
-              {/* Phone outline */}
-              <div className="w-12 h-20 rounded-lg border-2 border-slate-500 bg-slate-800 flex flex-col items-center justify-center relative overflow-hidden">
-                {/* Notch */}
-                <div className="absolute top-1 w-5 h-1 rounded-full bg-slate-600" />
-                {/* Screen content */}
-                <div className="flex flex-col items-center gap-1 mt-1">
-                  {/* Phase 1: Checkmark + time appear */}
-                  {phase >= 1 ? (
-                    <>
-                      <div className="w-7 h-7 rounded-full border-2 border-emerald-400/60 flex items-center justify-center bg-emerald-400/5" style={{ animation: 'fadeIn 0.3s ease-out' }}>
-                        <svg className="w-4 h-4 text-emerald-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round"><polyline points="20 6 9 17 4 12" /></svg>
-                      </div>
-                      <span className="text-[7px] font-mono text-emerald-400 tracking-tight" style={{ animation: 'fadeIn 0.3s ease-out 200ms both' }}>47ms</span>
-                    </>
-                  ) : (
-                    <div className="w-5 h-5 rounded-full border-2 border-blue-400/60 relative">
-                      <div className="absolute inset-1 rounded-full bg-blue-400/30 animate-ping" />
-                      <div className="absolute inset-1.5 rounded-full bg-blue-400/60" />
-                    </div>
-                  )}
-                </div>
-                {/* Home bar */}
-                <div className="absolute bottom-1 w-4 h-0.5 rounded-full bg-slate-600" />
-              </div>
-              {/* Label next to phone */}
-              <div className="flex flex-col gap-0.5">
-                {phase >= 1 ? (
-                  <span className="text-[8px] text-emerald-400 tracking-widest uppercase font-semibold" style={{ animation: 'fadeIn 0.3s ease-out' }}>verified</span>
-                ) : (
-                  <span className="text-[8px] text-blue-400/60 font-mono tracking-wider">VERIFYING</span>
-                )}
-                <span className="text-[7px] text-slate-500 tracking-wider">on your device</span>
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
-      <h4 className="text-sm font-semibold mb-2 text-white">{t("caps.wasmTitle")}</h4>
-      <p className="text-sm text-slate-400 leading-relaxed mb-3 flex-1">{t("caps.wasmDesc")}</p>
-      <Link to="/demo" className="text-sm text-blue-400 hover:text-blue-300 font-semibold transition-colors">
-        {t("caps.wasmCta")} <span className="inline-block transition-transform group-hover:translate-x-0.5">→</span>
-      </Link>
-    </div>
+    <svg className="w-4 h-4 text-emerald-400 mx-auto" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round">
+      <polyline points="20 6 9 17 4 12" />
+    </svg>
   );
 }
 
-/* Card 2 — Backward Compatibility with Paper
-   Story: digital credential → printed A4 with QR → scanned back → verified offline
-   Phases: 0=digital badge, 1=transforms to paper+QR, 2=camera scan, 3=offline verified, 4=hold */
-function PaperCard({ startDelay, visible }: { startDelay: number; visible: boolean }) {
-  const t = useT();
-  const { phase, fadePhase } = useCardPhase(PAPER_DURATIONS, startDelay, visible);
-  const isFading = phase >= fadePhase;
-
+function CrossIcon() {
   return (
-    <div className="bg-slate-800/50 rounded-xl border border-slate-700/50 p-5 flex flex-col group hover:border-slate-600/80 transition-colors">
-      <div className="bg-slate-900/60 rounded-lg h-40 flex items-center justify-center mb-4 overflow-hidden relative">
-        <div className="absolute inset-0 opacity-[0.03]" style={{
-          backgroundImage: 'linear-gradient(rgba(255,255,255,0.1) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.1) 1px, transparent 1px)',
-          backgroundSize: '12px 12px',
-        }} />
-
-        <div className="transition-opacity duration-700" style={{ opacity: isFading ? 0 : 1 }}>
-          {phase >= 0 && (
-            <div className="flex flex-col items-center gap-2">
-              <div className="flex items-center gap-2">
-                {/* eID badge */}
-                <div className="w-10 h-7 rounded border border-blue-500/40 bg-blue-500/10 flex items-center justify-center" style={{ animation: 'slideInLeft 0.5s ease-out' }}>
-                  <span className="text-[7px] font-mono text-blue-300 tracking-tight">eID</span>
-                </div>
-                <svg className="w-3 h-3 text-slate-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="9 18 15 12 9 6" /></svg>
-
-                {/* Phase 1: A4 paper with QR codes appears */}
-                {phase >= 1 && (
-                  <div className="w-12 h-16 bg-slate-200/90 rounded-[2px] shadow-md shadow-black/20 flex flex-col items-center justify-between p-1.5 relative" style={{ animation: 'fadeIn 0.4s ease-out' }}>
-                    <div className="w-full space-y-0.5">
-                      <div className="h-[2px] bg-slate-400/40 rounded w-full" />
-                      <div className="h-[2px] bg-slate-400/30 rounded w-3/4" />
-                    </div>
-                    <div className="flex gap-1">
-                      {[0, 1].map((i) => (
-                        <div key={i} className="w-3 h-3 bg-slate-700/80 rounded-[1px]" style={{
-                          animation: `fadeIn 0.3s ease-out ${300 + i * 200}ms both`,
-                        }}>
-                          <div className="w-full h-full grid grid-cols-2 grid-rows-2 gap-[1px] p-[1px]">
-                            {[0,1,2,3].map(j => <div key={j} className="bg-slate-200/60 rounded-[0.5px]" />)}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                    <div className="h-[2px] bg-slate-400/20 rounded w-full" />
-                    {/* Phase 2: Scan line overlay */}
-                    {phase >= 2 && (
-                      <div className="absolute left-0 right-0 h-[2px] bg-emerald-400/60 rounded" style={{
-                        animation: 'scanDown 1s ease-in-out infinite',
-                      }} />
-                    )}
-                  </div>
-                )}
-
-                {/* Phase 2: Camera icon */}
-                {phase >= 2 && (
-                  <div style={{ animation: 'fadeIn 0.3s ease-out' }}>
-                    <svg className="w-6 h-6 text-slate-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-                      <rect x="2" y="4" width="20" height="16" rx="2" />
-                      <circle cx="12" cy="12" r="4" />
-                      <circle cx="12" cy="12" r="1.5" fill="currentColor" opacity="0.3" />
-                    </svg>
-                  </div>
-                )}
-              </div>
-
-              {/* Phase 3: Verified + offline result */}
-              {phase >= 3 && (
-                <div className="flex items-center gap-2" style={{ animation: 'fadeIn 0.3s ease-out' }}>
-                  <div className="w-6 h-6 rounded-full border-2 border-emerald-400/60 flex items-center justify-center bg-emerald-400/5">
-                    <svg className="w-3 h-3 text-emerald-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round"><polyline points="20 6 9 17 4 12" /></svg>
-                  </div>
-                  <div className="relative">
-                    <svg className="w-4 h-4 text-slate-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-                      <path d="M5 12.55a11 11 0 0 1 14.08 0" />
-                      <path d="M1.42 9a16 16 0 0 1 21.16 0" />
-                      <path d="M8.53 16.11a6 6 0 0 1 6.95 0" />
-                      <circle cx="12" cy="20" r="1" fill="currentColor" />
-                    </svg>
-                    <div className="absolute inset-0 flex items-center justify-center">
-                      <div className="w-[140%] h-[1.5px] bg-red-400/80 rotate-45 rounded" />
-                    </div>
-                  </div>
-                  <span className="text-[8px] text-slate-500 tracking-widest uppercase">no internet needed</span>
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-      </div>
-      <h4 className="text-sm font-semibold mb-2 text-white">{t("caps.paperTitle")}</h4>
-      <p className="text-sm text-slate-400 leading-relaxed mb-3 flex-1">{t("caps.paperDesc")}</p>
-      <Link to="/verify" className="text-sm text-blue-400 hover:text-blue-300 font-semibold transition-colors">
-        {t("caps.paperCta")} <span className="inline-block transition-transform group-hover:translate-x-0.5">→</span>
-      </Link>
-    </div>
+    <svg className="w-4 h-4 text-red-400/70 mx-auto" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+      <line x1="18" y1="6" x2="6" y2="18" />
+      <line x1="6" y1="6" x2="18" y2="18" />
+    </svg>
   );
 }
 
-/* Card 3 — ZK-Enhanced Contracts
-   Story: contract with personal data → ZK replaces credentials → clean document with proof
-   Phases: 0=contract with exposed data, 1=data redacted by ZK, 2=stamp appears, 3=clean doc, 4=hold */
-function ContractsCard({ startDelay, visible }: { startDelay: number; visible: boolean }) {
+function CellValue({ value }: { value: boolean | "partial" }) {
+  if (value === "partial") return <span className="text-[10px] text-yellow-500/70 font-medium">partial</span>;
+  return value ? <CheckIcon /> : <CrossIcon />;
+}
+
+function ProblemSection() {
   const t = useT();
-  const { phase, fadePhase } = useCardPhase(CONTRACTS_DURATIONS, startDelay, visible);
-  const isFading = phase >= fadePhase;
+  const headers = ["problem.sdjwt", "problem.bbs", "problem.batch", "problem.zk"] as const;
 
   return (
-    <div className="bg-slate-800/50 rounded-xl border border-slate-700/50 p-5 flex flex-col group hover:border-slate-600/80 transition-colors">
-      <div className="bg-slate-900/60 rounded-lg h-40 flex items-center justify-center mb-4 overflow-hidden relative">
-        <div className="absolute inset-0 opacity-[0.03]" style={{
-          backgroundImage: 'linear-gradient(rgba(255,255,255,0.1) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.1) 1px, transparent 1px)',
-          backgroundSize: '12px 12px',
-        }} />
+    <section className="max-w-5xl mx-auto px-4 sm:px-8 py-16 sm:py-20 border-t border-slate-800">
+      <h3 className="text-2xl sm:text-3xl font-bold text-center mb-3">
+        {t("problem.title")}
+      </h3>
+      <p className="text-sm text-slate-400 text-center mb-12 max-w-3xl mx-auto leading-relaxed">
+        {t("problem.subtitle")}
+      </p>
 
-        <div className="transition-opacity duration-700" style={{ opacity: isFading ? 0 : 1 }}>
-          {phase >= 0 && (
-            <div className="flex flex-col items-center gap-2">
-              {/* Contract document — evolves through phases */}
-              <div className="w-16 h-24 bg-slate-200/90 rounded-[2px] shadow-md shadow-black/20 p-1.5 flex flex-col gap-1 relative" style={{ animation: 'slideInLeft 0.4s ease-out' }}>
-                <div className="h-[2px] bg-slate-400/40 rounded w-full" />
-
-                {/* Row 1: PII → ZK badge */}
-                <div className="flex items-center gap-0.5">
-                  {phase >= 1 ? (
-                    <div className="h-2.5 bg-emerald-500/20 border border-emerald-500/30 rounded flex-1 flex items-center justify-center" style={{ animation: 'fadeIn 0.3s ease-out' }}>
-                      <span className="text-[4px] font-bold text-emerald-600 tracking-wider">ZK</span>
-                    </div>
-                  ) : (
-                    <>
-                      <div className="h-[2px] bg-red-400/60 rounded flex-1" />
-                      <span className="text-[4px] text-red-400/80">PII</span>
-                    </>
-                  )}
-                </div>
-
-                <div className="h-[2px] bg-slate-400/30 rounded w-3/4" />
-
-                {/* Row 2: PII → ZK badge */}
-                <div className="flex items-center gap-0.5">
-                  {phase >= 1 ? (
-                    <div className="h-2.5 bg-emerald-500/20 border border-emerald-500/30 rounded flex-1 flex items-center justify-center" style={{ animation: 'fadeIn 0.3s ease-out 200ms both' }}>
-                      <span className="text-[4px] font-bold text-emerald-600 tracking-wider">ZK</span>
-                    </div>
-                  ) : (
-                    <>
-                      <div className="h-[2px] bg-red-400/60 rounded flex-1" />
-                      <span className="text-[4px] text-red-400/80">PII</span>
-                    </>
-                  )}
-                </div>
-
-                <div className="h-[2px] bg-slate-400/20 rounded w-1/2" />
-
-                {/* Phase 2: VERIFIED stamp on the document */}
-                {phase >= 2 && (
-                  <div className="absolute bottom-1 left-1/2 -translate-x-1/2 text-[5px] font-bold text-emerald-600 border border-emerald-500/40 rounded px-1.5 py-0.5 bg-emerald-500/10" style={{
-                    animation: 'fadeIn 0.3s ease-out 300ms both',
-                    transform: 'translateX(-50%) rotate(-3deg)',
-                  }}>
-                    VERIFIED
-                  </div>
-                )}
-              </div>
-
-              {/* Phase 3: Compliant result below the document */}
-              {phase >= 3 && (
-                <div className="flex items-center gap-2" style={{ animation: 'fadeIn 0.3s ease-out' }}>
-                  <div className="w-5 h-5 rounded-full border-2 border-emerald-400/60 flex items-center justify-center bg-emerald-400/5">
-                    <svg className="w-3 h-3 text-emerald-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round"><polyline points="20 6 9 17 4 12" /></svg>
-                  </div>
-                  <div className="text-left">
-                    <div className="text-[8px] text-emerald-400 font-semibold tracking-wider">COMPLIANT</div>
-                    <div className="text-[7px] text-slate-500">no PII exposed</div>
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-        </div>
+      <div className="max-w-4xl mx-auto overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b border-slate-700/40">
+              <th className="text-left py-3 px-3 text-xs text-slate-500 font-medium uppercase tracking-wider">
+                {t("problem.criterion")}
+              </th>
+              {headers.map((h) => (
+                <th
+                  key={h}
+                  className={`py-3 px-3 text-xs font-medium uppercase tracking-wider text-center ${
+                    h === "problem.zk"
+                      ? "text-emerald-400 bg-emerald-950/20 border-x border-emerald-500/30"
+                      : "text-slate-500"
+                  }`}
+                >
+                  {t(h)}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {COMPARISON_DATA.map((row, i) => (
+              <tr key={row.rowKey} className={i < COMPARISON_DATA.length - 1 ? "border-b border-slate-800/60" : ""}>
+                <td className="py-3 px-3 text-slate-300 text-xs sm:text-sm">{t(row.rowKey)}</td>
+                <td className="py-3 px-3 text-center"><CellValue value={row.sdjwt} /></td>
+                <td className="py-3 px-3 text-center"><CellValue value={row.bbs} /></td>
+                <td className="py-3 px-3 text-center"><CellValue value={row.batch} /></td>
+                <td className="py-3 px-3 text-center bg-emerald-950/20 border-x border-emerald-500/30">
+                  <CellValue value={row.zk} />
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
-      <h4 className="text-sm font-semibold mb-2 text-white">{t("caps.contractsTitle")}</h4>
-      <p className="text-sm text-slate-400 leading-relaxed mb-3 flex-1">{t("caps.contractsDesc")}</p>
-      <Link to="/contracts" className="text-sm text-blue-400 hover:text-blue-300 font-semibold transition-colors">
-        {t("caps.contractsCta")} <span className="inline-block transition-transform group-hover:translate-x-0.5">→</span>
-      </Link>
-    </div>
+    </section>
   );
 }
 
-function CapabilitiesTriptych() {
+/* === Section: Solution Steps === */
+
+function SolutionSteps() {
   const t = useT();
-  const sectionRef = useRef<HTMLElement>(null);
-  const [visible, setVisible] = useState(false);
-  const [reducedMotion, setReducedMotion] = useState(false);
 
-  useEffect(() => {
-    const prefersReduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    if (prefersReduced) {
-      setReducedMotion(true);
-      setVisible(true);
-      return;
-    }
-
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        if (entry.isIntersecting) {
-          setVisible(true);
-          observer.disconnect();
-        }
-      },
-      { threshold: 0.2 },
-    );
-
-    if (sectionRef.current) {
-      observer.observe(sectionRef.current);
-    }
-
-    return () => observer.disconnect();
-  }, []);
+  const steps = [
+    {
+      num: "1",
+      titleKey: "solution.step1Title",
+      labelKey: "solution.step1Label",
+      descKey: "solution.step1Desc",
+      icon: (
+        <svg className="w-8 h-8 text-blue-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+          <polyline points="14 2 14 8 20 8" />
+          <path d="M12 18v-6" /><path d="M9 15l3 3 3-3" />
+        </svg>
+      ),
+    },
+    {
+      num: "2",
+      titleKey: "solution.step2Title",
+      descKey: "solution.step2Desc",
+      icon: (
+        <svg className="w-8 h-8 text-yellow-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+          <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+          <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+          <circle cx="12" cy="16" r="1" fill="currentColor" />
+        </svg>
+      ),
+    },
+    {
+      num: "3",
+      titleKey: "solution.step3Title",
+      descKey: "solution.step3Desc",
+      icon: (
+        <svg className="w-8 h-8 text-emerald-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
+          <polyline points="22 4 12 14.01 9 11.01" />
+        </svg>
+      ),
+    },
+  ];
 
   return (
-    <section ref={sectionRef} className="max-w-5xl mx-auto px-4 sm:px-8 py-16 border-t border-slate-800">
-      <style>{`
-        @keyframes slideInLeft {
-          from { transform: translateX(-20px); opacity: 0; }
-          to { transform: translateX(0); opacity: 1; }
-        }
-        @keyframes fadeIn {
-          from { opacity: 0; }
-          to { opacity: 1; }
-        }
-        @keyframes scanDown {
-          0% { top: 0; }
-          50% { top: 100%; }
-          100% { top: 0; }
-        }
-      `}</style>
-      <h3 className="text-2xl font-bold text-center mb-4">{t("caps.title")}</h3>
-      <p className="text-sm text-slate-400 text-center mb-12 max-w-2xl mx-auto">{t("caps.subtitle")}</p>
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <WasmCard startDelay={reducedMotion ? 0 : 0} visible={visible} />
-        <PaperCard startDelay={reducedMotion ? 0 : 500} visible={visible} />
-        <ContractsCard startDelay={reducedMotion ? 0 : 1000} visible={visible} />
+    <section className="max-w-5xl mx-auto px-4 sm:px-8 py-16 sm:py-20 border-t border-slate-800">
+      <h3 className="text-2xl sm:text-3xl font-bold text-center mb-3">
+        {t("solution.title")}
+      </h3>
+      <p className="text-sm text-slate-400 text-center mb-12 max-w-2xl mx-auto">
+        {t("solution.subtitle")}
+      </p>
+
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-4xl mx-auto">
+        {steps.map((step, i) => (
+          <div key={step.num} className="relative flex flex-col items-center text-center">
+            {/* Arrow connector (desktop only, not on last) */}
+            {i < steps.length - 1 && (
+              <div className="hidden md:block absolute top-10 -right-3 z-10">
+                <svg className="w-6 h-6 text-slate-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <polyline points="9 18 15 12 9 6" />
+                </svg>
+              </div>
+            )}
+            <div className="bg-slate-800/50 rounded-xl border border-slate-700/50 p-6 flex flex-col items-center gap-4 w-full">
+              <div className="w-14 h-14 rounded-full bg-slate-900/60 flex items-center justify-center">
+                {step.icon}
+              </div>
+              <div>
+                <h4 className="text-sm font-semibold text-white mb-1">{t(step.titleKey)}</h4>
+                {step.labelKey && (
+                  <span className="text-[10px] text-slate-500 uppercase tracking-wider">{t(step.labelKey)}</span>
+                )}
+              </div>
+              <p className="text-xs text-slate-400 leading-relaxed">{t(step.descKey)}</p>
+            </div>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+/* === Section: Pre-commitment Performance === */
+
+const BENCHMARKS = [
+  { device: "iPhone SE", time: "< 1.5s" },
+  { device: "Budget Android", time: "< 3s" },
+  { device: "Server (ark-circom)", time: "< 0.3s" },
+];
+
+function PreCommitmentSection() {
+  const t = useT();
+
+  return (
+    <section className="max-w-5xl mx-auto px-4 sm:px-8 py-16 sm:py-20 border-t border-slate-800">
+      <div className="flex items-center justify-center gap-3 mb-3">
+        <h3 className="text-2xl sm:text-3xl font-bold text-center">
+          {t("precommit.title")}
+        </h3>
+        <span className="text-[10px] px-2 py-0.5 rounded-full border border-yellow-500/30 bg-yellow-950/20 text-yellow-500/60 font-medium">
+          {t("precommit.badge")}
+        </span>
+      </div>
+      <p className="text-sm text-slate-400 text-center mb-12 max-w-2xl mx-auto">
+        {t("precommit.subtitle")}
+      </p>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-3xl mx-auto">
+        <div>
+          <p className="text-sm text-slate-400 leading-relaxed">
+            {t("precommit.desc")}
+          </p>
+        </div>
+        <div className="bg-slate-800/50 border border-slate-700/50 rounded-xl p-5">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-slate-700/40">
+                <th className="text-left py-2 text-xs text-slate-500 font-medium uppercase tracking-wider">
+                  {t("precommit.device")}
+                </th>
+                <th className="text-right py-2 text-xs text-slate-500 font-medium uppercase tracking-wider">
+                  {t("precommit.time")}
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {BENCHMARKS.map((b) => (
+                <tr key={b.device} className="border-b border-slate-800/60 last:border-0">
+                  <td className="py-2.5 text-slate-300">{b.device}</td>
+                  <td className="py-2.5 text-right font-mono text-emerald-400 font-semibold">{b.time}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+/* === Section: Ukraine & Diia === */
+
+function UkraineDiiaSection() {
+  const t = useT();
+
+  const stats = [
+    { value: "24M", labelKey: "ukraine.stat1" },
+    { value: "5+", labelKey: "ukraine.stat2" },
+    { value: "EUDI", labelKey: "ukraine.stat3" },
+  ];
+
+  return (
+    <section className="border-t-2 border-t-transparent bg-slate-800/20" style={{
+      borderImage: "linear-gradient(to right, #005BBB, #FFD500) 1",
+    }}>
+      <div className="max-w-5xl mx-auto px-4 sm:px-8 py-16 sm:py-20 text-center">
+        <h3 className="text-2xl sm:text-3xl font-bold mb-10">
+          {t("ukraine.title")}
+        </h3>
+
+        <div className="grid grid-cols-3 gap-6 max-w-2xl mx-auto mb-10">
+          {stats.map((s) => (
+            <div key={s.labelKey}>
+              <p className="text-3xl sm:text-4xl font-extrabold text-white mb-1">{s.value}</p>
+              <p className="text-xs sm:text-sm text-slate-400">{t(s.labelKey)}</p>
+            </div>
+          ))}
+        </div>
+
+        <p className="text-sm text-slate-400 leading-relaxed max-w-2xl mx-auto">
+          {t("ukraine.desc")}
+        </p>
       </div>
     </section>
   );
@@ -1376,16 +1289,10 @@ function Landing() {
               <span className="text-slate-500 mx-1">-</span>
               <span style={{ color: "#FFD500" }}>eidas</span>
             </h2>
-            <p className="text-lg text-slate-300 mb-3 leading-relaxed">
+            <p className="text-lg sm:text-xl text-slate-200 mb-3 leading-relaxed font-semibold">
               {t("hero.subtitle")}
             </p>
-            <p className="text-base text-slate-400 mb-3">{t("hero.tagline")}</p>
-            <p className="text-sm text-slate-500 mb-4 leading-relaxed">
-              {t("hero.description")}
-            </p>
-            <p className="text-sm text-slate-300 font-semibold mb-8">
-              {t("hero.closing")}
-            </p>
+            <p className="text-base text-slate-400 mb-8">{t("hero.tagline")}</p>
             <div className="flex items-center gap-3">
               <Link
                 to="/contracts"
@@ -1416,22 +1323,17 @@ function Landing() {
         </div>
       </section>
 
-      <CapabilitiesTriptych />
+      <ProblemSection />
+
+      <SolutionSteps />
 
       <LiveProofSection />
 
+      <PreCommitmentSection />
+
       <PaperContractsSection />
 
-      {/* Research note */}
-      <div className="max-w-5xl mx-auto px-4 sm:px-8 py-10 border-t border-slate-800 mt-8">
-        <div className="max-w-2xl mx-auto text-center">
-          {t("footer.research").split("\n").map((line, i) => (
-            <p key={i} className={`text-xs leading-relaxed ${line === "" ? "h-3" : i >= 3 ? "text-slate-500 italic" : "text-slate-400"}`}>
-              {line}
-            </p>
-          ))}
-        </div>
-      </div>
+      <UkraineDiiaSection />
 
       {/* Footer */}
       <footer className="border-t border-slate-800 px-4 sm:px-8 py-8">
