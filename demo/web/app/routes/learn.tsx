@@ -118,11 +118,20 @@ function Learn() {
       <div className="max-w-4xl mx-auto px-4 sm:px-8 space-y-24 pb-24">
         {/* ── 1. The eIDAS 2.0 Unlinkability Problem ───────────────────── */}
         <section>
-          <SectionHeading
-            id="problem"
-            title={t("learn.problemTitle")}
-            subtitle={t("learn.problemSubtitle")}
-          />
+          <div className="mb-10" id="problem">
+            <h2 className="text-2xl sm:text-3xl font-bold mb-3">{t("learn.problemTitle")}</h2>
+            <p className="text-slate-400 leading-relaxed max-w-3xl">
+              <a
+                href="https://eur-lex.europa.eu/eli/reg/2024/1183/oj/eng"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-blue-400 hover:text-blue-300 underline underline-offset-2"
+              >
+                Article 5a(16)
+              </a>{" "}
+              {t("learn.problemSubtitleAfterLink")}
+            </p>
+          </div>
 
           {/* Two-card comparison */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
@@ -192,8 +201,8 @@ function Learn() {
           {/* Three failure modes */}
           <div className="space-y-4 mb-8">
             {[
-              { title: t("learn.problemSdjwtTitle"), desc: t("learn.problemSdjwtDesc") },
-              { title: t("learn.problemBbsTitle"), desc: t("learn.problemBbsDesc") },
+              { title: t("learn.problemSdjwtTitle"), desc: t("learn.problemSdjwtDesc"), href: "https://datatracker.ietf.org/doc/rfc9901/" },
+              { title: t("learn.problemBbsTitle"), desc: t("learn.problemBbsDesc"), href: "https://www.sogis.eu/uk/supporting_doc_en.html" },
               { title: t("learn.problemBatchTitle"), desc: t("learn.problemBatchDesc") },
             ].map((item) => (
               <div
@@ -202,6 +211,16 @@ function Learn() {
               >
                 <h4 className="text-sm font-semibold mb-1 text-slate-200">
                   {item.title}
+                  {item.href && (
+                    <a
+                      href={item.href}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="ml-2 text-xs text-slate-500 hover:text-blue-400 transition-colors"
+                    >
+                      ↗
+                    </a>
+                  )}
                 </h4>
                 <p className="text-sm text-slate-400 leading-relaxed">
                   {item.desc}
@@ -600,14 +619,14 @@ function Learn() {
 
           <div className="space-y-4">
             {[
-              { standard: "eIDAS 2.0", full: t("learn.stdEidas") },
-              { standard: "SD-JWT VC (RFC 9901)", full: t("learn.stdSdjwt") },
-              { standard: "mdoc / mDL (ISO 18013-5)", full: t("learn.stdMdoc") },
+              { standard: "eIDAS 2.0", full: t("learn.stdEidas"), href: "https://eur-lex.europa.eu/eli/reg/2024/1183/oj/eng" },
+              { standard: "SD-JWT (RFC 9901) / SD-JWT VC", full: t("learn.stdSdjwt"), href: "https://datatracker.ietf.org/doc/rfc9901/" },
+              { standard: "mdoc / mDL (ISO 18013-5)", full: t("learn.stdMdoc"), href: "https://www.iso.org/standard/69084.html" },
               { standard: "ECDSA P-256 (secp256r1)", full: t("learn.stdEcdsa") },
-              { standard: "OpenID4VP", full: t("learn.stdOpenid") },
-              { standard: "EUDI Wallet ARF v1.4", full: t("learn.stdArf") },
-              { standard: "SOG-IS Compliance", full: t("learn.stdSogis") },
-              { standard: "POTENTIAL LSP", full: t("learn.stdPotential") },
+              { standard: "OpenID4VP", full: t("learn.stdOpenid"), href: "https://openid.net/specs/openid-4-verifiable-presentations-1_0.html" },
+              { standard: "EUDI Wallet ARF v1.4", full: t("learn.stdArf"), href: "https://github.com/eu-digital-identity-wallet/eudi-doc-architecture-and-reference-framework" },
+              { standard: "SOG-IS Compliance", full: t("learn.stdSogis"), href: "https://www.sogis.eu/uk/supporting_doc_en.html" },
+              { standard: "POTENTIAL LSP", full: t("learn.stdPotential"), href: "https://www.digital-identity-wallet.eu/" },
             ].map((s) => (
               <div
                 key={s.standard}
@@ -615,9 +634,20 @@ function Learn() {
               >
                 <span className="text-green-400 shrink-0 mt-0.5">&#10003;</span>
                 <div>
-                  <span className="text-sm font-semibold text-white">
-                    {s.standard}
-                  </span>
+                  {s.href ? (
+                    <a
+                      href={s.href}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-sm font-semibold text-white hover:text-blue-400 transition-colors underline underline-offset-2 decoration-slate-600 hover:decoration-blue-400"
+                    >
+                      {s.standard}
+                    </a>
+                  ) : (
+                    <span className="text-sm font-semibold text-white">
+                      {s.standard}
+                    </span>
+                  )}
                   <p className="text-sm text-slate-400 mt-1 leading-relaxed">
                     {s.full}
                   </p>

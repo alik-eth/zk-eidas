@@ -24,12 +24,12 @@ const translations: Record<string, Record<Locale, string>> = {
 
   // ── Hero ────────────────────────────────────────────────────────────────
   "hero.subtitle": {
-    en: "The only eIDAS 2.0 compliant unlinkability solution",
-    uk: "Єдине рішення для незв'язуваності, сумісне з eIDAS 2.0",
+    en: "An eIDAS 2.0 compatible unlinkability layer",
+    uk: "Шар незв'язуваності, сумісний з eIDAS 2.0",
   },
   "hero.tagline": {
-    en: "EU mandates unlinkability. The mandated format can't provide it. We fix that.",
-    uk: "ЄС вимагає незв'язуваність. Мандатний формат не може її забезпечити. Ми це виправляємо.",
+    en: "EU mandates unlinkability. The approved credential formats can't provide it. We fix that.",
+    uk: "ЄС вимагає незв'язуваність. Затверджені формати посвідчень не можуть її забезпечити. Ми це виправляємо.",
   },
   "hero.tryDemo": { en: "Try the Demo", uk: "Спробувати демо" },
   "hero.viewGithub": { en: "View on GitHub", uk: "Переглянути на GitHub" },
@@ -40,8 +40,8 @@ const translations: Record<string, Record<Locale, string>> = {
     uk: "Прогалина незв'язуваності",
   },
   "problem.subtitle": {
-    en: "eIDAS 2.0 Article 5a(16) requires unlinkability. SD-JWT VC with ES256 structurally can't deliver it — every presentation is linkable by the issuer's signature. BBS+ was rejected by SOG-IS. Batch issuance doesn't support predicates. No EU member state has solved this.",
-    uk: "Стаття 5a(16) eIDAS 2.0 вимагає незв'язуваність. SD-JWT VC з ES256 структурно не може її забезпечити — кожна презентація зв'язувана через підпис видавця. BBS+ відхилено SOG-IS. Пакетна видача не підтримує предикати. Жодна країна ЄС не вирішила це.",
+    en: "eIDAS 2.0 Article 5a(16) requires unlinkability. SD-JWT VC with ES256 structurally can't deliver it — every presentation is linkable by the issuer's signature. BBS+ is not on the SOG-IS approved algorithm list. Batch issuance doesn't support predicates.",
+    uk: "Стаття 5a(16) eIDAS 2.0 вимагає незв'язуваність. SD-JWT VC з ES256 структурно не може її забезпечити — кожна презентація зв'язувана через підпис видавця. BBS+ не включено до списку схвалених алгоритмів SOG-IS. Пакетна видача не підтримує предикати.",
   },
   "problem.criterion": { en: "Criterion", uk: "Критерій" },
   "problem.sdjwt": { en: "SD-JWT VC", uk: "SD-JWT VC" },
@@ -49,7 +49,7 @@ const translations: Record<string, Record<Locale, string>> = {
   "problem.batch": { en: "Batch Issuance", uk: "Пакетна видача" },
   "problem.zk": { en: "ZK Proofs", uk: "ZK-докази" },
   "problem.row1": { en: "eIDAS 2.0 format compliant", uk: "Сумісність з форматом eIDAS 2.0" },
-  "problem.row2": { en: "SOG-IS algorithm approval", uk: "Схвалення алгоритму SOG-IS" },
+  "problem.row2": { en: "SOG-IS approved algorithms", uk: "Алгоритми схвалені SOG-IS" },
   "problem.row3": { en: "Unlinkable presentations", uk: "Незв'язувані презентації" },
   "problem.row4": { en: "Selective disclosure", uk: "Вибіркове розкриття" },
   "problem.row5": { en: "Predicate proofs (e.g. age \u2265 18)", uk: "Предикатні докази (напр. вік \u2265 18)" },
@@ -89,8 +89,8 @@ const translations: Record<string, Record<Locale, string>> = {
     uk: "Верифікатор перевіряє доказ",
   },
   "solution.step3Desc": {
-    en: "<10ms verification. Works offline. Zero personal data exposed.",
-    uk: "Верифікація <10мс. Працює офлайн. Нуль персональних даних розкрито.",
+    en: "Millisecond verification. Works offline. Zero personal data exposed.",
+    uk: "Верифікація за мілісекунди. Працює офлайн. Нуль персональних даних розкрито.",
   },
 
   // ── Pre-commitment ───────────────────────────────────────────────────
@@ -148,6 +148,10 @@ const translations: Record<string, Record<Locale, string>> = {
     en: "Article 5a(16) of the eIDAS 2.0 regulation requires that relying parties cannot link presentations of attributes from the same or different attestations. This is not optional — it is law.",
     uk: "Стаття 5a(16) регламенту eIDAS 2.0 вимагає, щоб сторони, які покладаються, не могли пов'язувати пред'явлення атрибутів з одних і тих самих або різних атестацій. Це не опція — це закон.",
   },
+  "learn.problemSubtitleAfterLink": {
+    en: "of the eIDAS 2.0 regulation (EU 2024/1183) requires that relying parties cannot link presentations of attributes from the same or different attestations. This is not optional — it is law.",
+    uk: "регламенту eIDAS 2.0 (EU 2024/1183) вимагає, щоб сторони, які покладаються, не могли пов'язувати пред'явлення атрибутів з одних і тих самих або різних атестацій. Це не опція — це закон.",
+  },
   "learn.problemSdjwtLabel": { en: "SD-JWT VC Presentation", uk: "Пред'явлення SD-JWT VC" },
   "learn.problemSdjwtSees": { en: "// every verifier sees:", uk: "// кожен верифікатор бачить:" },
   "learn.problemSdjwtSig": { en: "same every time", uk: "однаковий кожного разу" },
@@ -166,10 +170,10 @@ const translations: Record<string, Record<Locale, string>> = {
     en: "The issuer's ECDSA signature and the cnf (confirmation) key are identical in every presentation. Any two verifiers comparing notes can trivially correlate them to the same holder.",
     uk: "ECDSA підпис видавця та cnf (підтверджувальний) ключ ідентичні у кожному пред'явленні. Будь-які два верифікатори можуть тривіально скорелювати їх з одним власником.",
   },
-  "learn.problemBbsTitle": { en: "BBS+ Rejected by SOG-IS", uk: "BBS+ відхилено SOG-IS" },
+  "learn.problemBbsTitle": { en: "BBS+ Not SOG-IS Compliant", uk: "BBS+ не відповідає SOG-IS" },
   "learn.problemBbsDesc": {
-    en: "BBS+ signatures solve unlinkability mathematically. However, SOG-IS — the EU's cryptographic approval body — has not approved BBS+ for government use. EUDI Wallets cannot use unapproved primitives.",
-    uk: "Підписи BBS+ вирішують незв'язуваність математично. Проте SOG-IS — орган ЄС з затвердження криптографії — не схвалив BBS+ для державного використання. EUDI Wallets не можуть використовувати незатверджені примітиви.",
+    en: "BBS+ signatures solve unlinkability mathematically. However, BBS+ relies on bilinear pairings — not on the SOG-IS approved algorithms list. The European Commission rejected BBS+ for EUDI Wallets on these grounds.",
+    uk: "Підписи BBS+ вирішують незв'язуваність математично. Проте BBS+ використовує білінійні спарювання — відсутні у переліку схвалених алгоритмів SOG-IS. Європейська Комісія відхилила BBS+ для EUDI Wallets саме з цих підстав.",
   },
   "learn.problemBatchTitle": { en: "Batch Issuance Impractical", uk: "Пакетна видача непрактична" },
   "learn.problemBatchDesc": {
@@ -242,8 +246,8 @@ const translations: Record<string, Record<Locale, string>> = {
     uk: "SD-JWT VC: RFC 9901. Селективне розкриття через хеші з сіллю, але підпис видавця постійний у всіх пред'явленнях — стійкий маркер кореляції.",
   },
   "learn.compFootBbs": {
-    en: "BBS+: Mathematically sound unlinkability, but not on the SOG-IS approved algorithms list as of 2026.",
-    uk: "BBS+: Математично обґрунтована незв'язуваність, але не в переліку схвалених алгоритмів SOG-IS станом на 2026 рік.",
+    en: "BBS+: Mathematically sound unlinkability, but relies on bilinear pairings not on the SOG-IS approved list. Rejected by the European Commission for EUDI Wallets.",
+    uk: "BBS+: Математично обґрунтована незв'язуваність, але використовує білінійні спарювання, відсутні у переліку SOG-IS. Відхилено Європейською Комісією для EUDI Wallets.",
   },
   "learn.compFootBatch": {
     en: "Batch Issuance: Multiple credential copies with rotating keys. Storage scales linearly with N, revocation becomes per-copy, and N must be predetermined.",
@@ -358,8 +362,8 @@ const translations: Record<string, Record<Locale, string>> = {
     uk: "Рамка цифрової ідентичності ЄС, що зобов'язує цифрові гаманці для всіх громадян ЄС. zk-eidas підтримує профіль PID, визначений у Architecture Reference Framework.",
   },
   "learn.stdSdjwt": {
-    en: "The primary credential format for EUDI Wallets. Each claim is individually disclosable via salted SHA-256 hashes.",
-    uk: "Основний формат посвідчень для EUDI Wallets. Кожне поле може розкриватися окремо через SHA-256 хеші з сіллю.",
+    en: "Selective Disclosure for JWTs (RFC 9901) with the Verifiable Credentials profile (draft-ietf-oauth-sd-jwt-vc). The primary credential format for EUDI Wallets. Each claim is individually disclosable via salted SHA-256 hashes.",
+    uk: "Selective Disclosure для JWT (RFC 9901) з профілем Verifiable Credentials (draft-ietf-oauth-sd-jwt-vc). Основний формат посвідчень для EUDI Wallets. Кожне поле може розкриватися окремо через SHA-256 хеші з сіллю.",
   },
   "learn.stdMdoc": {
     en: "Mobile document format with COSE_Sign1 signatures. Used for mobile driver's licenses. zk-eidas verifies COSE_Sign1 signatures inside the same ZK circuits.",
@@ -405,8 +409,8 @@ const translations: Record<string, Record<Locale, string>> = {
     uk: "Незв'язуваність eIDAS 2.0 в дії",
   },
   "liveProof.subtitle": {
-    en: "Generate a real ZK proof, then verify it entirely in your browser. Two verifiers would see different proofs from the same credential — unlinkable.",
-    uk: "Згенеруйте справжній ZK-доказ, потім перевірте його у вашому браузері. Два верифікатори бачать різні докази від одного посвідчення — незв'язувані.",
+    en: "Generate a real ZK proof, then verify it entirely in your browser. Each proof is randomized — no two presentations are linkable.",
+    uk: "Згенеруйте справжній ZK-доказ, потім перевірте його у вашому браузері. Кожен доказ рандомізований — жодні дві презентації не зв'язувані.",
   },
   "liveProof.scenario": {
     en: "Prove: age \u2265 18 (from a national ID credential)",
