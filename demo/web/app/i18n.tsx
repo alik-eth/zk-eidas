@@ -24,20 +24,12 @@ const translations: Record<string, Record<Locale, string>> = {
 
   // ── Hero ────────────────────────────────────────────────────────────────
   "hero.subtitle": {
-    en: "Civil law documents without personal data",
-    uk: "Цивільні документи без персональних даних",
+    en: "The only eIDAS 2.0 compliant unlinkability solution",
+    uk: "Єдине рішення для незв'язуваності, сумісне з eIDAS 2.0",
   },
   "hero.tagline": {
-    en: "Backward compatible with paper.",
-    uk: "Зворотна сумісність з папером.",
-  },
-  "hero.description": {
-    en: "An open-source protocol for creating legal documents where every condition is cryptographically proven, zero personal data is exposed, and consent is expressed as a concludent act \u2014 binding a credential to contract terms inside a ZK circuit. Nullifiers enable courts to identify parties through credential issuer subpoena \u2014 and only through judicial process.",
-    uk: "Протокол з відкритим кодом для створення юридичних документів де кожна умова криптографічно доведена, жодних персональних даних не розкрито, а згода виражається як конклюдентна дія \u2014 прив\u2019язка посвідчення до умов договору всередині ZK-схеми. Нуліфікатори дозволяють суду ідентифікувати сторони через запит до видавця \u2014 і тільки через судовий процес.",
-  },
-  "hero.closing": {
-    en: "Privacy by default. Accountability by court order.",
-    uk: "Приватність за замовчуванням. Відповідальність за судовим рішенням.",
+    en: "EU mandates unlinkability. The mandated format can't provide it. We fix that.",
+    uk: "ЄС вимагає незв'язуваність. Мандатний формат не може її забезпечити. Ми це виправляємо.",
   },
   "hero.tryDemo": { en: "Try the Demo", uk: "Спробувати демо" },
   "hero.viewGithub": { en: "View on GitHub", uk: "Переглянути на GitHub" },
@@ -285,12 +277,12 @@ const translations: Record<string, Record<Locale, string>> = {
 
   // ── Live Proof ─────────────────────────────────────────────────────────
   "liveProof.title": {
-    en: "Try It Yourself",
-    uk: "Спробуйте самі",
+    en: "See eIDAS 2.0 unlinkability in action",
+    uk: "Незв'язуваність eIDAS 2.0 в дії",
   },
   "liveProof.subtitle": {
-    en: "Generate a real ZK proof on our server, then verify it entirely in your browser. No trust required.",
-    uk: "Згенеруйте справжній ZK-доказ на нашому сервері, а потім перевірте його повністю у вашому браузері. Довіра не потрібна.",
+    en: "Generate a real ZK proof, then verify it entirely in your browser. Two verifiers would see different proofs from the same credential — unlinkable.",
+    uk: "Згенеруйте справжній ZK-доказ, потім перевірте його у вашому браузері. Два верифікатори бачать різні докази від одного посвідчення — незв'язувані.",
   },
   "liveProof.scenario": {
     en: "Prove: age \u2265 18 (from a national ID credential)",
@@ -375,8 +367,8 @@ const translations: Record<string, Record<Locale, string>> = {
 
   // ── Paper Contracts ───────────────────────────────────────────────────
   "paperContracts.title": {
-    en: "Bureaucracy 2.0: Contracts Without Personal Data",
-    uk: "Бюрократія 2.0: контракт без персональних даних",
+    en: "Real-world application: Contracts without personal data",
+    uk: "Реальне застосування: контракти без персональних даних",
   },
   "paperContracts.subtitle": {
     en: "Today, selling a car means handing over your full name, address, birth date, and ID number to a stranger. ZK proofs change that: every contractual condition is cryptographically proven without revealing any personal data.",
@@ -474,13 +466,9 @@ const translations: Record<string, Record<Locale, string>> = {
   "stats.license": { en: "License", uk: "Ліцензія" },
 
   // ── Footer ──────────────────────────────────────────────────────────────
-  "footer.research": {
-    en: 'A research project at the intersection of cryptography and civil law.\nExtending the "verification dilemmas" framework (Bamberger, Goldwasser, Wexler, 2022) to persistent legal documents.\n\nBuilt in Ukraine during wartime. That\u2019s why \u2014 backward compatible with paper.',
-    uk: "Дослідницький проект на перетині криптографії та цивільного права.\nРозширює рамку \u201Cverification dilemmas\u201D (Bamberger, Goldwasser, Wexler, 2022) на персистентні юридичні документи.\n\nРозроблено в Україні під час війни. Тому \u2014 сумісність з папером.",
-  },
   "footer.license": {
-    en: "Apache 2.0 License \u00B7 Open Source",
-    uk: "Ліцензія Apache 2.0 \u00B7 Відкритий код",
+    en: "Open-source SDK for eIDAS 2.0 privacy. Apache 2.0.",
+    uk: "SDK з відкритим кодом для приватності eIDAS 2.0. Apache 2.0.",
   },
 
   // ── Demo page ───────────────────────────────────────────────────────────
