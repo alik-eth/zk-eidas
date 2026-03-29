@@ -186,10 +186,11 @@ test.describe('Contracts', () => {
 
 const ON_DEVICE = !!process.env.E2E_ON_DEVICE
 const CONTRACT_TEMPLATES = [
-  { name: 'Age Verification', pattern: /Перевірка віку/, creds: 1 },
-  { name: 'Student Transit', pattern: /Студентський проїзний|Student Transit/, creds: 1 },
-  { name: 'Driver Employment', pattern: /найму водія|Driver Employment/, creds: 1 },
-  { name: 'Vehicle Sale', pattern: /купівлі-продажу|Vehicle Sale/, creds: 3 },
+  // ecdsaProofs = unique predicate claims + nullifier field (if different from predicate claims)
+  { name: 'Age Verification', pattern: /Перевірка віку/, creds: 1, ecdsaProofs: 2 },
+  { name: 'Student Transit', pattern: /Студентський проїзний|Student Transit/, creds: 1, ecdsaProofs: 2 },
+  { name: 'Driver Employment', pattern: /найму водія|Driver Employment/, creds: 1, ecdsaProofs: 4 },
+  { name: 'Vehicle Sale', pattern: /купівлі-продажу|Vehicle Sale/, creds: 3, ecdsaProofs: 6 },
 ]
 
 for (const tpl of CONTRACT_TEMPLATES) {
@@ -201,7 +202,9 @@ for (const tpl of CONTRACT_TEMPLATES) {
     }
 
     test(`${tpl.name}: issue ${tpl.creds} cred(s) → prove → document`, async ({ page }) => {
-      test.setTimeout(ON_DEVICE ? 600_000 : 300_000)
+      // Each ECDSA proof takes ~5 min in browser; scale timeout accordingly
+      const timeoutMs = ON_DEVICE ? tpl.ecdsaProofs * 5 * 60_000 : 300_000
+      test.setTimeout(timeoutMs)
       if (ON_DEVICE) enableConsoleLogs(page)
 
       // Collect benchmark timings from browser console
