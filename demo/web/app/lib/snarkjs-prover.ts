@@ -276,19 +276,3 @@ export async function clearCache(): Promise<void> {
   await caches.delete(ARTIFACT_CACHE_NAME);
   await clearChunkCache();
 }
-
-export async function verifyInBrowser(
-  circuitName: string,
-  proof: unknown,
-  publicSignals: string[],
-  apiBaseUrl: string
-): Promise<{ verified: boolean; timeMs: number }> {
-  // @ts-expect-error snarkjs doesn't have type declarations
-  const snarkjs = await import("snarkjs");
-  const vkUrl = `${apiBaseUrl}/circuits/${circuitName}/vk.json`;
-  const vk = await (await fetch(vkUrl)).json();
-
-  const start = performance.now();
-  const verified = await snarkjs.groth16.verify(vk, publicSignals, proof);
-  return { verified, timeMs: performance.now() - start };
-}
