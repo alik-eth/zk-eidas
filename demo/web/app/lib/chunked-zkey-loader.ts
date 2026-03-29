@@ -23,12 +23,15 @@ export async function areChunksReady(circuitName: string): Promise<boolean> {
 /**
  * Download missing chunk files from a remote URL and store them in localforage.
  *
- * Each chunk is fetched from `${baseUrl}/${circuitName}.zkey${suffix}`.
- * Already-cached chunks are skipped.
+ * @param circuitName - e.g. "ecdsa_verify"
+ * @param urlSource - either a base URL string (chunks fetched as `${base}/${key}`)
+ *                    or a Record mapping chunk keys to their full URLs (for CDN-hosted files)
+ * @param suffixes - which section suffixes to download (defaults to all 10)
+ * @param onProgress - optional callback for UI progress
  */
 export async function downloadChunks(
   circuitName: string,
-  baseUrl: string,
+  urlSource: string | Record<string, string>,
   suffixes: readonly string[] = SECTION_SUFFIXES,
   onProgress?: ProgressCallback,
 ): Promise<void> {
@@ -44,7 +47,11 @@ export async function downloadChunks(
       continue
     }
 
-    const url = `${baseUrl}/${key}`
+    const url = typeof urlSource === 'string' ? `${urlSource}/${key}` : urlSource[key]
+    if (!url) {
+      onProgress?.(`Skipping ${key} — no URL configured`)
+      continue
+    }
     onProgress?.(`Downloading chunk ${downloaded + 1}/${total} (${key})...`)
 
     const buffer = await fetchWithRetry(url, 3)

@@ -20,6 +20,20 @@ type ProgressCallback = (stage: string, detail: string) => void;
 
 const ARTIFACT_CACHE_NAME = "zk-eidas-circuits-v1";
 
+/** ECDSA zkey chunk URLs on UploadThing CDN (each section file has a unique URL). */
+const ECDSA_CHUNK_URLS: Record<string, string> = {
+  "ecdsa_verify.zkeyb": "https://utfs.io/f/vsKUhXCDRm2gXoQnNBaNCF3RyEbVq2GDxspUW8JSgu0TKBmZ",
+  "ecdsa_verify.zkeyc": "https://utfs.io/f/vsKUhXCDRm2gZrtRrl5iXH1GBEpW0o72VmsY98qQkDhIZMzJ",
+  "ecdsa_verify.zkeyd": "https://utfs.io/f/vsKUhXCDRm2gbtImu1Gsl3W4u1xD5F0jzMheRnyS7d2gEaQP",
+  "ecdsa_verify.zkeye": "https://utfs.io/f/vsKUhXCDRm2gpbkszW41JxEDHKYNISnGPBaXpRQg0FrjyUfO",
+  "ecdsa_verify.zkeyf": "https://utfs.io/f/vsKUhXCDRm2gompZbxrfU89TOlNWkKE5xn0ZjBHSwP1msqhR",
+  "ecdsa_verify.zkeyg": "https://utfs.io/f/vsKUhXCDRm2gJ0bo59veWxMh6TNfosdR9QB3q0DXg2Z8nAkv",
+  "ecdsa_verify.zkeyh": "https://utfs.io/f/vsKUhXCDRm2ghlwv1EY6Uklm13cHbRYivwpnBfGNF2Q40qAZ",
+  "ecdsa_verify.zkeyi": "https://utfs.io/f/vsKUhXCDRm2gNecbY8m9EROnsC6LBwY0z83lumTkxKGvgDpb",
+  "ecdsa_verify.zkeyj": "https://utfs.io/f/vsKUhXCDRm2gbHHyCw6Gsl3W4u1xD5F0jzMheRnyS7d2gEaQ",
+  "ecdsa_verify.zkeyk": "https://utfs.io/f/vsKUhXCDRm2gyIXAa0kTlUH5Rj2gmWkiJZxcCASdp7E1GfBt",
+};
+
 /** SHA-256 hash a string and return first 8 bytes as a decimal string (matches Rust bytes_to_u64). */
 async function hashToU64(value: string): Promise<string> {
   const encoded = new TextEncoder().encode(value);
@@ -67,8 +81,7 @@ export async function proveInBrowser(
   // Ensure zkey sections are in localforage before the worker starts proving
   onProgress?.("cache", `Caching ${circuitName} zkey sections...`);
   if (circuitName === "ecdsa_verify") {
-    const ecdsaChunkBaseUrl = `${apiBaseUrl}/circuits/ecdsa_verify`;
-    await downloadChunks("ecdsa_verify", ecdsaChunkBaseUrl, SECTION_SUFFIXES, (detail) =>
+    await downloadChunks("ecdsa_verify", ECDSA_CHUNK_URLS, SECTION_SUFFIXES, (detail) =>
       onProgress?.("cache", detail)
     );
   } else {
