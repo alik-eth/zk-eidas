@@ -16,7 +16,7 @@ ECDSA_CIRCUIT := ecdsa_verify
 
 ALL_STAGE2 := $(PREDICATE_CIRCUITS) $(SPECIAL_CIRCUITS)
 
-.PHONY: all clean predicates specials ecdsa ptau ptau-ecdsa help
+.PHONY: all clean predicates specials ecdsa split-ecdsa ptau ptau-ecdsa help
 
 help:
 	@echo "Usage:"
@@ -24,6 +24,7 @@ help:
 	@echo "  make predicates - Build 6 predicate circuits (fast, ~30s)"
 	@echo "  make specials   - Build nullifier + holder_binding (fast)"
 	@echo "  make ecdsa      - Build ECDSA circuit (slow, ~15min, needs 16GB RAM)"
+	@echo "  make split-ecdsa - Split ECDSA zkey into chunks for browser proving"
 	@echo "  make ptau       - Download Powers of Tau files"
 	@echo "  make clean      - Remove all build artifacts"
 
@@ -74,6 +75,17 @@ $(BUILD_DIR)/$(ECDSA_CIRCUIT)/$(ECDSA_CIRCUIT).zkey: $(ECDSA_CIRCUIT)/$(ECDSA_CI
 	$(SNARKJS) zkey export verificationkey $(BUILD_DIR)/$(ECDSA_CIRCUIT)/$(ECDSA_CIRCUIT).zkey $(BUILD_DIR)/$(ECDSA_CIRCUIT)/vk.json
 	@rm -f $(BUILD_DIR)/$(ECDSA_CIRCUIT)/$(ECDSA_CIRCUIT)_0.zkey
 	@echo "==> ECDSA circuit done."
+
+# Split ECDSA zkey into per-section chunk files for browser proving
+split-ecdsa: $(BUILD_DIR)/$(ECDSA_CIRCUIT)/$(ECDSA_CIRCUIT).zkey
+	@echo "==> Splitting ECDSA zkey into per-section chunks..."
+	$(NODE) $(NODE_MEM) scripts/split-zkey.mjs $(BUILD_DIR)/$(ECDSA_CIRCUIT)/$(ECDSA_CIRCUIT).zkey
+	@echo "==> Compressing chunks with gzip..."
+	@for f in $(BUILD_DIR)/$(ECDSA_CIRCUIT)/$(ECDSA_CIRCUIT).zkey[b-k]; do \
+		gzip -kf "$$f"; \
+		echo "  $$f.gz"; \
+	done
+	@echo "==> Done. Upload .gz files to UploadThing."
 
 clean:
 	rm -rf $(BUILD_DIR)
