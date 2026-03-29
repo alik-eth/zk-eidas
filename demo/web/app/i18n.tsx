@@ -583,6 +583,51 @@ const translations: Record<string, Record<Locale, string>> = {
     uk: "лише докази",
   },
 
+  // ── Ukraine page ────────────────────────────────────────────────────
+  "ua.title": {
+    en: "Ukraine & Diia",
+    uk: "Україна та Дія",
+  },
+  "ua.heroSubtitle": {
+    en: "The most deployed digital identity app in Europe meets zero-knowledge privacy.",
+    uk: "Найпоширеніший застосунок цифрової ідентичності в Європі зустрічає приватність з нульовим розголошенням.",
+  },
+  "ua.factsTitle": {
+    en: "Diia by the numbers",
+    uk: "Дія в цифрах",
+  },
+  "ua.fact1": { en: "24M active users", uk: "24М активних користувачів" },
+  "ua.fact2": { en: "Open source, exported to 5+ countries (Estonia, Colombia, Zambia)", uk: "Відкритий код, експортовано в 5+ країн (Естонія, Колумбія, Замбія)" },
+  "ua.fact3": { en: "Only non-EU country in the POTENTIAL EUDI Wallet pilot", uk: "Єдина не-ЄС країна в пілоті POTENTIAL EUDI Wallet" },
+  "ua.fact4": { en: "Diia.Sign recognized under eIDAS for cross-border signing", uk: "Дія.Підпис визнаний за eIDAS для транскордонного підписання" },
+  "ua.fact5": { en: "CMU Resolution #689 — digital ID wallets aligned with eIDAS 2.0", uk: "Постанова КМУ №689 — цифрові ID-гаманці узгоджені з eIDAS 2.0" },
+  "ua.fact6": { en: "DT4UA Phase 2 (\u20AC10M from EU, eGA Estonia) — trust services and eID interoperability", uk: "DT4UA Phase 2 (\u20AC10М від ЄС, eGA Естонії) — довірчі сервіси та eID інтероперабельність" },
+  "ua.problemTitle": {
+    en: "The problem with Diia today",
+    uk: "Проблема Дії сьогодні",
+  },
+  "ua.problem1": { en: "Diia shares full documents (JSON server-to-server)", uk: "Дія шерить повні документи (JSON сервер-до-сервера)" },
+  "ua.problem2": { en: "No credentials in the user's hands", uk: "Немає посвідчень у руках юзера" },
+  "ua.problem3": { en: "No selective disclosure — a store sees your full passport to verify your age", uk: "Немає вибіркового розкриття — магазин бачить повний паспорт для перевірки віку" },
+  "ua.problem4": { en: "Does not comply with eIDAS 2.0 Art. 5a(16) unlinkability requirement", uk: "Не відповідає вимозі незв'язуваності ст. 5a(16) eIDAS 2.0" },
+  "ua.solutionTitle": {
+    en: "With ZK proofs",
+    uk: "З ZK-доказами",
+  },
+  "ua.solution1": { en: "Diia issues an SD-JWT VC (one change on Diia's side)", uk: "Дія видає SD-JWT VC (одна зміна на стороні Дії)" },
+  "ua.solution2": { en: "User generates a ZK proof: \u201CI am 18+\u201D without revealing the passport", uk: "Юзер генерує ZK-доказ: \u00ABмені є 18\u00BB без розкриття паспорта" },
+  "ua.solution3": { en: "Offline verification, milliseconds", uk: "Верифікація офлайн, мілісекунди" },
+  "ua.solution4": { en: "Unlinkability mathematically guaranteed", uk: "Незв'язуваність математично гарантована" },
+  "ua.wartimeTitle": {
+    en: "Built in Ukraine during wartime",
+    uk: "Розроблено в Україні під час війни",
+  },
+  "ua.wartime1": { en: "Paper backward compatibility — QR code on A4, works without internet", uk: "Зворотна сумісність з папером — QR-код на А4, працює без інтернету" },
+  "ua.wartime2": { en: "Infrastructure resilience — documents work when registries are offline", uk: "Стійкість інфраструктури — документи працюють коли реєстри офлайн" },
+  "ua.wartime3": { en: "No server dependency — proof generated and verified on device", uk: "Без залежності від сервера — доказ генерується та перевіряється на пристрої" },
+  "ua.back": { en: "\u2190 Back", uk: "\u2190 Назад" },
+  "nav.ukraine": { en: "Ukraine", uk: "Україна" },
+
   // ── Learn More nav ───────────────────────────────────────────────────
   "nav.learn": { en: "Learn More", uk: "Дізнатися більше" },
 

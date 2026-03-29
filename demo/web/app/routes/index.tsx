@@ -1207,6 +1207,12 @@ function Landing() {
               {locale === "uk" ? "EN" : "UA"}
             </button>
             <Link
+              to="/ukraine"
+              className="hidden sm:inline text-xs text-slate-400 hover:text-slate-200 transition-colors font-medium"
+            >
+              {t("nav.ukraine")}
+            </Link>
+            <Link
               to="/verify"
               className="hidden sm:inline text-xs text-slate-400 hover:text-slate-200 transition-colors font-medium"
             >
