@@ -83,6 +83,28 @@ make predicates specials
 cd .. && cargo test --workspace
 ```
 
+## Testing
+
+```bash
+# Rust unit + integration tests (252 tests)
+cargo test --workspace
+
+# Circom circuit constraint tests (26 tests)
+cd circuits && npm test
+
+# WASM browser tests (Chrome + Firefox)
+cd crates/zk-eidas-wasm && wasm-pack test --headless --chrome --firefox
+
+# Web unit tests (vitest — QR chunking, nullifier check, chunked zkey loader)
+cd demo/web && npx vitest run
+
+# E2E tests — server-side proving (requires running container)
+cd demo/web && E2E_BASE_URL=http://127.0.0.1:8080 npx playwright test
+
+# E2E tests — on-device browser proving (slow, ~5-10 min per contract)
+cd demo/web && E2E_BASE_URL=http://127.0.0.1:8080 E2E_ON_DEVICE=1 npx playwright test
+```
+
 ## Circuit Artifacts
 
 Large binary files (zkeys, ptau, CVM) are hosted externally. URLs are tracked in `circuits/artifact-urls.json`.
