@@ -63,10 +63,10 @@ The [verify page](https://zk-eidas.com/verify) is a PWA — install it once, ver
 | `zk-eidas-prover` | Witness generation (C++ binaries) + Groth16 proving (rapidsnark) |
 | `zk-eidas-verifier` | Proof verification + trusted circuit registry |
 | `zk-eidas-utils` | Date conversion, age calculation, field arithmetic |
-| `zk-eidas-wasm` | WASM bindings for browser |
+| `zk-eidas-wasm` | WASM bindings for browser — credential parsing (SD-JWT + mdoc), proof inspection |
 | `cbor-print` | Chunked QR protocol for paper proof transport |
 
-9 Circom circuits. Groth16 proofs. Browser verification via snarkjs.
+9 Circom circuits. Groth16 proofs. Server proving via rapidsnark. On-device browser proving via chunked snarkjs fork (zkey sections loaded from IndexedDB on demand, ~1.5 GB peak memory instead of ~3 GB).
 
 ## Building
 
@@ -98,10 +98,13 @@ source .env.production && node scripts/upload-artifacts.mjs
 | File | Size | Host |
 |------|------|------|
 | `ecdsa_verify.zkey` | 1.2 GB | UploadThing |
+| ECDSA zkey chunks (10 sections) | 1.2 GB total | UploadThing |
 | `ecdsa_verify.cvm` | 58 MB | UploadThing |
 | `pot21.ptau` | 2.4 GB | Hermez ceremony (Google Storage) |
 | `pot22.ptau` | 4.6 GB | Hermez ceremony (Google Storage) |
 | Predicate zkeys (8x) | ~2 MB | Git repo |
+
+ECDSA chunk files are split per-section (`ecdsa_verify.zkeyb` through `.zkeyk`) for on-device browser proving. The browser downloads them into IndexedDB and the chunked snarkjs fork reads sections on demand during proving.
 
 ## Standards
 
