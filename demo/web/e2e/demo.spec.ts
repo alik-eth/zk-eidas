@@ -4,6 +4,15 @@ import { test, expect, type Page } from '@playwright/test'
 // Helpers
 // ---------------------------------------------------------------------------
 
+function enableConsoleLogs(page: Page) {
+  page.on('console', msg => {
+    const text = msg.text()
+    if (text.includes('[chunked-zkey]') || text.includes('[prover]') || text.includes('[worker]')) {
+      console.log(`  [browser] ${text}`)
+    }
+  })
+}
+
 async function issueDefaultPid(page: Page) {
   page.on('dialog', d => d.dismiss())
   // Wait for React hydration
@@ -102,6 +111,7 @@ test.describe('Demo — On-Device Proof', () => {
 
   test('PID: issue → on-device prove age >= 18 → verified', async ({ page }) => {
     test.setTimeout(600_000) // 10 min — ECDSA circuit is heavy in browser
+    enableConsoleLogs(page)
     await page.goto('/demo')
     await issueDefaultPid(page)
 
@@ -194,6 +204,7 @@ test.describe('Contracts — On-Device E2E', () => {
 
   test('Age Verification: on-device prove → document', async ({ page }) => {
     test.setTimeout(600_000)
+    enableConsoleLogs(page)
     await page.goto('/contracts')
     await page.waitForTimeout(2000)
     await page.locator('button', { hasText: /Перевірка віку/ }).first().click()
