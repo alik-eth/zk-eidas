@@ -34,6 +34,95 @@ const translations: Record<string, Record<Locale, string>> = {
   "hero.tryDemo": { en: "Try the Demo", uk: "Спробувати демо" },
   "hero.viewGithub": { en: "View on GitHub", uk: "Переглянути на GitHub" },
 
+  // ── Problem ──────────────────────────────────────────────────────────
+  "problem.title": {
+    en: "The Unlinkability Gap",
+    uk: "Прогалина незв'язуваності",
+  },
+  "problem.subtitle": {
+    en: "eIDAS 2.0 Article 5a(16) requires unlinkability. SD-JWT VC with ES256 structurally can't deliver it — every presentation is linkable by the issuer's signature. BBS+ was rejected by SOG-IS. Batch issuance doesn't support predicates. No EU member state has solved this.",
+    uk: "Стаття 5a(16) eIDAS 2.0 вимагає незв'язуваність. SD-JWT VC з ES256 структурно не може її забезпечити — кожна презентація зв'язувана через підпис видавця. BBS+ відхилено SOG-IS. Пакетна видача не підтримує предикати. Жодна країна ЄС не вирішила це.",
+  },
+  "problem.criterion": { en: "Criterion", uk: "Критерій" },
+  "problem.sdjwt": { en: "SD-JWT VC", uk: "SD-JWT VC" },
+  "problem.bbs": { en: "BBS+", uk: "BBS+" },
+  "problem.batch": { en: "Batch Issuance", uk: "Пакетна видача" },
+  "problem.zk": { en: "ZK Proofs", uk: "ZK-докази" },
+  "problem.row1": { en: "eIDAS 2.0 format compliant", uk: "Сумісність з форматом eIDAS 2.0" },
+  "problem.row2": { en: "SOG-IS algorithm approval", uk: "Схвалення алгоритму SOG-IS" },
+  "problem.row3": { en: "Unlinkable presentations", uk: "Незв'язувані презентації" },
+  "problem.row4": { en: "Selective disclosure", uk: "Вибіркове розкриття" },
+  "problem.row5": { en: "Predicate proofs (e.g. age \u2265 18)", uk: "Предикатні докази (напр. вік \u2265 18)" },
+  "problem.row6": { en: "No infrastructure changes", uk: "Без змін інфраструктури" },
+
+  // ── Solution ─────────────────────────────────────────────────────────
+  "solution.title": {
+    en: "ZK proofs over existing credentials",
+    uk: "ZK-докази поверх існуючих посвідчень",
+  },
+  "solution.subtitle": {
+    en: "No format changes. No new algorithms. No infrastructure.",
+    uk: "Без змін формату. Без нових алгоритмів. Без інфраструктури.",
+  },
+  "solution.step1Title": {
+    en: "Issuer signs ES256",
+    uk: "Видавець підписує ES256",
+  },
+  "solution.step1Desc": {
+    en: "Standard SD-JWT VC or mdoc issuance. No changes to the issuer's infrastructure.",
+    uk: "Стандартна видача SD-JWT VC або mdoc. Без змін інфраструктури видавця.",
+  },
+  "solution.step1Label": {
+    en: "as usual",
+    uk: "як зазвичай",
+  },
+  "solution.step2Title": {
+    en: "User proves in ZK circuit",
+    uk: "Користувач доводить у ZK-схемі",
+  },
+  "solution.step2Desc": {
+    en: "ECDSA signature verified inside the circuit. The claim value never leaves the device.",
+    uk: "Підпис ECDSA перевіряється всередині схеми. Значення поля ніколи не залишає пристрій.",
+  },
+  "solution.step3Title": {
+    en: "Verifier checks proof",
+    uk: "Верифікатор перевіряє доказ",
+  },
+  "solution.step3Desc": {
+    en: "<10ms verification. Works offline. Zero personal data exposed.",
+    uk: "Верифікація <10мс. Працює офлайн. Нуль персональних даних розкрито.",
+  },
+
+  // ── Pre-commitment ───────────────────────────────────────────────────
+  "precommit.title": {
+    en: "< 1 second on any smartphone",
+    uk: "< 1 секунда на будь-якому смартфоні",
+  },
+  "precommit.subtitle": {
+    en: "Heavy ECDSA once at issuance — lightweight Poseidon proofs forever",
+    uk: "Важкий ECDSA один раз при видачі — легкі Poseidon-докази назавжди",
+  },
+  "precommit.desc": {
+    en: "The ECDSA P-256 signature verification is the most expensive part of the proof — millions of constraints. Pre-computing it at credential issuance time means the user's device only needs to run lightweight Poseidon-based predicate circuits at presentation time.",
+    uk: "Перевірка підпису ECDSA P-256 — найважча частина доказу: мільйони обмежень. Попередній розрахунок при видачі посвідчення означає, що пристрій користувача запускає лише легкі Poseidon-схеми предикатів при пред'явленні.",
+  },
+  "precommit.device": { en: "Device", uk: "Пристрій" },
+  "precommit.time": { en: "Predicate proof time", uk: "Час доказу предиката" },
+  "precommit.badge": { en: "planned", uk: "в розробці" },
+
+  // ── Ukraine ──────────────────────────────────────────────────────────
+  "ukraine.title": {
+    en: "Built for scale. Proven by Diia.",
+    uk: "Побудовано для масштабу. Доведено Дією.",
+  },
+  "ukraine.stat1": { en: "active users", uk: "активних користувачів" },
+  "ukraine.stat2": { en: "countries exported to", uk: "країн експорту" },
+  "ukraine.stat3": { en: "wallet pilot participant", uk: "учасник пілоту гаманця" },
+  "ukraine.desc": {
+    en: "Ukraine is the only non-EU country in the POTENTIAL EUDI Wallet pilot. Diia — the most widely deployed digital identity app in Europe — is open source and runs on the same credential formats zk-eidas supports. We're building the unlinkability layer.",
+    uk: "Україна — єдина країна поза ЄС у пілоті POTENTIAL EUDI Wallet. Дія — найпоширеніший застосунок цифрової ідентичності в Європі — має відкритий код і працює на тих самих форматах посвідчень, що підтримує zk-eidas. Ми будуємо шар незв'язуваності.",
+  },
+
   // ── Learn More page ─────────────────────────────────────────────────────
   "learn.back": { en: "Back", uk: "Назад" },
   "learn.title": { en: "How zk-eidas Works", uk: "Як працює zk-eidas" },
@@ -228,52 +317,6 @@ const translations: Record<string, Record<Locale, string>> = {
   "learn.privacyLimitationDesc": { en: "Each proof is scoped to a specific predicate. A verifier can\'t repurpose it for other checks.", uk: "Кожен доказ прив\'язаний до конкретного предиката. Верифікатор не може використати його для інших перевірок." },
   "learn.privacyStorage": { en: "Zero Storage", uk: "Нуль зберігання" },
   "learn.privacyStorageDesc": { en: "The library stores no personal data. Proofs are transient. Nothing to breach.", uk: "Бібліотека не зберігає персональних даних. Докази тимчасові. Нічого для витоку." },
-
-  // ── Capabilities ─────────────────────────────────────────────────────────
-  "caps.title": {
-    en: "Beyond Verification \u2014 A New Type of Document",
-    uk: "Більше ніж верифікація \u2014 новий тип документу",
-  },
-  "caps.subtitle": {
-    en: "Zero-knowledge proofs are just the start. Verify in the browser, print on paper, generate legally-styled documents — all without a server.",
-    uk: "Докази з нульовим розголошенням — лише початок. Перевіряйте у браузері, друкуйте на папері, створюйте юридичні документи — без сервера.",
-  },
-  "caps.wasmTitle": {
-    en: "Consent as Concludent Act",
-    uk: "Згода як конклюдентна дія",
-  },
-  "caps.wasmDesc": {
-    en: "Binding a credential to the contract hash inside a ZK circuit. Impossible to forge, impossible to deny, bound to specific terms. Stronger than a signature.",
-    uk: "Прив\u2019язка посвідчення до хешу контракту всередині ZK-схеми. Неможливо підробити, неможливо заперечити, прив\u2019язано до конкретних умов. Сильніше за підпис.",
-  },
-  "caps.wasmCta": {
-    en: "Try it in the playground",
-    uk: "Спробувати у пісочниці",
-  },
-  "caps.paperTitle": {
-    en: "Backward Compatibility with Paper",
-    uk: "Зворотна сумісність з папером",
-  },
-  "caps.paperDesc": {
-    en: "Any digital credential can be issued on paper and verified offline. ZK proofs embed as chunked QR codes on standard A4 — verifiable with any camera, no app or internet needed.",
-    uk: "Будь-який цифровий документ можна видати на папері та перевірити офлайн. ZK-докази вбудовуються як QR-коди на стандартному A4 — перевіряються будь-якою камерою, без застосунку чи інтернету.",
-  },
-  "caps.paperCta": {
-    en: "Try offline verification",
-    uk: "Спробувати офлайн-перевірку",
-  },
-  "caps.contractsTitle": {
-    en: "Dispute Resolution Through Court",
-    uk: "Вирішення спорів через суд",
-  },
-  "caps.contractsDesc": {
-    en: "Nullifiers are unique per contract, unlinkable across documents. A court subpoenas the credential issuer \u2014 and only the issuer can identify the party. Privacy by default, accountability by court order.",
-    uk: "Нуліфікатори \u2014 унікальні для кожного контракту, незв\u2019язувані між документами. Суд запитує видавця посвідчень \u2014 і тільки видавець може ідентифікувати сторону. Приватність за замовчуванням, відповідальність за судовим рішенням.",
-  },
-  "caps.contractsCta": {
-    en: "Try the demo",
-    uk: "Спробувати демо",
-  },
 
   // ── Live Proof ─────────────────────────────────────────────────────────
   "liveProof.title": {
