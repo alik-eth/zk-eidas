@@ -43,18 +43,23 @@ export async function downloadChunks(
 
     const cached = await localforage.getItem(key)
     if (cached !== null) {
+      console.log(`[chunked-zkey] ${key} already cached`)
       downloaded++
       continue
     }
 
     const url = typeof urlSource === 'string' ? `${urlSource}/${key}` : urlSource[key]
     if (!url) {
+      console.warn(`[chunked-zkey] ${key} — no URL configured, skipping`)
       onProgress?.(`Skipping ${key} — no URL configured`)
       continue
     }
+    console.log(`[chunked-zkey] Downloading ${key} from ${url}...`)
     onProgress?.(`Downloading chunk ${downloaded + 1}/${total} (${key})...`)
 
     const buffer = await fetchWithRetry(url, 3)
+    const sizeMB = (buffer.byteLength / (1024 * 1024)).toFixed(1)
+    console.log(`[chunked-zkey] Cached ${key} (${sizeMB} MB)`)
     await localforage.setItem(key, buffer)
     downloaded++
     onProgress?.(`Cached ${key} (${downloaded}/${total})`)

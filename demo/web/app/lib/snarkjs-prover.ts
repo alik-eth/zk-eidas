@@ -57,13 +57,18 @@ async function ensureZkeyInLocalforage(circuitName: string, apiBaseUrl: string):
   for (const suffix of SECTION_SUFFIXES) {
     const key = `${circuitName}.zkey${suffix}`
     const cached = await localforage.getItem(key)
-    if (cached !== null) continue
+    if (cached !== null) {
+      console.log(`[prover] ${key} already cached`)
+      continue
+    }
 
     const url = `${apiBaseUrl}/circuits/${circuitName}/${circuitName}.zkey${suffix}`
     try {
+      console.log(`[prover] Fetching ${key}...`)
       const resp = await fetch(url)
-      if (!resp.ok) break // Section doesn't exist — circuit has fewer sections
+      if (!resp.ok) break
       const buffer = await resp.arrayBuffer()
+      console.log(`[prover] Cached ${key} (${(buffer.byteLength / 1024).toFixed(0)} KB)`)
       await localforage.setItem(key, buffer)
     } catch {
       break
@@ -79,6 +84,7 @@ export async function proveInBrowser(
   onProgress?: ProgressCallback,
 ): Promise<BrowserProofResult> {
   // Ensure zkey sections are in localforage before the worker starts proving
+  console.log(`[prover] Ensuring zkey sections cached for ${circuitName}...`);
   onProgress?.("cache", `Caching ${circuitName} zkey sections...`);
   if (circuitName === "ecdsa_verify") {
     await downloadChunks("ecdsa_verify", ECDSA_CHUNK_URLS, SECTION_SUFFIXES, (detail) =>
@@ -87,6 +93,7 @@ export async function proveInBrowser(
   } else {
     await ensureZkeyInLocalforage(circuitName, apiBaseUrl);
   }
+  console.log(`[prover] Zkey sections ready for ${circuitName}, spawning worker...`);
 
   const wasmUrl = `${apiBaseUrl}/circuits/${circuitName}/${circuitName}_js/${circuitName}.wasm`;
   const zkeyUrl = `${circuitName}.zkey`;
