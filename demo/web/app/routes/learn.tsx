@@ -26,24 +26,14 @@ function SectionHeading({
   );
 }
 
-function CodeBlock({ code }: { code: string }) {
-  return (
-    <pre className="bg-slate-900 border border-slate-700/50 rounded-lg p-4 overflow-x-auto text-sm font-mono text-slate-300 leading-relaxed">
-      {code}
-    </pre>
-  );
-}
-
 function PipelineStep({
   num,
   title,
   description,
-  detail,
 }: {
   num: number;
   title: string;
   description: string;
-  detail?: string;
 }) {
   return (
     <div className="relative pl-12">
@@ -55,11 +45,16 @@ function PipelineStep({
       </div>
       <h4 className="text-lg font-semibold mb-1">{title}</h4>
       <p className="text-slate-400 leading-relaxed">{description}</p>
-      {detail && (
-        <p className="text-sm text-slate-500 mt-2 leading-relaxed">{detail}</p>
-      )}
     </div>
   );
+}
+
+function StatusIcon({ status }: { status: "yes" | "no" | "partial" }) {
+  if (status === "yes")
+    return <span className="text-green-400 font-bold">✓</span>;
+  if (status === "no")
+    return <span className="text-red-400 font-bold">✗</span>;
+  return <span className="text-yellow-400 font-bold">⚠</span>;
 }
 
 /* ── Main component ────────────────────────────────────────────────────── */
@@ -101,10 +96,11 @@ function Learn() {
         <nav className="flex flex-wrap gap-3 text-sm">
           {[
             { href: "#problem", label: t("learn.tocProblem") },
-            { href: "#zkp-basics", label: t("learn.tocZkp") },
-            { href: "#pipeline", label: t("learn.tocPipeline") },
-            { href: "#predicates", label: t("learn.tocPredicates") },
-            { href: "#advanced", label: t("learn.tocAdvanced") },
+            { href: "#why-zk", label: t("learn.tocWhyZk") },
+            { href: "#comparison", label: t("learn.tocComparison") },
+            { href: "#trust-gap", label: t("learn.tocTrustGap") },
+            { href: "#how-it-works", label: t("learn.tocHowItWorks") },
+            { href: "#capabilities", label: t("learn.tocCapabilities") },
             { href: "#standards", label: t("learn.tocStandards") },
             { href: "#privacy", label: t("learn.tocPrivacy") },
           ].map((item) => (
@@ -120,7 +116,7 @@ function Learn() {
       </section>
 
       <div className="max-w-4xl mx-auto px-4 sm:px-8 space-y-24 pb-24">
-        {/* ── 1. The Privacy Problem ──────────────────────────────────────── */}
+        {/* ── 1. The eIDAS 2.0 Unlinkability Problem ───────────────────── */}
         <section>
           <SectionHeading
             id="problem"
@@ -128,30 +124,31 @@ function Learn() {
             subtitle={t("learn.problemSubtitle")}
           />
 
+          {/* Two-card comparison */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-            {/* Traditional */}
+            {/* SD-JWT VC */}
             <div className="bg-slate-800 rounded-xl border border-slate-700 p-6">
               <h4 className="text-sm font-semibold mb-4 text-slate-400 uppercase tracking-wider">
-                {t("learn.problemTraditional")}
+                {t("learn.problemSdjwtLabel")}
               </h4>
-              <div className="space-y-3 text-sm">
-                <div className="bg-slate-900 rounded-lg p-3 font-mono text-xs">
-                  <div className="text-slate-500 mb-1">
-                    {t("learn.problemVerifierSees")}
-                  </div>
-                  <div className="text-red-400">name: Hans Mueller</div>
-                  <div className="text-red-400">birth_date: 1985-11-30</div>
-                  <div className="text-red-400">
-                    document_number: DE-PID-2025-001
-                  </div>
-                  <div className="text-red-400">
-                    address: Alexanderplatz 1, Berlin
-                  </div>
-                  <div className="text-red-400">nationality: DE</div>
+              <div className="bg-slate-900 rounded-lg p-3 font-mono text-xs space-y-1">
+                <div className="text-slate-500">{t("learn.problemSdjwtSees")}</div>
+                <div className="text-red-400">
+                  signature: eyJhbGci...{" "}
+                  <span className="text-slate-600">← {t("learn.problemSdjwtSig")}</span>
                 </div>
-                <p className="text-slate-400">
-                  {t("learn.problemTraditionalDesc")}
-                </p>
+                <div className="text-red-400">
+                  cnf: {"{"}jwk: ...{"}"}{" "}
+                  <span className="text-slate-600">← {t("learn.problemSdjwtCnf")}</span>
+                </div>
+                <div className="text-green-400">
+                  age_over_18: true{" "}
+                  <span className="text-slate-600">← {t("learn.problemSdjwtClaim")}</span>
+                </div>
+                <div className="text-slate-600">
+                  name: [redacted]{" "}
+                  <span className="text-slate-600">← {t("learn.problemSdjwtHidden")}</span>
+                </div>
               </div>
             </div>
 
@@ -164,68 +161,78 @@ function Learn() {
                 className="text-sm font-semibold mb-4 uppercase tracking-wider"
                 style={{ color: "#FFD500" }}
               >
-                {t("learn.problemZkTitle")}
+                {t("learn.problemZkLabel")}
               </h4>
-              <div className="space-y-3 text-sm">
-                <div className="bg-slate-900 rounded-lg p-3 font-mono text-xs">
-                  <div className="text-slate-500 mb-1">
-                    {t("learn.problemVerifierSees")}
-                  </div>
-                  <div className="text-green-400">
-                    age &gt;= 18: <span className="text-white">true</span>
-                  </div>
-                  <div className="text-green-400">
-                    signature_valid: <span className="text-white">true</span>
-                  </div>
-                  <div className="text-slate-600">name: ████████████</div>
-                  <div className="text-slate-600">birth_date: ██████████</div>
-                  <div className="text-slate-600">
-                    document_number: ████████████
-                  </div>
+              <div className="bg-slate-900 rounded-lg p-3 font-mono text-xs space-y-1">
+                <div className="text-slate-500">{t("learn.problemZkSees")}</div>
+                <div className="text-green-400">
+                  age &gt;= 18: true{" "}
+                  <span className="text-slate-600">← {t("learn.problemZkResult")}</span>
                 </div>
-                <p className="text-slate-300">{t("learn.problemZkDesc")}</p>
+                <div className="text-green-400">
+                  signature_valid: true{" "}
+                  <span className="text-slate-600">← {t("learn.problemZkSigValid")}</span>
+                </div>
+                <div className="text-green-400">
+                  nullifier: 0xa7f3…{" "}
+                  <span className="text-slate-600">← {t("learn.problemZkNullifier")}</span>
+                </div>
+                <div className="text-slate-600">
+                  name: ████████{" "}
+                  <span className="text-slate-500">← {t("learn.problemZkHidden")}</span>
+                </div>
+                <div className="text-slate-600">
+                  signature: ████████{" "}
+                  <span className="text-slate-500">← {t("learn.problemZkSigHidden")}</span>
+                </div>
               </div>
             </div>
           </div>
+
+          {/* Three failure modes */}
+          <div className="space-y-4 mb-8">
+            {[
+              { title: t("learn.problemSdjwtTitle"), desc: t("learn.problemSdjwtDesc") },
+              { title: t("learn.problemBbsTitle"), desc: t("learn.problemBbsDesc") },
+              { title: t("learn.problemBatchTitle"), desc: t("learn.problemBatchDesc") },
+            ].map((item) => (
+              <div
+                key={item.title}
+                className="bg-slate-800/50 rounded-xl border border-slate-700/50 p-4"
+              >
+                <h4 className="text-sm font-semibold mb-1 text-slate-200">
+                  {item.title}
+                </h4>
+                <p className="text-sm text-slate-400 leading-relaxed">
+                  {item.desc}
+                </p>
+              </div>
+            ))}
+          </div>
+
+          <p className="text-slate-300 font-medium text-center italic">
+            {t("learn.problemClosing")}
+          </p>
         </section>
 
-        {/* ── 2. Zero-Knowledge Proofs in 30 Seconds ─────────────────────── */}
+        {/* ── 2. Why Only ZK Works ─────────────────────────────────────── */}
         <section>
           <SectionHeading
-            id="zkp-basics"
-            title={t("learn.zkpTitle")}
-            subtitle={t("learn.zkpSubtitle")}
+            id="why-zk"
+            title={t("learn.whyZkTitle")}
           />
 
           <div className="bg-slate-800/50 rounded-xl border border-slate-700/50 p-6 sm:p-8 mb-8">
-            <div className="space-y-6 text-slate-300 leading-relaxed">
-              <p>{t("learn.zkpAnalogy1")}</p>
-              <div className="bg-slate-900 rounded-lg p-4 border border-slate-700/50">
-                <p className="text-sm font-mono text-blue-400 mb-2">
-                  {t("learn.zkpAnalogyLabel")}
-                </p>
-                <p className="text-sm text-slate-400">
-                  {t("learn.zkpAnalogy2")}
-                </p>
-              </div>
-              <p>{t("learn.zkpAnalogy3")}</p>
-            </div>
+            <p className="text-slate-300 leading-relaxed text-lg">
+              {t("learn.whyZkDesc")}
+            </p>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
             {[
-              {
-                property: t("learn.zkpCompleteness"),
-                desc: t("learn.zkpCompletenessDesc"),
-              },
-              {
-                property: t("learn.zkpSoundness"),
-                desc: t("learn.zkpSoundnessDesc"),
-              },
-              {
-                property: t("learn.zkpZeroKnowledge"),
-                desc: t("learn.zkpZeroKnowledgeDesc"),
-              },
+              { property: t("learn.whyZkCompleteness"), desc: t("learn.whyZkCompletenessDesc") },
+              { property: t("learn.whyZkSoundness"), desc: t("learn.whyZkSoundnessDesc") },
+              { property: t("learn.whyZkZeroKnowledge"), desc: t("learn.whyZkZeroKnowledgeDesc") },
             ].map((p) => (
               <div
                 key={p.property}
@@ -243,50 +250,220 @@ function Learn() {
               </div>
             ))}
           </div>
+
+          <p className="text-slate-300 font-medium text-center italic">
+            {t("learn.whyZkClosing")}
+          </p>
         </section>
 
-        {/* ── 3. How zk-eidas Works: The Pipeline ────────────────────────── */}
+        {/* ── 3. Comparison Table ──────────────────────────────────────── */}
         <section>
           <SectionHeading
-            id="pipeline"
-            title={t("learn.pipelineTitle")}
-            subtitle={t("learn.pipelineSubtitle")}
+            id="comparison"
+            title={t("learn.comparisonTitle")}
+            subtitle={t("learn.comparisonSubtitle")}
           />
 
-          {/* Visual pipeline */}
+          <div className="overflow-x-auto mb-6">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-slate-700">
+                  <th className="text-left py-3 px-3 text-slate-400 font-semibold">
+                    {t("learn.compCriterion")}
+                  </th>
+                  <th className="text-left py-3 px-3 text-slate-400 font-semibold">
+                    {t("learn.compSdjwt")}
+                  </th>
+                  <th className="text-left py-3 px-3 text-slate-400 font-semibold">
+                    {t("learn.compBbs")}
+                  </th>
+                  <th className="text-left py-3 px-3 text-slate-400 font-semibold">
+                    {t("learn.compBatch")}
+                  </th>
+                  <th
+                    className="text-left py-3 px-3 font-semibold border-x border-blue-500/20"
+                    style={{ color: "#FFD500" }}
+                  >
+                    {t("learn.compZk")}
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-800">
+                {/* Unlinkability */}
+                <tr className="hover:bg-slate-800/50">
+                  <td className="py-3 px-3 text-slate-300 font-medium">{t("learn.compUnlinkability")}</td>
+                  <td className="py-3 px-3 text-slate-400"><StatusIcon status="no" /> {t("learn.compUnlinkSdjwt")}</td>
+                  <td className="py-3 px-3 text-slate-400"><StatusIcon status="yes" /> {t("learn.compUnlinkBbs")}</td>
+                  <td className="py-3 px-3 text-slate-400"><StatusIcon status="partial" /> {t("learn.compUnlinkBatch")}</td>
+                  <td className="py-3 px-3 text-slate-300 border-x border-blue-500/20"><StatusIcon status="yes" /> {t("learn.compUnlinkZk")}</td>
+                </tr>
+                {/* Selective Disclosure */}
+                <tr className="hover:bg-slate-800/50">
+                  <td className="py-3 px-3 text-slate-300 font-medium">{t("learn.compSelective")}</td>
+                  <td className="py-3 px-3 text-slate-400"><StatusIcon status="yes" /> {t("learn.compSelectSdjwt")}</td>
+                  <td className="py-3 px-3 text-slate-400"><StatusIcon status="yes" /> {t("learn.compSelectBbs")}</td>
+                  <td className="py-3 px-3 text-slate-400"><StatusIcon status="no" /> {t("learn.compSelectBatch")}</td>
+                  <td className="py-3 px-3 text-slate-300 border-x border-blue-500/20"><StatusIcon status="yes" /> {t("learn.compSelectZk")}</td>
+                </tr>
+                {/* Predicates */}
+                <tr className="hover:bg-slate-800/50">
+                  <td className="py-3 px-3 text-slate-300 font-medium">{t("learn.compPredicates")}</td>
+                  <td className="py-3 px-3 text-slate-400"><StatusIcon status="no" /> {t("learn.compPredReveals")}</td>
+                  <td className="py-3 px-3 text-slate-400"><StatusIcon status="no" /> {t("learn.compPredReveals")}</td>
+                  <td className="py-3 px-3 text-slate-400"><StatusIcon status="no" /> {t("learn.compPredReveals")}</td>
+                  <td className="py-3 px-3 text-slate-300 border-x border-blue-500/20"><StatusIcon status="yes" /> {t("learn.compPredZk")}</td>
+                </tr>
+                {/* SOG-IS */}
+                <tr className="hover:bg-slate-800/50">
+                  <td className="py-3 px-3 text-slate-300 font-medium">{t("learn.compSogis")}</td>
+                  <td className="py-3 px-3 text-slate-400"><StatusIcon status="yes" /> {t("learn.compSogisSdjwt")}</td>
+                  <td className="py-3 px-3 text-slate-400"><StatusIcon status="no" /> {t("learn.compSogisBbs")}</td>
+                  <td className="py-3 px-3 text-slate-400"><StatusIcon status="yes" /> {t("learn.compSogisBatch")}</td>
+                  <td className="py-3 px-3 text-slate-300 border-x border-blue-500/20"><StatusIcon status="yes" /> {t("learn.compSogisZk")}</td>
+                </tr>
+                {/* Offline */}
+                <tr className="hover:bg-slate-800/50">
+                  <td className="py-3 px-3 text-slate-300 font-medium">{t("learn.compOffline")}</td>
+                  <td className="py-3 px-3 text-slate-400"><StatusIcon status="yes" /></td>
+                  <td className="py-3 px-3 text-slate-400"><StatusIcon status="yes" /></td>
+                  <td className="py-3 px-3 text-slate-400"><StatusIcon status="yes" /></td>
+                  <td className="py-3 px-3 text-slate-300 border-x border-blue-500/20"><StatusIcon status="yes" /></td>
+                </tr>
+                {/* Format */}
+                <tr className="hover:bg-slate-800/50">
+                  <td className="py-3 px-3 text-slate-300 font-medium">{t("learn.compFormat")}</td>
+                  <td className="py-3 px-3 text-slate-400">{t("learn.compFormatSdjwt")}</td>
+                  <td className="py-3 px-3 text-slate-400">{t("learn.compFormatBbs")}</td>
+                  <td className="py-3 px-3 text-slate-400">{t("learn.compFormatBatch")}</td>
+                  <td className="py-3 px-3 text-slate-300 border-x border-blue-500/20">{t("learn.compFormatZk")}</td>
+                </tr>
+                {/* Proof Size */}
+                <tr className="hover:bg-slate-800/50">
+                  <td className="py-3 px-3 text-slate-300 font-medium">{t("learn.compSize")}</td>
+                  <td className="py-3 px-3 text-slate-400">{t("learn.compSizeFull")}</td>
+                  <td className="py-3 px-3 text-slate-400">{t("learn.compSizeBbs")}</td>
+                  <td className="py-3 px-3 text-slate-400">{t("learn.compSizeFull")}</td>
+                  <td className="py-3 px-3 text-slate-300 border-x border-blue-500/20">{t("learn.compSizeZk")}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div className="space-y-2 text-xs text-slate-500">
+            <p>{t("learn.compFootSdjwt")}</p>
+            <p>{t("learn.compFootBbs")}</p>
+            <p>{t("learn.compFootBatch")}</p>
+          </div>
+        </section>
+
+        {/* ── 4. The Trust Gap ─────────────────────────────────────────── */}
+        <section>
+          <SectionHeading
+            id="trust-gap"
+            title={t("learn.trustGapTitle")}
+            subtitle={t("learn.trustGapSubtitle")}
+          />
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+            {/* Typical ZK */}
+            <div className="bg-slate-800 rounded-xl border border-slate-700 p-6">
+              <h4 className="text-sm font-semibold mb-4 text-slate-400 uppercase tracking-wider">
+                {t("learn.trustGapTypical")}
+              </h4>
+              <ul className="space-y-3 text-sm text-slate-400">
+                <li className="flex gap-2">
+                  <span className="text-red-400 shrink-0">1.</span>
+                  {t("learn.trustGapTyp1")}
+                </li>
+                <li className="flex gap-2">
+                  <span className="text-red-400 shrink-0">2.</span>
+                  {t("learn.trustGapTyp2")}
+                </li>
+                <li className="flex gap-2">
+                  <span className="text-red-400 shrink-0">3.</span>
+                  {t("learn.trustGapTyp3")}
+                </li>
+                <li className="flex gap-2">
+                  <span className="text-red-400 shrink-0">4.</span>
+                  {t("learn.trustGapTyp4")}
+                </li>
+                <li className="text-red-300 italic mt-2">
+                  {t("learn.trustGapTyp5")}
+                </li>
+              </ul>
+            </div>
+
+            {/* zk-eidas */}
+            <div
+              className="bg-slate-800 rounded-xl border border-blue-700/40 p-6"
+              style={{ boxShadow: "0 0 20px rgba(59,130,246,0.06)" }}
+            >
+              <h4
+                className="text-sm font-semibold mb-4 uppercase tracking-wider"
+                style={{ color: "#FFD500" }}
+              >
+                {t("learn.trustGapZkTitle")}
+              </h4>
+              <ul className="space-y-3 text-sm text-slate-300">
+                <li className="flex gap-2">
+                  <span className="text-green-400 shrink-0">✓</span>
+                  {t("learn.trustGapZk1")}
+                </li>
+                <li className="flex gap-2">
+                  <span className="text-green-400 shrink-0">✓</span>
+                  {t("learn.trustGapZk2")}
+                </li>
+                <li className="flex gap-2">
+                  <span className="text-green-400 shrink-0">✓</span>
+                  {t("learn.trustGapZk3")}
+                </li>
+              </ul>
+
+              {/* Chain diagram */}
+              <div className="mt-4 bg-slate-900 rounded-lg p-3 border border-blue-500/20">
+                <div className="flex items-center justify-center gap-2 text-xs font-mono text-blue-400">
+                  {t("learn.trustGapChain").split("→").map((part, i, arr) => (
+                    <span key={i} className="flex items-center gap-2">
+                      <span className="bg-slate-800 border border-blue-500/30 rounded px-2 py-1 whitespace-nowrap">
+                        {part.trim()}
+                      </span>
+                      {i < arr.length - 1 && (
+                        <svg className="w-3 h-3 text-blue-500 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <polyline points="9 18 15 12 9 6" />
+                        </svg>
+                      )}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <p className="text-slate-300 font-medium text-center italic">
+            {t("learn.trustGapClosing")}
+          </p>
+        </section>
+
+        {/* ── 5. How It Works ──────────────────────────────────────────── */}
+        <section>
+          <SectionHeading
+            id="how-it-works"
+            title={t("learn.howTitle")}
+            subtitle={t("learn.howSubtitle")}
+          />
+
+          {/* Pipeline visual */}
           <div className="bg-slate-800/30 rounded-xl border border-slate-700/50 p-6 sm:p-8 mb-10">
             <div className="flex flex-wrap items-center justify-center gap-2 sm:gap-3 text-sm font-mono">
               {[
-                {
-                  label: "SD-JWT / mdoc",
-                  sub: t("learn.pipelineCredential"),
-                },
-                {
-                  label: t("learn.pipelineParser"),
-                  sub: t("learn.pipelineParserSub"),
-                },
-                {
-                  label: t("learn.pipelineWitness"),
-                  sub: t("learn.pipelineWitnessSub"),
-                },
-                {
-                  label: t("learn.pipelineCircuit"),
-                  sub: t("learn.pipelineCircuitSub"),
-                },
-                { label: "Groth16", sub: "ark-circom / snarkjs" },
-                {
-                  label: t("learn.pipelineProof"),
-                  sub: t("learn.pipelineProofSub"),
-                },
-                {
-                  label: t("learn.pipelineVerifier"),
-                  sub: t("learn.pipelineVerifierSub"),
-                },
+                { label: "SD-JWT / mdoc", sub: t("learn.howCredential") },
+                { label: t("learn.howParser"), sub: t("learn.howParserSub") },
+                { label: t("learn.howWitness"), sub: t("learn.howWitnessSub") },
+                { label: t("learn.howCircuit"), sub: t("learn.howCircuitSub") },
+                { label: t("learn.howProof"), sub: t("learn.howProofSub") },
+                { label: t("learn.howVerifier"), sub: t("learn.howVerifierSub") },
               ].map((stage, i) => (
-                <div
-                  key={stage.label}
-                  className="flex items-center gap-2 sm:gap-3"
-                >
+                <div key={stage.label} className="flex items-center gap-2 sm:gap-3">
                   <div className="bg-slate-800 border border-slate-700/50 rounded-lg px-3 py-2 text-center">
                     <span className="text-slate-200 whitespace-nowrap block text-xs sm:text-sm">
                       {stage.label}
@@ -295,7 +472,7 @@ function Learn() {
                       {stage.sub}
                     </span>
                   </div>
-                  {i < 6 && (
+                  {i < 5 && (
                     <svg
                       className="w-3 h-3 sm:w-4 sm:h-4 text-slate-600 shrink-0"
                       viewBox="0 0 24 24"
@@ -311,193 +488,109 @@ function Learn() {
             </div>
           </div>
 
-          {/* Step-by-step */}
-          <div className="space-y-8">
-            <PipelineStep
-              num={1}
-              title={t("learn.step1Title")}
-              description={t("learn.step1Desc")}
-              detail={t("learn.step1Detail")}
-            />
-            <PipelineStep
-              num={2}
-              title={t("learn.step2Title")}
-              description={t("learn.step2Desc")}
-              detail={t("learn.step2Detail")}
-            />
-            <PipelineStep
-              num={3}
-              title={t("learn.step3Title")}
-              description={t("learn.step3Desc")}
-            />
-            <PipelineStep
-              num={4}
-              title={t("learn.step4Title")}
-              description={t("learn.step4Desc")}
-              detail={t("learn.step4Detail")}
-            />
-            <PipelineStep
-              num={5}
-              title={t("learn.step5Title")}
-              description={t("learn.step5Desc")}
-              detail={t("learn.step5Detail")}
-            />
+          {/* Five steps */}
+          <div className="space-y-8 mb-10">
+            <PipelineStep num={1} title={t("learn.howStep1Title")} description={t("learn.howStep1Desc")} />
+            <PipelineStep num={2} title={t("learn.howStep2Title")} description={t("learn.howStep2Desc")} />
+            <PipelineStep num={3} title={t("learn.howStep3Title")} description={t("learn.howStep3Desc")} />
+            <PipelineStep num={4} title={t("learn.howStep4Title")} description={t("learn.howStep4Desc")} />
+            <PipelineStep num={5} title={t("learn.howStep5Title")} description={t("learn.howStep5Desc")} />
           </div>
 
-          <div className="mt-8">
-            <CodeBlock
-              code={`// Holder: prove age >= 18 with ECDSA verified in-circuit
-let proof = ZkCredential::from_sdjwt(&credential, "circuits/predicates")?
-    .predicate("birth_date", Predicate::gte(18))
-    .prove()?;
-
-// Verifier: learns nothing except that the predicate holds
-let valid = ZkVerifier::new("circuits/predicates").verify(&proof)?;
-// valid == true — the holder is 18+, signature is authentic
-// The verifier never sees the birth date, name, or any other claim`}
-            />
+          {/* Metrics box */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+            <div className="bg-slate-800/50 rounded-xl border border-slate-700/50 p-4 text-center">
+              <div className="text-2xl font-bold text-white mb-1">~800B</div>
+              <div className="text-xs text-slate-400">{t("learn.howMetricSize")}</div>
+            </div>
+            <div className="bg-slate-800/50 rounded-xl border border-slate-700/50 p-4 text-center">
+              <div className="text-2xl font-bold text-white mb-1">&lt;10ms</div>
+              <div className="text-xs text-slate-400">{t("learn.howMetricVerify")}</div>
+            </div>
+            <div className="bg-slate-800/50 rounded-xl border border-slate-700/50 p-4 text-center">
+              <div className="text-2xl font-bold text-white mb-1">{t("learn.howMetricOffline")}</div>
+              <div className="text-xs text-slate-400">{t("learn.howMetricOfflineDesc")}</div>
+            </div>
+            <div className="bg-slate-800/50 rounded-xl border border-slate-700/50 p-4 text-center">
+              <div className="text-2xl font-bold text-white mb-1">{t("learn.howMetricDevice")}</div>
+              <div className="text-xs text-slate-400">{t("learn.howMetricDeviceDesc")}</div>
+            </div>
           </div>
         </section>
 
-        {/* ── 4. Predicates ───────────────────────────────────────────────── */}
+        {/* ── 6. Capabilities ──────────────────────────────────────────── */}
         <section>
           <SectionHeading
-            id="predicates"
-            title={t("learn.predicatesTitle")}
-            subtitle={t("learn.predicatesSubtitle")}
+            id="capabilities"
+            title={t("learn.capabilitiesTitle")}
+            subtitle={t("learn.capabilitiesSubtitle")}
           />
 
-          <div className="overflow-x-auto">
+          {/* Predicate types table */}
+          <div className="overflow-x-auto mb-8">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-slate-700">
                   <th className="text-left py-3 px-4 text-slate-400 font-semibold">
-                    {t("learn.predType")}
+                    {t("learn.capType")}
                   </th>
                   <th className="text-left py-3 px-4 text-slate-400 font-semibold">
-                    {t("learn.predDescription")}
+                    {t("learn.capDescription")}
                   </th>
                   <th className="text-left py-3 px-4 text-slate-400 font-semibold">
-                    {t("learn.predExample")}
+                    {t("learn.capExample")}
                   </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-800">
                 {[
-                  {
-                    type: "gte",
-                    desc: t("learn.predGteDesc"),
-                    ex: "age >= 18",
-                  },
-                  {
-                    type: "lte",
-                    desc: t("learn.predLteDesc"),
-                    ex: "age <= 65",
-                  },
-                  {
-                    type: "eq",
-                    desc: t("learn.predEqDesc"),
-                    ex: 'status == "active"',
-                  },
-                  {
-                    type: "neq",
-                    desc: t("learn.predNeqDesc"),
-                    ex: 'status != "revoked"',
-                  },
-                  {
-                    type: "range",
-                    desc: t("learn.predRangeDesc"),
-                    ex: "18 <= age <= 25",
-                  },
-                  {
-                    type: "set_member",
-                    desc: t("learn.predSetDesc"),
-                    ex: 'nationality \u2208 {"DE","FR","NL"}',
-                  },
-                  {
-                    type: "nullifier",
-                    desc: t("learn.predNullDesc"),
-                    ex: "hash(secret, scope)",
-                  },
+                  { type: "gte", desc: t("learn.capGteDesc"), ex: "age ≥ 18" },
+                  { type: "lte", desc: t("learn.capLteDesc"), ex: "age ≤ 65" },
+                  { type: "eq", desc: t("learn.capEqDesc"), ex: 'status == "active"' },
+                  { type: "neq", desc: t("learn.capNeqDesc"), ex: 'status ≠ "revoked"' },
+                  { type: "range", desc: t("learn.capRangeDesc"), ex: "18 ≤ age ≤ 25" },
+                  { type: "set_member", desc: t("learn.capSetDesc"), ex: "nationality ∈ {DE,FR,NL}" },
+                  { type: "nullifier", desc: t("learn.capNullDesc"), ex: "hash(secret, scope)" },
                 ].map((p) => (
                   <tr key={p.type} className="hover:bg-slate-800/50">
-                    <td className="py-3 px-4 font-mono text-blue-400">
-                      {p.type}
-                    </td>
+                    <td className="py-3 px-4 font-mono text-blue-400">{p.type}</td>
                     <td className="py-3 px-4 text-slate-300">{p.desc}</td>
-                    <td className="py-3 px-4 font-mono text-slate-500 text-xs">
-                      {p.ex}
-                    </td>
+                    <td className="py-3 px-4 font-mono text-slate-500 text-xs">{p.ex}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
 
-          <p className="text-sm text-slate-500 mt-4">
-            {t("learn.predicatesNote")}
-          </p>
-        </section>
-
-        {/* ── 6. Advanced Features ────────────────────────────────────────── */}
-        <section>
-          <SectionHeading
-            id="advanced"
-            title={t("learn.advancedTitle")}
-            subtitle={t("learn.advancedSubtitle")}
-          />
-
-          <div className="space-y-6">
+          {/* Advanced feature cards */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
             {[
-              {
-                title: t("learn.advCompoundTitle"),
-                desc: t("learn.advCompoundDesc"),
-                code: `.predicate("birth_date", Predicate::gte(18))
-.predicate("nationality", Predicate::set_member(vec!["DE","FR","NL"]))
-.prove_all()?  // AND: both must hold`,
-              },
-              {
-                title: t("learn.advNullifierTitle"),
-                desc: t("learn.advNullifierDesc"),
-                code: `// Same credential, different scope = different nullifier
-// bar.example.com can't link to shop.example.com
-nullifier = hash(holder_secret, "bar.example.com")`,
-              },
-              {
-                title: t("learn.advRevocationTitle"),
-                desc: t("learn.advRevocationDesc"),
-                code: `// Sparse Merkle Tree: prove credential NOT in revocation set
-// Issuer publishes tree root, holder proves non-membership
-SMT::prove_non_membership(credential_id, tree_root)`,
-              },
-              {
-                title: t("learn.advBindingTitle"),
-                desc: t("learn.advBindingDesc"),
-                code: `// Prove PID and driver's license belong to same person
-// Without revealing the shared identifier
-hash(pid.personal_id) == hash(license.personal_id)`,
-              },
+              { title: t("learn.capCompoundTitle"), desc: t("learn.capCompoundDesc") },
+              { title: t("learn.capNullifierTitle"), desc: t("learn.capNullifierDesc") },
+              { title: t("learn.capRevocationTitle"), desc: t("learn.capRevocationDesc") },
+              { title: t("learn.capBindingTitle"), desc: t("learn.capBindingDesc") },
             ].map((feature) => (
               <div
                 key={feature.title}
-                className="bg-slate-800/50 rounded-xl border border-slate-700/50 p-6"
+                className="bg-slate-800/50 rounded-xl border border-slate-700/50 p-5"
               >
                 <h4
-                  className="text-lg font-semibold mb-2"
+                  className="text-sm font-semibold mb-2"
                   style={{ color: "#FFD500" }}
                 >
                   {feature.title}
                 </h4>
-                <p className="text-slate-400 leading-relaxed mb-4">
+                <p className="text-sm text-slate-400 leading-relaxed">
                   {feature.desc}
                 </p>
-                <CodeBlock code={feature.code} />
               </div>
             ))}
           </div>
+
+          <p className="text-sm text-slate-500">{t("learn.capNote")}</p>
         </section>
 
-        {/* ── 7. Standards ────────────────────────────────────────────────── */}
+        {/* ── 7. Standards & Compliance ─────────────────────────────────── */}
         <section>
           <SectionHeading
             id="standards"
@@ -509,24 +602,18 @@ hash(pid.personal_id) == hash(license.personal_id)`,
             {[
               { standard: "eIDAS 2.0", full: t("learn.stdEidas") },
               { standard: "SD-JWT VC (RFC 9901)", full: t("learn.stdSdjwt") },
-              {
-                standard: "mdoc / mDL (ISO 18013-5)",
-                full: t("learn.stdMdoc"),
-              },
-              {
-                standard: "ECDSA P-256 (secp256r1)",
-                full: t("learn.stdEcdsa"),
-              },
+              { standard: "mdoc / mDL (ISO 18013-5)", full: t("learn.stdMdoc") },
+              { standard: "ECDSA P-256 (secp256r1)", full: t("learn.stdEcdsa") },
               { standard: "OpenID4VP", full: t("learn.stdOpenid") },
-              { standard: "EUDI Wallet ARF", full: t("learn.stdEudi") },
+              { standard: "EUDI Wallet ARF v1.4", full: t("learn.stdArf") },
+              { standard: "SOG-IS Compliance", full: t("learn.stdSogis") },
+              { standard: "POTENTIAL LSP", full: t("learn.stdPotential") },
             ].map((s) => (
               <div
                 key={s.standard}
                 className="flex gap-4 items-start bg-slate-800/50 rounded-xl border border-slate-700/50 p-4"
               >
-                <span className="text-green-400 shrink-0 mt-0.5">
-                  &#10003;
-                </span>
+                <span className="text-green-400 shrink-0 mt-0.5">&#10003;</span>
                 <div>
                   <span className="text-sm font-semibold text-white">
                     {s.standard}
@@ -540,7 +627,7 @@ hash(pid.personal_id) == hash(license.personal_id)`,
           </div>
         </section>
 
-        {/* ── 8. GDPR & Privacy ───────────────────────────────────────────── */}
+        {/* ── 8. GDPR: Privacy by Design ───────────────────────────────── */}
         <section>
           <SectionHeading id="privacy" title={t("learn.privacyTitle")} />
 
@@ -550,18 +637,9 @@ hash(pid.personal_id) == hash(license.personal_id)`,
             </p>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               {[
-                {
-                  principle: t("learn.privacyMinimization"),
-                  desc: t("learn.privacyMinimizationDesc"),
-                },
-                {
-                  principle: t("learn.privacyLimitation"),
-                  desc: t("learn.privacyLimitationDesc"),
-                },
-                {
-                  principle: t("learn.privacyStorage"),
-                  desc: t("learn.privacyStorageDesc"),
-                },
+                { principle: t("learn.privacyMinimization"), desc: t("learn.privacyMinimizationDesc") },
+                { principle: t("learn.privacyLimitation"), desc: t("learn.privacyLimitationDesc") },
+                { principle: t("learn.privacyStorage"), desc: t("learn.privacyStorageDesc") },
               ].map((p) => (
                 <div key={p.principle} className="text-center">
                   <h4
@@ -577,7 +655,7 @@ hash(pid.personal_id) == hash(license.personal_id)`,
           </div>
         </section>
 
-        {/* ── CTA ─────────────────────────────────────────────────────────── */}
+        {/* ── CTA ─────────────────────────────────────────────────────── */}
         <section className="text-center py-8">
           <Link
             to="/demo"
