@@ -75,17 +75,44 @@ pub fn check_nullifier_duplicate(
     Ok(known.iter().any(|n| n == nullifier_hex))
 }
 
-/// Prepare ECDSA circuit inputs from an SD-JWT credential — fully client-side.
+/// Parse an mdoc token ("mdoc:<base64>:<hex_x>:<hex_y>") into a Credential.
+fn parse_mdoc_credential(token: &str) -> Result<zk_eidas_types::credential::Credential, JsError> {
+    use base64::Engine;
+    let parts: Vec<&str> = token.splitn(4, ':').collect();
+    if parts.len() != 4 || parts[0] != "mdoc" {
+        return Err(JsError::new("expected mdoc:<base64>:<hex_x>:<hex_y>"));
+    }
+    let bytes = base64::engine::general_purpose::STANDARD
+        .decode(parts[1])
+        .map_err(|e| JsError::new(&format!("mdoc base64 decode: {e}")))?;
+    let pub_key_x: [u8; 32] = hex::decode(parts[2])
+        .map_err(|e| JsError::new(&format!("mdoc hex x: {e}")))?
+        .try_into()
+        .map_err(|_| JsError::new("pub_key_x must be 32 bytes"))?;
+    let pub_key_y: [u8; 32] = hex::decode(parts[3])
+        .map_err(|e| JsError::new(&format!("mdoc hex y: {e}")))?
+        .try_into()
+        .map_err(|_| JsError::new("pub_key_y must be 32 bytes"))?;
+
+    zk_eidas_mdoc::MdocParser::parse_with_issuer_key(&bytes, pub_key_x, pub_key_y)
+        .map_err(|e| JsError::new(&format!("mdoc parse: {e}")))
+}
+
+/// Prepare ECDSA circuit inputs from a credential — fully client-side.
 ///
-/// Takes an SD-JWT string and claim name, parses the credential, extracts
-/// ECDSA signature data, and returns the circuit input JSON for snarkjs.
+/// Accepts both SD-JWT and mdoc format credentials (auto-detected).
+/// mdoc tokens use the format: "mdoc:<base64>:<hex_pubx>:<hex_puby>"
 ///
 /// Returns JSON: { "ecdsa_inputs": {...}, "claim_value": "..." }
 #[wasm_bindgen]
-pub fn prepare_inputs(sdjwt: &str, claim_name: &str) -> Result<String, JsError> {
-    let parser = zk_eidas_parser::SdJwtParser::new();
-    let credential = parser.parse(sdjwt)
-        .map_err(|e| JsError::new(&format!("SD-JWT parse error: {e}")))?;
+pub fn prepare_inputs(credential_token: &str, claim_name: &str) -> Result<String, JsError> {
+    let credential = if credential_token.starts_with("mdoc:") {
+        parse_mdoc_credential(credential_token)?
+    } else {
+        let parser = zk_eidas_parser::SdJwtParser::new();
+        parser.parse(credential_token)
+            .map_err(|e| JsError::new(&format!("SD-JWT parse error: {e}")))?
+    };
 
     let sig_data = match credential.signature_data() {
         zk_eidas_types::credential::SignatureData::Ecdsa {

@@ -18,6 +18,8 @@ zk-eidas-parser = { version = "0.1.0", path = "../zk-eidas-parser" }
 sha2 = "0.10.9"
 num-bigint = "0.4.6"
 zk-eidas-utils = { version = "0.1.0", path = "../zk-eidas-utils" }
+zk-eidas-mdoc = { version = "0.1.0", path = "../zk-eidas-mdoc" }
+base64 = "0.22"
 getrandom = { version = "0.2", features = ["js"] }
 
 [dev-dependencies]
