@@ -181,15 +181,44 @@ test.describe('Contracts', () => {
 // ---------------------------------------------------------------------------
 
 test.describe('Contracts — E2E', () => {
-  test('Age Verification: template → issue → prove → document', async ({ page }) => {
+  async function contractFlow(page: Page, templatePattern: RegExp, credentialCount = 1) {
     await page.goto('/contracts')
     await page.waitForTimeout(2000)
-    await page.locator('button', { hasText: /Перевірка віку/ }).first().click()
+    await page.locator('button', { hasText: templatePattern }).first().click()
     await expect(page.getByRole('button', { name: /Почати спочатку|Start over/ })).toBeVisible({ timeout: 15_000 })
-    const issueBtn = page.getByRole('button', { name: /Видати посвідчення|Issue/ })
-    await issueBtn.scrollIntoViewIfNeeded()
-    await issueBtn.click()
+    for (let i = 0; i < credentialCount; i++) {
+      const issueBtn = page.getByRole('button', { name: /Видати посвідчення|Issue/ })
+      await issueBtn.scrollIntoViewIfNeeded()
+      await issueBtn.click()
+      if (i < credentialCount - 1) {
+        // Wait for next credential form to appear
+        await page.waitForTimeout(1000)
+      }
+    }
     await expect(page.getByText(/Доведені предикати|Proven predicates/i).first()).toBeVisible({ timeout: 30_000 })
+  }
+
+  test('Age Verification: template → issue → prove → document', async ({ page }) => {
+    await contractFlow(page, /Перевірка віку/)
+    await page.getByRole('button', { name: /Згенерувати доказ|Generate proof/i }).click()
+    await expect(page.getByRole('button', { name: /Друкувати|Print/i })).toBeVisible({ timeout: 180_000 })
+  })
+
+  test('Student Transit: template → issue → prove → document', async ({ page }) => {
+    await contractFlow(page, /Студентський проїзний|Student Transit/)
+    await page.getByRole('button', { name: /Згенерувати доказ|Generate proof/i }).click()
+    await expect(page.getByRole('button', { name: /Друкувати|Print/i })).toBeVisible({ timeout: 180_000 })
+  })
+
+  test('Driver Employment: template → issue → prove → document', async ({ page }) => {
+    await contractFlow(page, /найму водія|Driver Employment/)
+    await page.getByRole('button', { name: /Згенерувати доказ|Generate proof/i }).click()
+    await expect(page.getByRole('button', { name: /Друкувати|Print/i })).toBeVisible({ timeout: 180_000 })
+  })
+
+  test('Vehicle Sale: template → issue 3 creds → prove → document', async ({ page }) => {
+    test.setTimeout(300_000)
+    await contractFlow(page, /купівлі-продажу|Vehicle Sale/, 3)
     await page.getByRole('button', { name: /Згенерувати доказ|Generate proof/i }).click()
     await expect(page.getByRole('button', { name: /Друкувати|Print/i })).toBeVisible({ timeout: 180_000 })
   })
@@ -202,22 +231,48 @@ test.describe('Contracts — E2E', () => {
 test.describe('Contracts — On-Device E2E', () => {
   test.skip(() => !process.env.E2E_ON_DEVICE, 'slow: set E2E_ON_DEVICE=1 to run')
 
-  test('Age Verification: on-device prove → document', async ({ page }) => {
-    test.setTimeout(600_000)
+  async function contractOnDeviceFlow(page: Page, templatePattern: RegExp, credentialCount = 1) {
     enableConsoleLogs(page)
     await page.goto('/contracts')
     await page.waitForTimeout(2000)
-    await page.locator('button', { hasText: /Перевірка віку/ }).first().click()
+    await page.locator('button', { hasText: templatePattern }).first().click()
     await expect(page.getByRole('button', { name: /Почати спочатку|Start over/ })).toBeVisible({ timeout: 15_000 })
-
-    const issueBtn = page.getByRole('button', { name: /Видати посвідчення|Issue/ })
-    await issueBtn.scrollIntoViewIfNeeded()
-    await issueBtn.click()
+    for (let i = 0; i < credentialCount; i++) {
+      const issueBtn = page.getByRole('button', { name: /Видати посвідчення|Issue/ })
+      await issueBtn.scrollIntoViewIfNeeded()
+      await issueBtn.click()
+      if (i < credentialCount - 1) {
+        await page.waitForTimeout(1000)
+      }
+    }
     await expect(page.getByText(/Доведені предикати|Proven predicates/i).first()).toBeVisible({ timeout: 30_000 })
-
-    // Toggle to On Device
     await page.getByRole('button', { name: /On Device/ }).click()
+  }
 
+  test('Age Verification: on-device prove → document', async ({ page }) => {
+    test.setTimeout(600_000)
+    await contractOnDeviceFlow(page, /Перевірка віку/)
+    await generateProofAndWait(page)
+    await expect(page.getByRole('button', { name: /Друкувати|Print/i })).toBeVisible({ timeout: 600_000 })
+  })
+
+  test('Student Transit: on-device prove → document', async ({ page }) => {
+    test.setTimeout(600_000)
+    await contractOnDeviceFlow(page, /Студентський проїзний|Student Transit/)
+    await generateProofAndWait(page)
+    await expect(page.getByRole('button', { name: /Друкувати|Print/i })).toBeVisible({ timeout: 600_000 })
+  })
+
+  test('Driver Employment: on-device prove → document', async ({ page }) => {
+    test.setTimeout(600_000)
+    await contractOnDeviceFlow(page, /найму водія|Driver Employment/)
+    await generateProofAndWait(page)
+    await expect(page.getByRole('button', { name: /Друкувати|Print/i })).toBeVisible({ timeout: 600_000 })
+  })
+
+  test('Vehicle Sale: on-device prove 3 creds → document', async ({ page }) => {
+    test.setTimeout(600_000)
+    await contractOnDeviceFlow(page, /купівлі-продажу|Vehicle Sale/, 3)
     await generateProofAndWait(page)
     await expect(page.getByRole('button', { name: /Друкувати|Print/i })).toBeVisible({ timeout: 600_000 })
   })
