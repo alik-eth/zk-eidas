@@ -64,6 +64,30 @@ test.describe('Landing Page', () => {
 })
 
 // ---------------------------------------------------------------------------
+// Learn Page
+// ---------------------------------------------------------------------------
+
+test.describe('Learn Page', () => {
+  test('renders all 8 sections', async ({ page }) => {
+    await page.goto('/learn')
+    // Section 1: eIDAS problem
+    await expect(page.getByText(/eIDAS 2.0|незв'язуваності/).first()).toBeVisible()
+    // Section 3: Comparison table
+    await expect(page.getByText(/SD-JWT VC/).first()).toBeVisible()
+    await expect(page.getByText(/BBS\+/).first()).toBeVisible()
+    // Section 4: Trust gap
+    await expect(page.getByText(/Trust Gap|Прогалина довіри/).first()).toBeVisible()
+    // Section 7: Standards
+    await expect(page.getByText(/SOG-IS/).first()).toBeVisible()
+    await expect(page.getByText(/POTENTIAL/).first()).toBeVisible()
+    // Section 8: GDPR
+    await expect(page.getByText(/GDPR/).first()).toBeVisible()
+    // CTA
+    await expect(page.getByRole('link', { name: /Спробувати|Try/ })).toBeVisible()
+  })
+})
+
+// ---------------------------------------------------------------------------
 // Demo — Form + Issuance
 // ---------------------------------------------------------------------------
 
