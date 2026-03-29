@@ -1003,6 +1003,19 @@ const translations: Record<string, Record<Locale, string>> = {
   "demo.presReqEmpty": { en: "Add at least one requirement", uk: "Додайте хоча б одну вимогу" },
   "demo.startOver": { en: "Start Over", uk: "Почати спочатку" },
 
+  // ── On-device proving progress ──────────────────────────────────────────
+  "prove.cachingZkey": { en: "Caching zkey sections...", uk: "Кешування секцій zkey..." },
+  "prove.downloadingChunk": { en: "Downloading chunk", uk: "Завантаження фрагменту" },
+  "prove.cachedChunk": { en: "Cached", uk: "Збережено" },
+  "prove.loadingWasm": { en: "Loading WASM module...", uk: "Завантаження WASM модуля..." },
+  "prove.parsingClaim": { en: "Parsing claim on device...", uk: "Обробка атрибуту на пристрої..." },
+  "prove.ecdsaProof": { en: "ECDSA proof (1.2 GB download on first run)...", uk: "ECDSA доказ (1.2 ГБ завантаження при першому запуску)..." },
+  "prove.downloadingWasm": { en: "Downloading WASM...", uk: "Завантаження WASM..." },
+  "prove.generatingProof": { en: "Generating proof...", uk: "Генерація доказу..." },
+  "prove.verifyingProof": { en: "Verifying proof...", uk: "Верифікація доказу..." },
+  "prove.predicate": { en: "Predicate", uk: "Предикат" },
+  "prove.allDone": { en: "All proofs generated in", uk: "Усі докази згенеровано за" },
+
   // ── Credential showcase (landing) ────────────────────────────────────────
   "cred.pid": { en: "Personal Identification Data", uk: "Персональні ідентифікаційні дані" },
   "cred.name": { en: "Name", uk: "Ім'я" },

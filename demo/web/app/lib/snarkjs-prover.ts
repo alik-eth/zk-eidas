@@ -16,6 +16,7 @@ export interface BrowserCompoundResult {
   totalTimeMs: number;
 }
 
+export type TranslateFunction = (key: string) => string;
 type ProgressCallback = (stage: string, detail: string) => void;
 
 const ARTIFACT_CACHE_NAME = "zk-eidas-circuits-v1";
@@ -81,14 +82,16 @@ export async function proveInBrowser(
   circuitName: string,
   inputs: Record<string, string | string[]>,
   apiBaseUrl: string,
+  t: TranslateFunction,
   onProgress?: ProgressCallback,
 ): Promise<BrowserProofResult> {
   // Ensure zkey sections are in localforage before the worker starts proving
   console.log(`[prover] Ensuring zkey sections cached for ${circuitName}...`);
-  onProgress?.("cache", `Caching ${circuitName} zkey sections...`);
+  onProgress?.("cache", `${t("prove.cachingZkey")} (${circuitName})`);
   if (circuitName === "ecdsa_verify") {
     await downloadChunks("ecdsa_verify", ECDSA_CHUNK_URLS, SECTION_SUFFIXES, (detail) =>
-      onProgress?.("cache", detail)
+      onProgress?.("cache", detail),
+      t,
     );
   } else {
     await ensureZkeyInLocalforage(circuitName, apiBaseUrl);
@@ -105,7 +108,11 @@ export async function proveInBrowser(
     worker.onmessage = (e) => {
       const msg = e.data;
       if (msg.type === "progress") {
-        onProgress?.("worker", msg.detail);
+        const translated = (msg.detail as string)
+          .replace(/Downloading .* WASM\.\.\./, `${t("prove.downloadingWasm")} (${circuitName})`)
+          .replace(/Generating .* proof\.\.\./, `${t("prove.generatingProof")} (${circuitName})`)
+          .replace(/Verifying .* proof\.\.\./, `${t("prove.verifyingProof")} (${circuitName})`);
+        onProgress?.("worker", translated);
       } else if (msg.type === "result") {
         worker.terminate();
         resolve({
@@ -143,13 +150,14 @@ export async function proveCompoundInBrowser(
   _format: string,
   predicates: Array<{ claim: string; op: string; value: unknown }>,
   apiBaseUrl: string,
+  t: TranslateFunction,
   onProgress?: ProgressCallback,
 ): Promise<BrowserCompoundResult> {
   const totalStart = performance.now();
   if (!predicates.length) throw new Error("No predicates specified");
 
   // Step 1: Load WASM for on-device credential parsing
-  onProgress?.("preparing", "Loading WASM module...");
+  onProgress?.("preparing", t("prove.loadingWasm"));
   const { default: init, prepare_inputs } = await import("zk-eidas-wasm");
   await init();
 
@@ -159,16 +167,17 @@ export async function proveCompoundInBrowser(
 
   for (let c = 0; c < uniqueClaims.length; c++) {
     const claim = uniqueClaims[c];
-    onProgress?.("ecdsa", `[${c + 1}/${uniqueClaims.length}] Parsing claim "${claim}" on device...`);
+    onProgress?.("ecdsa", `[${c + 1}/${uniqueClaims.length}] ${t("prove.parsingClaim")} ("${claim}")`);
 
     const prepRaw = prepare_inputs(credential, claim);
     const prepData = JSON.parse(prepRaw);
 
-    onProgress?.("ecdsa", `[${c + 1}/${uniqueClaims.length}] ECDSA proof for "${claim}" (1.2 GB download on first run)...`);
+    onProgress?.("ecdsa", `[${c + 1}/${uniqueClaims.length}] ${t("prove.ecdsaProof")} ("${claim}")`);
     const ecdsaResult = await proveInBrowser(
       "ecdsa_verify",
       prepData.ecdsa_inputs,
       apiBaseUrl,
+      t,
       (_stage, detail) => onProgress?.("ecdsa", `[${c + 1}/${uniqueClaims.length}] ${detail}`),
     );
 
@@ -212,7 +221,7 @@ export async function proveCompoundInBrowser(
     }
     // Non-age date comparisons (expiry_date >= epochDays) pass through as-is
 
-    onProgress?.("predicate", `Predicate ${i + 1}/${predicates.length}: ${pred.claim} ${pred.op}...`);
+    onProgress?.("predicate", `${t("prove.predicate")} ${i + 1}/${predicates.length}: ${pred.claim} ${pred.op}...`);
 
     const predicateInputs: Record<string, string | string[]> = {
       claim_value: claimValue,
@@ -248,6 +257,7 @@ export async function proveCompoundInBrowser(
       circuit,
       predicateInputs,
       apiBaseUrl,
+      t,
       (_stage, detail) => onProgress?.("predicate", detail),
     );
     predicateProofs.push(predResult);
@@ -259,7 +269,7 @@ export async function proveCompoundInBrowser(
     ecdsaProofs.set(claim, result);
   }
   const totalTimeMs = performance.now() - totalStart;
-  onProgress?.("done", `All proofs generated in ${(totalTimeMs / 1000).toFixed(1)}s`);
+  onProgress?.("done", `${t("prove.allDone")} ${(totalTimeMs / 1000).toFixed(1)}s`);
 
   return { ecdsaProof: firstEcdsa.result, ecdsaProofs, predicateProofs, totalTimeMs };
 }

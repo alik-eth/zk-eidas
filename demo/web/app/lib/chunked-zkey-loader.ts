@@ -34,6 +34,7 @@ export async function downloadChunks(
   urlSource: string | Record<string, string>,
   suffixes: readonly string[] = SECTION_SUFFIXES,
   onProgress?: ProgressCallback,
+  t?: (key: string) => string,
 ): Promise<void> {
   const total = suffixes.length
   let downloaded = 0
@@ -55,14 +56,14 @@ export async function downloadChunks(
       continue
     }
     console.log(`[chunked-zkey] Downloading ${key} from ${url}...`)
-    onProgress?.(`Downloading chunk ${downloaded + 1}/${total} (${key})...`)
+    onProgress?.(`${t?.("prove.downloadingChunk") ?? "Downloading chunk"} ${downloaded + 1}/${total} (${key})...`)
 
     const buffer = await fetchWithRetry(url, 3)
     const sizeMB = (buffer.byteLength / (1024 * 1024)).toFixed(1)
     console.log(`[chunked-zkey] Cached ${key} (${sizeMB} MB)`)
     await localforage.setItem(key, buffer)
     downloaded++
-    onProgress?.(`Cached ${key} (${downloaded}/${total})`)
+    onProgress?.(`${t?.("prove.cachedChunk") ?? "Cached"} ${key} (${downloaded}/${total})`)
   }
 }
 
