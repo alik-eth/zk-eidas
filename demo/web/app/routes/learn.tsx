@@ -438,20 +438,20 @@ function Learn() {
                 </li>
               </ul>
 
-              {/* Chain diagram */}
+              {/* Chain diagram — vertical to fit in half-width card */}
               <div className="mt-4 bg-slate-900 rounded-lg p-3 border border-blue-500/20">
-                <div className="flex items-center justify-center gap-2 text-xs font-mono text-blue-400">
+                <div className="flex flex-col items-center gap-1 text-xs font-mono text-blue-400">
                   {t("learn.trustGapChain").split("→").map((part, i, arr) => (
-                    <span key={i} className="flex items-center gap-2">
-                      <span className="bg-slate-800 border border-blue-500/30 rounded px-2 py-1 whitespace-nowrap">
+                    <div key={i} className="flex flex-col items-center">
+                      <span className="bg-slate-800 border border-blue-500/30 rounded px-3 py-1 text-center w-full max-w-48">
                         {part.trim()}
                       </span>
                       {i < arr.length - 1 && (
-                        <svg className="w-3 h-3 text-blue-500 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                          <polyline points="9 18 15 12 9 6" />
+                        <svg className="w-3 h-3 text-blue-500 shrink-0 my-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <polyline points="6 9 12 15 18 9" />
                         </svg>
                       )}
-                    </span>
+                    </div>
                   ))}
                 </div>
               </div>
