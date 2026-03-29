@@ -147,8 +147,6 @@ function CredentialShowcase() {
   const showPredicates = phase >= 2 && phase <= 6;
   const showStamp = phase >= 2 && phase <= 6;
   const showFooterSig = phase >= 2 && phase <= 6;
-  const showRevoke = phase >= 4 && phase <= 6;
-  const revokePressed = phase >= 6 && phase <= 6;
   const stampScale = showStamp ? 1 : 0.7;
   const stampRotate = phase <= 2 ? "12deg" : "0deg";
   const stampTransform = `translate(-50%, -50%) scale(${stampScale}) rotate(${stampRotate})`;
@@ -338,33 +336,10 @@ function CredentialShowcase() {
             transform: stampTransform,
           }}
         >
-          <div className="border-2 border-emerald-500/60 rounded-lg px-3 py-2 space-y-0.5">
-            <p className="text-emerald-500/80 text-[10px] font-bold tracking-wide whitespace-nowrap">
-              {t("cred.conditions")}
+          <div className="border-2 border-emerald-500/60 rounded-lg px-4 py-2.5">
+            <p className="text-emerald-500/80 text-xs font-bold tracking-widest uppercase whitespace-nowrap">
+              {t("cred.zkVerified")}
             </p>
-            <p className="text-slate-400 text-[9px] font-mono whitespace-nowrap">
-              {t("cred.nullifier")}
-            </p>
-            <p className="text-emerald-500/60 text-[9px] font-medium whitespace-nowrap">
-              {t("cred.noPersonalData")}
-            </p>
-          </div>
-          {/* Revoke button — appears below stamp */}
-          <div className="flex justify-center mt-3">
-            <button
-              className="text-[10px] font-medium px-3 py-1 rounded border transition-all duration-200"
-              style={{
-                opacity: showRevoke ? 1 : 0,
-                transform: `translateY(${showRevoke ? "0" : "4px"}) scale(${revokePressed ? 0.95 : 1})`,
-                borderColor: revokePressed ? "#ef4444" : "#64748b",
-                color: revokePressed ? "#ef4444" : "#94a3b8",
-                backgroundColor: revokePressed
-                  ? "rgba(239,68,68,0.1)"
-                  : "rgba(15,23,42,0.8)",
-              }}
-            >
-              {t("cred.revoke")}
-            </button>
           </div>
         </div>
       </div>
@@ -374,13 +349,14 @@ function CredentialShowcase() {
 
 /* === Section: The Unlinkability Gap === */
 
-const COMPARISON_DATA: { rowKey: string; sdjwt: boolean | "partial"; bbs: boolean; batch: boolean | "partial"; zk: boolean }[] = [
+type CellVal = boolean | "partial";
+const COMPARISON_DATA: { rowKey: string; sdjwt: CellVal; bbs: CellVal; batch: CellVal; zk: CellVal }[] = [
   { rowKey: "problem.row1", sdjwt: true, bbs: false, batch: true, zk: true },
-  { rowKey: "problem.row2", sdjwt: true, bbs: false, batch: true, zk: true },
+  { rowKey: "problem.row2", sdjwt: true, bbs: false, batch: true, zk: "partial" },
   { rowKey: "problem.row3", sdjwt: false, bbs: true, batch: false, zk: true },
   { rowKey: "problem.row4", sdjwt: true, bbs: true, batch: "partial", zk: true },
   { rowKey: "problem.row5", sdjwt: false, bbs: false, batch: false, zk: true },
-  { rowKey: "problem.row6", sdjwt: true, bbs: false, batch: false, zk: true },
+  { rowKey: "problem.row6", sdjwt: true, bbs: false, batch: false, zk: "partial" },
 ];
 
 function CheckIcon() {
@@ -458,179 +434,148 @@ function ProblemSection() {
   );
 }
 
-/* === Section: Solution Steps === */
+/* === Section: Solution Pipeline === */
 
 function SolutionSteps() {
   const t = useT();
-
-  const steps = [
-    {
-      num: "1",
-      titleKey: "solution.step1Title",
-      labelKey: "solution.step1Label",
-      descKey: "solution.step1Desc",
-      icon: (
-        <svg className="w-8 h-8 text-blue-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-          <polyline points="14 2 14 8 20 8" />
-          <path d="M12 18v-6" /><path d="M9 15l3 3 3-3" />
-        </svg>
-      ),
-    },
-    {
-      num: "2",
-      titleKey: "solution.step2Title",
-      descKey: "solution.step2Desc",
-      icon: (
-        <svg className="w-8 h-8 text-yellow-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-          <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
-          <path d="M7 11V7a5 5 0 0 1 10 0v4" />
-          <circle cx="12" cy="16" r="1" fill="currentColor" />
-        </svg>
-      ),
-    },
-    {
-      num: "3",
-      titleKey: "solution.step3Title",
-      descKey: "solution.step3Desc",
-      icon: (
-        <svg className="w-8 h-8 text-emerald-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
-          <polyline points="22 4 12 14.01 9 11.01" />
-        </svg>
-      ),
-    },
-  ];
 
   return (
     <section className="max-w-5xl mx-auto px-4 sm:px-8 py-16 sm:py-20 border-t border-slate-800">
       <h3 className="text-2xl sm:text-3xl font-bold text-center mb-3">
         {t("solution.title")}
       </h3>
-      <p className="text-sm text-slate-400 text-center mb-12 max-w-2xl mx-auto">
+      <p className="text-sm text-slate-400 text-center mb-14 max-w-2xl mx-auto">
         {t("solution.subtitle")}
       </p>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-4xl mx-auto">
-        {steps.map((step, i) => (
-          <div key={step.num} className="relative flex flex-col items-center text-center">
-            {/* Arrow connector (desktop only, not on last) */}
-            {i < steps.length - 1 && (
-              <div className="hidden md:block absolute top-10 -right-3 z-10">
-                <svg className="w-6 h-6 text-slate-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <polyline points="9 18 15 12 9 6" />
-                </svg>
+      {/* Pipeline: three nodes connected by dashed lines */}
+      <div className="max-w-4xl mx-auto">
+        {/* Desktop: horizontal pipeline */}
+        <div className="hidden md:grid grid-cols-[1fr_auto_1fr_auto_1fr] items-center gap-0">
+          {/* Node 1: Issuer */}
+          <div className="relative group">
+            <div className="absolute -inset-px rounded-xl bg-gradient-to-b from-blue-500/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+            <div className="relative bg-slate-900/80 rounded-xl border border-slate-700/40 p-5">
+              <div className="flex items-center gap-3 mb-3">
+                <div className="w-8 h-8 rounded-lg bg-blue-500/10 border border-blue-500/30 flex items-center justify-center shrink-0">
+                  <span className="text-[10px] font-bold text-blue-400 tracking-wider">ES256</span>
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-white leading-tight">{t("solution.step1Title")}</p>
+                  <p className="text-[10px] text-slate-500 uppercase tracking-widest">{t("solution.step1Label")}</p>
+                </div>
               </div>
-            )}
-            <div className="bg-slate-800/50 rounded-xl border border-slate-700/50 p-6 flex flex-col items-center gap-4 w-full">
-              <div className="w-14 h-14 rounded-full bg-slate-900/60 flex items-center justify-center">
-                {step.icon}
-              </div>
-              <div>
-                <h4 className="text-sm font-semibold text-white mb-1">{t(step.titleKey)}</h4>
-                {step.labelKey && (
-                  <span className="text-[10px] text-slate-500 uppercase tracking-wider">{t(step.labelKey)}</span>
-                )}
-              </div>
-              <p className="text-xs text-slate-400 leading-relaxed">{t(step.descKey)}</p>
+              <p className="text-xs text-slate-400 leading-relaxed">{t("solution.step1Desc")}</p>
             </div>
           </div>
-        ))}
-      </div>
-    </section>
-  );
-}
 
-/* === Section: Pre-commitment Performance === */
+          {/* Connector 1→2 */}
+          <div className="flex items-center px-1">
+            <div className="w-8 border-t border-dashed border-slate-600" />
+            <svg className="w-3 h-3 text-slate-600 -ml-0.5 shrink-0" viewBox="0 0 12 12" fill="currentColor">
+              <path d="M2 1l8 5-8 5z" />
+            </svg>
+          </div>
 
-const BENCHMARKS = [
-  { device: "iPhone SE", time: "< 1.5s" },
-  { device: "Budget Android", time: "< 3s" },
-  { device: "Server (ark-circom)", time: "< 0.3s" },
-];
-
-function PreCommitmentSection() {
-  const t = useT();
-
-  return (
-    <section className="max-w-5xl mx-auto px-4 sm:px-8 py-16 sm:py-20 border-t border-slate-800">
-      <div className="flex items-center justify-center gap-3 mb-3">
-        <h3 className="text-2xl sm:text-3xl font-bold text-center">
-          {t("precommit.title")}
-        </h3>
-        <span className="text-[10px] px-2 py-0.5 rounded-full border border-yellow-500/30 bg-yellow-950/20 text-yellow-500/60 font-medium">
-          {t("precommit.badge")}
-        </span>
-      </div>
-      <p className="text-sm text-slate-400 text-center mb-12 max-w-2xl mx-auto">
-        {t("precommit.subtitle")}
-      </p>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-3xl mx-auto">
-        <div>
-          <p className="text-sm text-slate-400 leading-relaxed">
-            {t("precommit.desc")}
-          </p>
-        </div>
-        <div className="bg-slate-800/50 border border-slate-700/50 rounded-xl p-5">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-slate-700/40">
-                <th className="text-left py-2 text-xs text-slate-500 font-medium uppercase tracking-wider">
-                  {t("precommit.device")}
-                </th>
-                <th className="text-right py-2 text-xs text-slate-500 font-medium uppercase tracking-wider">
-                  {t("precommit.time")}
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {BENCHMARKS.map((b) => (
-                <tr key={b.device} className="border-b border-slate-800/60 last:border-0">
-                  <td className="py-2.5 text-slate-300">{b.device}</td>
-                  <td className="py-2.5 text-right font-mono text-emerald-400 font-semibold">{b.time}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </section>
-  );
-}
-
-/* === Section: Ukraine & Diia === */
-
-function UkraineDiiaSection() {
-  const t = useT();
-
-  const stats = [
-    { value: "24M", labelKey: "ukraine.stat1" },
-    { value: "5+", labelKey: "ukraine.stat2" },
-    { value: "EUDI", labelKey: "ukraine.stat3" },
-  ];
-
-  return (
-    <section className="border-t-2 border-t-transparent bg-slate-800/20" style={{
-      borderImage: "linear-gradient(to right, #005BBB, #FFD500) 1",
-    }}>
-      <div className="max-w-5xl mx-auto px-4 sm:px-8 py-16 sm:py-20 text-center">
-        <h3 className="text-2xl sm:text-3xl font-bold mb-10">
-          {t("ukraine.title")}
-        </h3>
-
-        <div className="grid grid-cols-3 gap-6 max-w-2xl mx-auto mb-10">
-          {stats.map((s) => (
-            <div key={s.labelKey}>
-              <p className="text-3xl sm:text-4xl font-extrabold text-white mb-1">{s.value}</p>
-              <p className="text-xs sm:text-sm text-slate-400">{t(s.labelKey)}</p>
+          {/* Node 2: Prover */}
+          <div className="relative group">
+            <div className="absolute -inset-px rounded-xl bg-gradient-to-b from-yellow-500/15 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+            <div className="relative bg-slate-900/80 rounded-xl border border-slate-700/40 p-5">
+              <div className="flex items-center gap-3 mb-3">
+                <div className="w-8 h-8 rounded-lg bg-yellow-500/10 border border-yellow-500/30 flex items-center justify-center shrink-0">
+                  <svg className="w-4 h-4 text-yellow-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                    <rect x="3" y="11" width="18" height="11" rx="2" />
+                    <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                  </svg>
+                </div>
+                <p className="text-sm font-semibold text-white leading-tight">{t("solution.step2Title")}</p>
+              </div>
+              <p className="text-xs text-slate-400 leading-relaxed">{t("solution.step2Desc")}</p>
+              <div className="mt-3 flex items-center gap-1.5">
+                <div className="w-1.5 h-1.5 rounded-full bg-yellow-500/50" />
+                <span className="text-[10px] font-mono text-slate-500">ECDSA P-256 in-circuit</span>
+              </div>
             </div>
-          ))}
+          </div>
+
+          {/* Connector 2→3 */}
+          <div className="flex items-center px-1">
+            <div className="w-8 border-t border-dashed border-slate-600" />
+            <svg className="w-3 h-3 text-slate-600 -ml-0.5 shrink-0" viewBox="0 0 12 12" fill="currentColor">
+              <path d="M2 1l8 5-8 5z" />
+            </svg>
+          </div>
+
+          {/* Node 3: Verifier */}
+          <div className="relative group">
+            <div className="absolute -inset-px rounded-xl bg-gradient-to-b from-emerald-500/15 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+            <div className="relative bg-slate-900/80 rounded-xl border border-emerald-500/20 p-5">
+              <div className="flex items-center gap-3 mb-3">
+                <div className="w-8 h-8 rounded-lg bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center shrink-0">
+                  <svg className="w-4 h-4 text-emerald-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+                    <polyline points="20 6 9 17 4 12" />
+                  </svg>
+                </div>
+                <p className="text-sm font-semibold text-white leading-tight">{t("solution.step3Title")}</p>
+              </div>
+              <p className="text-xs text-slate-400 leading-relaxed">{t("solution.step3Desc")}</p>
+              <div className="mt-3 flex items-center gap-1.5">
+                <div className="w-1.5 h-1.5 rounded-full bg-emerald-500/50" />
+                <span className="text-[10px] font-mono text-emerald-400/60">Groth16 · WASM · offline</span>
+              </div>
+            </div>
+          </div>
         </div>
 
-        <p className="text-sm text-slate-400 leading-relaxed max-w-2xl mx-auto">
-          {t("ukraine.desc")}
-        </p>
+        {/* Mobile: vertical pipeline */}
+        <div className="md:hidden space-y-0">
+          {/* Node 1 */}
+          <div className="bg-slate-900/80 rounded-t-xl border border-slate-700/40 p-5">
+            <div className="flex items-center gap-3 mb-2">
+              <div className="w-7 h-7 rounded-lg bg-blue-500/10 border border-blue-500/30 flex items-center justify-center shrink-0">
+                <span className="text-[8px] font-bold text-blue-400">ES256</span>
+              </div>
+              <div>
+                <p className="text-sm font-semibold text-white">{t("solution.step1Title")}</p>
+                <p className="text-[10px] text-slate-500 uppercase tracking-widest">{t("solution.step1Label")}</p>
+              </div>
+            </div>
+            <p className="text-xs text-slate-400 leading-relaxed">{t("solution.step1Desc")}</p>
+          </div>
+          {/* Vertical connector */}
+          <div className="flex justify-center">
+            <div className="h-5 border-l border-dashed border-slate-600" />
+          </div>
+          {/* Node 2 */}
+          <div className="bg-slate-900/80 border border-slate-700/40 p-5">
+            <div className="flex items-center gap-3 mb-2">
+              <div className="w-7 h-7 rounded-lg bg-yellow-500/10 border border-yellow-500/30 flex items-center justify-center shrink-0">
+                <svg className="w-3.5 h-3.5 text-yellow-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                  <rect x="3" y="11" width="18" height="11" rx="2" />
+                  <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                </svg>
+              </div>
+              <p className="text-sm font-semibold text-white">{t("solution.step2Title")}</p>
+            </div>
+            <p className="text-xs text-slate-400 leading-relaxed">{t("solution.step2Desc")}</p>
+          </div>
+          {/* Vertical connector */}
+          <div className="flex justify-center">
+            <div className="h-5 border-l border-dashed border-slate-600" />
+          </div>
+          {/* Node 3 */}
+          <div className="bg-slate-900/80 rounded-b-xl border border-emerald-500/20 p-5">
+            <div className="flex items-center gap-3 mb-2">
+              <div className="w-7 h-7 rounded-lg bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center shrink-0">
+                <svg className="w-3.5 h-3.5 text-emerald-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+                  <polyline points="20 6 9 17 4 12" />
+                </svg>
+              </div>
+              <p className="text-sm font-semibold text-white">{t("solution.step3Title")}</p>
+            </div>
+            <p className="text-xs text-slate-400 leading-relaxed">{t("solution.step3Desc")}</p>
+          </div>
+        </div>
       </div>
     </section>
   );
@@ -1313,7 +1258,7 @@ function Landing() {
 
           {/* Right: credential showcase */}
           <div className="flex justify-center lg:justify-end">
-            <div className="w-full max-w-sm">
+            <div className="w-full max-w-sm h-[340px] overflow-hidden">
               <CredentialShowcase />
               <p className="text-[10px] text-slate-600 text-center mt-3 italic">
                 {t("cred.tagline")}
@@ -1329,11 +1274,7 @@ function Landing() {
 
       <LiveProofSection />
 
-      <PreCommitmentSection />
-
       <PaperContractsSection />
-
-      <UkraineDiiaSection />
 
       {/* Footer */}
       <footer className="border-t border-slate-800 px-4 sm:px-8 py-8">
