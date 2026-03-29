@@ -71,6 +71,14 @@ RUN ldconfig
 # Copy compiled circuits (zkey excluded from context via .dockerignore, downloaded below)
 COPY circuits/build/ /app/circuits/build/
 
+# Split predicate zkeys into per-section chunk files for on-device browser proving
+COPY circuits/scripts/split-zkey.mjs /tmp/split-zkey.mjs
+RUN npm install -g @iden3/binfileutils && \
+    for c in gte lte eq neq range set_member nullifier holder_binding; do \
+      node /tmp/split-zkey.mjs /app/circuits/build/$c/$c.zkey; \
+    done && \
+    npm uninstall -g @iden3/binfileutils && rm /tmp/split-zkey.mjs
+
 # Download the 1.2GB ECDSA zkey from UploadThing (not in Docker context to speed up builds)
 RUN curl -L -o /app/circuits/build/ecdsa_verify/ecdsa_verify.zkey \
     "https://ruvpd2ka1g.ufs.sh/f/vsKUhXCDRm2gNVLwvum9EROnsC6LBwY0z83lumTkxKGvgDpb"
