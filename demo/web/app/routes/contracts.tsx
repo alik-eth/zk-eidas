@@ -827,18 +827,32 @@ function ProveStep({ state, setState, t }: { state: ContractWizardState; setStat
         const saltHex = `0x${salt.toString(16).padStart(16, '0')}`
 
         if (req.nullifierField) {
-          setBrowserProgress(`[${ci + 1}/${template!.credentials.length}] Generating nullifier on device...`)
+          setBrowserProgress(`[${ci + 1}/${template!.credentials.length}] ${t("prove.generatingProof")} (nullifier)...`)
 
-          // Get credential_id by parsing the nullifier field claim
+          // The nullifier circuit needs an ECDSA commitment for the nullifier field,
+          // which may differ from the predicate claim. Generate a separate ECDSA proof.
           const nullifierFieldName = req.nullifierField
           const credIdRaw = prepare_inputs(cred.credential, nullifierFieldName)
           const credIdData = JSON.parse(credIdRaw)
           const credentialId = credIdData.claim_value
 
-          // ECDSA public outputs: [0]=commitment, [1]=sd_array_hash, [2]=msg_hash_field
-          const commitment = result.ecdsaProof.publicSignals[0]
-          const sdArrayHash = result.ecdsaProof.publicSignals[1]
-          const msgHashField = result.ecdsaProof.publicSignals[2]
+          // Check if we already have an ECDSA proof for this claim
+          let nullifierEcdsa = result.ecdsaProofs.get(nullifierFieldName)
+          if (!nullifierEcdsa) {
+            // Need a separate ECDSA proof for the nullifier field
+            setBrowserProgress(`[${ci + 1}/${template!.credentials.length}] ECDSA (${nullifierFieldName})...`)
+            nullifierEcdsa = await proveInBrowser(
+              'ecdsa_verify',
+              credIdData.ecdsa_inputs,
+              API_URL,
+              t,
+              (_stage: string, detail: string) => setBrowserProgress(`[${ci + 1}/${template!.credentials.length}] Nullifier ECDSA: ${detail}`),
+            )
+          }
+
+          const commitment = nullifierEcdsa.publicSignals[0]
+          const sdArrayHash = nullifierEcdsa.publicSignals[1]
+          const msgHashField = nullifierEcdsa.publicSignals[2]
 
           const nullifierInputs: Record<string, string> = {
             credential_id: credentialId,
