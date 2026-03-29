@@ -2,7 +2,7 @@ import { createFileRoute } from '@tanstack/react-router'
 import React, { useEffect, useRef, useState } from 'react'
 import { StepWizard } from '../components/StepWizard'
 import { ProveMethodToggle, type ProveMethod } from '../components/ProveMethodToggle'
-import { proveCompoundInBrowser, proveInBrowser, type TranslateFunction } from '../lib/snarkjs-prover'
+import { proveCompoundInBrowser, proveInBrowser } from '../lib/snarkjs-prover'
 import { useT, useLocale, tLang } from '../i18n'
 import { CREDENTIAL_TYPES, resolveVariant, type FieldDisplay } from '../lib/credential-types'
 import { CONTRACT_TEMPLATES } from '../lib/contract-templates'
@@ -817,8 +817,8 @@ function ProveStep({ state, setState, t }: { state: ContractWizardState; setStat
           cred.format,
           predicates,
           API_URL,
-          t as TranslateFunction,
-          (_stage, detail) => setBrowserProgress(`[${ci + 1}/${template!.credentials.length}] ${detail}`),
+          t,
+          (_stage: string, detail: string) => setBrowserProgress(`[${ci + 1}/${template!.credentials.length}] ${detail}`),
         )
 
         // 2. Browser-side nullifier proving (if this credential has a nullifier field)
@@ -853,8 +853,8 @@ function ProveStep({ state, setState, t }: { state: ContractWizardState; setStat
             'nullifier',
             nullifierInputs,
             API_URL,
-            t as TranslateFunction,
-            (_stage, detail) => setBrowserProgress(`[${ci + 1}/${template!.credentials.length}] Nullifier: ${detail}`),
+            t,
+            (_stage: string, detail: string) => setBrowserProgress(`[${ci + 1}/${template!.credentials.length}] Nullifier: ${detail}`),
           )
 
           // Nullifier output is publicSignals[0]

@@ -5,7 +5,7 @@ import { StepWizard } from '../components/StepWizard'
 import { ProveMethodToggle, type ProveMethod } from '../components/ProveMethodToggle'
 import { useT, useLocale } from '../i18n'
 import { CREDENTIAL_TYPES, resolveVariant, type FieldDisplay } from '../lib/credential-types'
-import { proveCompoundInBrowser, getCacheStats, type BrowserProofResult, type TranslateFunction } from '../lib/snarkjs-prover'
+import { proveCompoundInBrowser, getCacheStats, type BrowserProofResult } from '../lib/snarkjs-prover'
 
 // Types
 
@@ -318,8 +318,8 @@ function HolderStep({ state, setState, t }: { state: WizardState; setState: Reac
         state.format!,
         userPredicates,
         API_URL,
-        t as TranslateFunction,
-        (_stage, detail) => setBrowserProgress(detail),
+        t,
+        (_stage: string, detail: string) => setBrowserProgress(detail),
       )
 
       // Build proof results from ECDSA + predicate proofs

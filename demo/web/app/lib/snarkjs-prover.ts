@@ -178,7 +178,7 @@ export async function proveCompoundInBrowser(
       prepData.ecdsa_inputs,
       apiBaseUrl,
       t,
-      (_stage, detail) => onProgress?.("ecdsa", `[${c + 1}/${uniqueClaims.length}] ${detail}`),
+      (_stage: string, detail: string) => onProgress?.("ecdsa", `[${c + 1}/${uniqueClaims.length}] ${detail}`),
     );
 
     if (!ecdsaResult.verified) {
@@ -258,7 +258,7 @@ export async function proveCompoundInBrowser(
       predicateInputs,
       apiBaseUrl,
       t,
-      (_stage, detail) => onProgress?.("predicate", detail),
+      (_stage: string, detail: string) => onProgress?.("predicate", detail),
     );
     predicateProofs.push(predResult);
   }
