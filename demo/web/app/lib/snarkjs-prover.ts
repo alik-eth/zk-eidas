@@ -1,3 +1,6 @@
+import { downloadChunks, getChunkStats as getChunkCacheStats, clearChunkCache, SECTION_SUFFIXES } from './chunked-zkey-loader'
+import localforage from 'localforage'
+
 export interface BrowserProofResult {
   proof: unknown;
   publicSignals: string[];
@@ -32,13 +35,50 @@ function ageCutoffEpochDays(minAge: number): number {
   return Math.floor(cutoff / 86400000);
 }
 
+/**
+ * Ensure a single (non-chunked) zkey's section files are stored in localforage.
+ * For predicate circuits, download section files from the API's /circuits/ endpoint.
+ */
+async function ensureZkeyInLocalforage(circuitName: string, apiBaseUrl: string): Promise<void> {
+  for (const suffix of SECTION_SUFFIXES) {
+    const key = `${circuitName}.zkey${suffix}`
+    const cached = await localforage.getItem(key)
+    if (cached !== null) continue
+
+    const url = `${apiBaseUrl}/circuits/${circuitName}/${circuitName}.zkey${suffix}`
+    try {
+      const resp = await fetch(url)
+      if (!resp.ok) break // Section doesn't exist — circuit has fewer sections
+      const buffer = await resp.arrayBuffer()
+      await localforage.setItem(key, buffer)
+    } catch {
+      break
+    }
+  }
+}
+
 /** Prove a single circuit in a Web Worker (keeps UI responsive). */
-export function proveInBrowser(
+export async function proveInBrowser(
   circuitName: string,
   inputs: Record<string, string | string[]>,
   apiBaseUrl: string,
   onProgress?: ProgressCallback,
 ): Promise<BrowserProofResult> {
+  // Ensure zkey sections are in localforage before the worker starts proving
+  onProgress?.("cache", `Caching ${circuitName} zkey sections...`);
+  if (circuitName === "ecdsa_verify") {
+    const ecdsaChunkBaseUrl = `${apiBaseUrl}/circuits/ecdsa_verify`;
+    await downloadChunks("ecdsa_verify", ecdsaChunkBaseUrl, SECTION_SUFFIXES, (detail) =>
+      onProgress?.("cache", detail)
+    );
+  } else {
+    await ensureZkeyInLocalforage(circuitName, apiBaseUrl);
+  }
+
+  const wasmUrl = `${apiBaseUrl}/circuits/${circuitName}/${circuitName}_js/${circuitName}.wasm`;
+  const zkeyUrl = `${circuitName}.zkey`;
+  const vkUrl = `${apiBaseUrl}/circuits/${circuitName}/vk.json`;
+
   return new Promise((resolve, reject) => {
     const worker = new Worker("/prove-worker.js");
 
@@ -65,10 +105,6 @@ export function proveInBrowser(
       worker.terminate();
       reject(new Error(e.message || "Worker error"));
     };
-
-    const wasmUrl = `${apiBaseUrl}/circuits/${circuitName}/${circuitName}_js/${circuitName}.wasm`;
-    const zkeyUrl = `${apiBaseUrl}/circuits/${circuitName}/${circuitName}.zkey`;
-    const vkUrl = `${apiBaseUrl}/circuits/${circuitName}/vk.json`;
 
     worker.postMessage({ type: "prove", circuitName, inputs, wasmUrl, zkeyUrl, vkUrl });
   });
@@ -208,28 +244,37 @@ export async function proveCompoundInBrowser(
   return { ecdsaProof: firstEcdsa.result, ecdsaProofs, predicateProofs, totalTimeMs };
 }
 
-/** Check how much circuit data is cached. */
+/** Check how much circuit data is cached (Cache API + localforage). */
 export async function getCacheStats(): Promise<{ totalBytes: number; entries: number }> {
+  let totalBytes = 0;
+  let entries = 0;
+
+  // Cache API entries (WASM, vk.json)
   try {
     const cache = await caches.open(ARTIFACT_CACHE_NAME);
     const keys = await cache.keys();
-    let totalBytes = 0;
     for (const req of keys) {
       const resp = await cache.match(req);
       if (resp) {
         const blob = await resp.blob();
         totalBytes += blob.size;
+        entries++;
       }
     }
-    return { totalBytes, entries: keys.length };
-  } catch {
-    return { totalBytes: 0, entries: 0 };
-  }
+  } catch { /* Cache API not available */ }
+
+  // Localforage entries (zkey section files)
+  const chunkStats = await getChunkCacheStats();
+  totalBytes += chunkStats.totalBytes;
+  entries += chunkStats.entries;
+
+  return { totalBytes, entries };
 }
 
-/** Clear all cached circuit artifacts. */
+/** Clear all cached circuit artifacts (Cache API + localforage). */
 export async function clearCache(): Promise<void> {
   await caches.delete(ARTIFACT_CACHE_NAME);
+  await clearChunkCache();
 }
 
 export async function verifyInBrowser(
