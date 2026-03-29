@@ -35,12 +35,12 @@ async function selectOnlyPredicates(page: Page, labels: string[]) {
   }
 }
 
-async function generateProofAndWait(page: Page) {
+async function generateProofAndWait(page: Page, timeoutMs = 600_000) {
   // Match both server ("Згенерувати доказ/Generate") and on-device ("Довести у браузері/Prove in browser") buttons
   await page.getByRole('button', { name: /Згенерувати доказ|Generate|Довести у браузері|Prove in browser/ }).click()
   await expect(
     page.getByText(/Доказ успішно згенеровано|Proof generated/).first()
-  ).toBeVisible({ timeout: 600_000 })
+  ).toBeVisible({ timeout: timeoutMs })
 }
 
 // ---------------------------------------------------------------------------
@@ -240,7 +240,7 @@ for (const tpl of CONTRACT_TEMPLATES) {
 
       // 4. Prove
       const proveStart = Date.now()
-      await generateProofAndWait(page)
+      await generateProofAndWait(page, timeoutMs)
       const proveMs = Date.now() - proveStart
 
       // 5. Verify document generated
