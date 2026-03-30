@@ -173,4 +173,159 @@ describe("Special Circuits", function () {
             }
         });
     });
+
+    describe("identity_escrow", () => {
+        let circuit;
+        before(async () => {
+            circuit = await wasm(
+                path.join(circuitsDir, "identity_escrow", "identity_escrow.circom"),
+                { include: [includeDir] }
+            );
+        });
+
+        function keystreamElement(K, index) {
+            return F.toString(poseidon([K, index]));
+        }
+
+        function fieldSub(ciphertextStr, keystreamStr) {
+            const ct = F.e(ciphertextStr);
+            const ks = F.e(keystreamStr);
+            return F.toString(F.sub(ct, ks));
+        }
+
+        it("happy path: encrypt and decrypt roundtrip with credential_hash integrity", async () => {
+            const credData = [100, 200, 300, 400, 500, 600, 12345, 800];
+            const claimValue = 12345, claimIndex = 6;
+            const sdh = 111, mh = 222, K = 987654321;
+            const commitment = computeCommitment(claimValue, sdh, mh);
+
+            const w = await circuit.calculateWitness({
+                claim_value: claimValue,
+                sd_array_hash: sdh,
+                message_hash: mh,
+                credential_data: credData,
+                claim_index: claimIndex,
+                K: K,
+                commitment: commitment
+            }, true);
+            await circuit.checkConstraints(w);
+
+            // w[1] = credential_hash, w[2..9] = ciphertext[0..7], w[10] = key_commitment
+            const credentialHash = w[1].toString();
+            const keyCommitment = w[10].toString();
+
+            // Verify credential_hash = Poseidon(credData)
+            const expectedCredHash = computePoseidon(...credData);
+            expect(credentialHash).to.equal(expectedCredHash);
+
+            // Verify key_commitment = Poseidon(K)
+            const expectedKeyCommitment = computePoseidon(K);
+            expect(keyCommitment).to.equal(expectedKeyCommitment);
+
+            // Decrypt each ciphertext[i] and verify it matches credData[i]
+            const decrypted = [];
+            for (let i = 0; i < 8; i++) {
+                const ct = w[2 + i].toString();
+                const ks = keystreamElement(K, i);
+                const plain = fieldSub(ct, ks);
+                expect(plain).to.equal(credData[i].toString(), `decrypt mismatch at index ${i}`);
+                decrypted.push(plain);
+            }
+
+            // Recompute Poseidon of decrypted data and verify it matches credential_hash
+            const recomputedHash = F.toString(poseidon(decrypted.map(x => F.e(x))));
+            expect(recomputedHash).to.equal(credentialHash);
+        });
+
+        it("claim_index = 0 works", async () => {
+            const credData = [42, 200, 300, 400, 500, 600, 700, 800];
+            const claimValue = 42, claimIndex = 0;
+            const sdh = 111, mh = 222, K = 987654321;
+            const commitment = computeCommitment(claimValue, sdh, mh);
+
+            const w = await circuit.calculateWitness({
+                claim_value: claimValue,
+                sd_array_hash: sdh,
+                message_hash: mh,
+                credential_data: credData,
+                claim_index: claimIndex,
+                K: K,
+                commitment: commitment
+            }, true);
+            await circuit.checkConstraints(w);
+
+            // Decrypt ciphertext[0] and verify it gives back 42
+            const ct0 = w[2].toString();
+            const ks0 = keystreamElement(K, 0);
+            const plain0 = fieldSub(ct0, ks0);
+            expect(plain0).to.equal("42");
+        });
+
+        it("wrong commitment fails", async () => {
+            const credData = [100, 200, 300, 400, 500, 600, 12345, 800];
+            const claimValue = 12345, claimIndex = 6;
+            const sdh = 111, mh = 222, K = 987654321;
+
+            try {
+                await circuit.calculateWitness({
+                    claim_value: claimValue,
+                    sd_array_hash: sdh,
+                    message_hash: mh,
+                    credential_data: credData,
+                    claim_index: claimIndex,
+                    K: K,
+                    commitment: "9999999"
+                }, true);
+                expect.fail("Should have thrown");
+            } catch (err) {
+                expect(err.message).to.include("Assert Failed");
+            }
+        });
+
+        it("claim_index pointing to wrong value fails", async () => {
+            // credData[0] = 100, credData[6] = 12345, but claimIndex = 0 → selected = 100 != 12345
+            const credData = [100, 200, 300, 400, 500, 600, 12345, 800];
+            const claimValue = 12345, claimIndex = 0;
+            const sdh = 111, mh = 222, K = 987654321;
+            const commitment = computeCommitment(claimValue, sdh, mh);
+
+            try {
+                await circuit.calculateWitness({
+                    claim_value: claimValue,
+                    sd_array_hash: sdh,
+                    message_hash: mh,
+                    credential_data: credData,
+                    claim_index: claimIndex,
+                    K: K,
+                    commitment: commitment
+                }, true);
+                expect.fail("Should have thrown");
+            } catch (err) {
+                expect(err.message).to.include("Assert Failed");
+            }
+        });
+
+        it("claim_index out of range fails", async () => {
+            // claimIndex = 8 → no IsEqual matches → selected = 0 → 0 != 12345
+            const credData = [100, 200, 300, 400, 500, 600, 12345, 800];
+            const claimValue = 12345, claimIndex = 8;
+            const sdh = 111, mh = 222, K = 987654321;
+            const commitment = computeCommitment(claimValue, sdh, mh);
+
+            try {
+                await circuit.calculateWitness({
+                    claim_value: claimValue,
+                    sd_array_hash: sdh,
+                    message_hash: mh,
+                    credential_data: credData,
+                    claim_index: claimIndex,
+                    K: K,
+                    commitment: commitment
+                }, true);
+                expect.fail("Should have thrown");
+            } catch (err) {
+                expect(err.message).to.include("Assert Failed");
+            }
+        });
+    });
 });
