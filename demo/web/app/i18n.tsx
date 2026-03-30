@@ -93,23 +93,6 @@ const translations: Record<string, Record<Locale, string>> = {
     uk: "Верифікація за мілісекунди. Працює офлайн. Нуль персональних даних розкрито.",
   },
 
-  // ── Pre-commitment ───────────────────────────────────────────────────
-  "precommit.title": {
-    en: "< 1 second on any smartphone",
-    uk: "< 1 секунда на будь-якому смартфоні",
-  },
-  "precommit.subtitle": {
-    en: "Heavy ECDSA once at issuance — lightweight Poseidon proofs forever",
-    uk: "Важкий ECDSA один раз при видачі — легкі Poseidon-докази назавжди",
-  },
-  "precommit.desc": {
-    en: "The ECDSA P-256 signature verification is the most expensive part of the proof — millions of constraints. Pre-computing it at credential issuance time means the user's device only needs to run lightweight Poseidon-based predicate circuits at presentation time.",
-    uk: "Перевірка підпису ECDSA P-256 — найважча частина доказу: мільйони обмежень. Попередній розрахунок при видачі посвідчення означає, що пристрій користувача запускає лише легкі Poseidon-схеми предикатів при пред'явленні.",
-  },
-  "precommit.device": { en: "Device", uk: "Пристрій" },
-  "precommit.time": { en: "Predicate proof time", uk: "Час доказу предиката" },
-  "precommit.badge": { en: "planned", uk: "в розробці" },
-
   // ── Ukraine ──────────────────────────────────────────────────────────
   "ukraine.title": {
     en: "Built for scale. Proven by Diia.",
