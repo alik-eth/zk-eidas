@@ -11,7 +11,7 @@ PTAU_ECDSA_URL := https://storage.googleapis.com/zkevm/ptau/powersOfTau28_hez_fi
 NODE_MEM := --max-old-space-size=16384
 
 PREDICATE_CIRCUITS := gte lte eq neq range set_member
-SPECIAL_CIRCUITS := nullifier holder_binding
+SPECIAL_CIRCUITS := nullifier holder_binding identity_escrow
 ECDSA_CIRCUIT := ecdsa_verify
 
 ALL_STAGE2 := $(PREDICATE_CIRCUITS) $(SPECIAL_CIRCUITS)
@@ -22,7 +22,7 @@ help:
 	@echo "Usage:"
 	@echo "  make all        - Build everything (download ptau + compile + setup all circuits)"
 	@echo "  make predicates - Build 6 predicate circuits (fast, ~30s)"
-	@echo "  make specials   - Build nullifier + holder_binding (fast)"
+	@echo "  make specials   - Build nullifier + holder_binding + identity_escrow (fast)"
 	@echo "  make ecdsa      - Build ECDSA circuit (slow, ~15min, needs 16GB RAM)"
 	@echo "  make split-ecdsa      - Split ECDSA zkey into chunks for browser proving"
 	@echo "  make split-predicates - Split predicate + special zkeys into chunks"
