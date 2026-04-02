@@ -1,109 +1,138 @@
 import { createFileRoute } from '@tanstack/react-router'
 import React, { useEffect, useRef, useState } from 'react'
-import { Tooltip } from '../components/Tooltip'
 import { StepWizard } from '../components/StepWizard'
 import { ProveMethodToggle, type ProveMethod } from '../components/ProveMethodToggle'
-import { useT, useLocale } from '../i18n'
+import { proveCompoundInBrowser, proveInBrowser } from '../lib/snarkjs-prover'
+import { useT, useLocale, tLang } from '../i18n'
 import { CREDENTIAL_TYPES, resolveVariant, type FieldDisplay } from '../lib/credential-types'
-import { proveCompoundInBrowser, getCacheStats, type BrowserProofResult } from '../lib/snarkjs-prover'
+import { CONTRACT_TEMPLATES } from '../lib/contract-templates'
 
 // Types
 
-interface ProofResult {
-  predicate: string
-  proof_json: string
-  proof_hex: string
-  op: string
-}
-
-interface PrintProofItem {
-  predicate: string
-  op?: string
-  compressedCbor: string // base64
-}
-
-interface PrintPredicate {
-  claim: string
-  claimKey?: string // i18n key for dynamic translation
-  op: string
-  publicValue: string
-  disclosed: boolean
-}
-
-interface WizardState {
-  step: 1 | 2 | 3 | 4
-  credentialType: string | null
-  credential: string | null
-  format: string | null
+interface CredentialData {
+  role: string
+  credentialType: string
+  credential: string
+  format: string
   fields: FieldDisplay[]
-  proofs: ProofResult[]
-  hiddenFields: string[]
-  nullifier: string | null
+  credentialId: string
   compoundProofJson: string | null
   compoundOp: string | null
-  credentialId: string | null
-  selectedPredicateIds: string[]
-  // Print data (populated when entering step 4)
-  printProofs: PrintProofItem[]
-  printPredicates: PrintPredicate[]
-  printLogicalOp: 'single' | 'and' | 'or'
-  printCredentialLabel: string
-  printCredentialLabelKey?: string // i18n key for dynamic translation
+  hiddenFields: string[]
+  predicateDescriptions: string[]
+  qrDataUrls: string[]
+}
+
+interface BindingResult {
+  labelKey: string
+  bindingHash: string
+  verified: boolean
+}
+
+interface PartyProof {
+  role: string
+  roleLabelKey: string
+  nullifier: string
+  salt: string
+  issuer: string
+  qrDataUrls: string[]
+}
+
+interface ContractWizardState {
+  step: 1 | 2 | 3 | 4 | 5
+  templateId: string | null
+  credentialIndex: number
+  credentials: CredentialData[]
+  bindings: BindingResult[]
+  qrDataUrls: string[]
+  compressedSize: number
+  compressedCborBase64: string | null
+  cached: boolean
+  partyProofs: PartyProof[]
+  contractHash: string | null
+  termsQrUrl: string | null
+  metadataQrUrl: string | null
+  bundleCborUrl: string | null
 }
 
 const API_URL = typeof window !== 'undefined' && window.location.hostname === 'localhost' ? 'http://localhost:3001' : ''
 
+const INITIAL_STATE: ContractWizardState = {
+  step: 1,
+  templateId: null,
+  credentialIndex: 0,
+  credentials: [],
+  bindings: [],
+  qrDataUrls: [],
+  compressedSize: 0,
+  compressedCborBase64: null,
+  cached: false,
+  partyProofs: [],
+  contractHash: null,
+  termsQrUrl: null,
+  metadataQrUrl: null,
+  bundleCborUrl: null,
+}
 
 export const Route = createFileRoute('/demo')({
-  component: Demo,
+  component: Contracts,
 })
 
-function Demo() {
+function Contracts() {
   const t = useT()
   const { locale, setLocale } = useLocale()
-  const [state, setState] = useState<WizardState>({
-    step: 1,
-    credentialType: null,
-    credential: null,
-    format: null,
-    fields: [],
-    proofs: [],
-    hiddenFields: [],
-    nullifier: null,
-    compoundProofJson: null,
-    compoundOp: null,
-    credentialId: null,
-    selectedPredicateIds: [],
-    printProofs: [],
-    printPredicates: [],
-    printLogicalOp: 'single',
-    printCredentialLabel: '',
-  })
+  const [state, setState] = useState<ContractWizardState>(INITIAL_STATE)
 
   const steps = [
     {
-      label: t('demo.step1Label'),
-      description: t('demo.step1Desc'),
-      icon: (<svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg>),
-      content: <IssuerStep state={state} setState={setState} t={t} />,
+      label: t('contracts.step1Label'),
+      description: t('contracts.step1Desc'),
+      icon: (
+        <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/>
+        </svg>
+      ),
+      content: <TemplateStep setState={setState} t={t} />,
     },
     {
-      label: t('demo.step2Label'),
-      description: t('demo.step2Desc'),
-      icon: (<svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>),
-      content: <HolderStep state={state} setState={setState} t={t} />,
+      label: t('contracts.step2Label'),
+      description: t('contracts.step2Desc'),
+      icon: (
+        <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/>
+        </svg>
+      ),
+      content: <CredentialStep state={state} setState={setState} t={t} />,
     },
     {
-      label: t('demo.step3Label'),
-      description: t('demo.step3Desc'),
-      icon: (<svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>),
-      content: <VerifierStep state={state} setState={setState} t={t} />,
+      label: t('contracts.step3Label'),
+      description: t('contracts.step3Desc'),
+      icon: (
+        <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+        </svg>
+      ),
+      content: <ProveStep state={state} setState={setState} t={t} />,
     },
     {
-      label: t('demo.step4Label'),
-      description: t('demo.step4Desc'),
-      icon: (<svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>),
-      content: <PrintStep state={state} t={t} />,
+      label: t('contracts.step4Label'),
+      description: t('contracts.step4Desc'),
+      icon: (
+        <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/>
+        </svg>
+      ),
+      content: <DocumentStep state={state} setState={setState} t={t} />,
+    },
+    {
+      label: t('contracts.step5Label'),
+      description: t('contracts.step5Desc'),
+      icon: (
+        <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>
+        </svg>
+      ),
+      content: <VerifyStep state={state} t={t} />,
     },
   ]
 
@@ -122,11 +151,22 @@ function Demo() {
                 <span className="text-slate-600 mx-0.5">-</span>
                 <span style={{ color: '#FFD500' }}>eidas</span>
               </h1>
-              <p className="text-xs text-slate-500 truncate">{t('demo.subtitle')}</p>
+              <p className="text-xs text-slate-500 truncate">{t('contracts.subtitle')}</p>
             </div>
           </a>
           <div className="flex items-center gap-2 sm:gap-4 shrink-0">
-            <button onClick={() => setLocale(locale === 'uk' ? 'en' : 'uk')} className="text-xs text-slate-500 hover:text-slate-300 transition-colors font-medium px-2 py-1 rounded border border-slate-800 hover:border-slate-700">
+            {state.step > 1 && (
+              <button
+                onClick={() => setState(INITIAL_STATE)}
+                className="text-xs text-slate-400 hover:text-slate-200 transition-colors font-medium px-2 py-1 rounded border border-slate-700 hover:border-slate-600"
+              >
+                {t('contracts.startOver')}
+              </button>
+            )}
+            <button
+              onClick={() => setLocale(locale === 'uk' ? 'en' : 'uk')}
+              className="text-xs text-slate-500 hover:text-slate-300 transition-colors font-medium px-2 py-1 rounded border border-slate-800 hover:border-slate-700"
+            >
               {locale === 'uk' ? 'EN' : 'UA'}
             </button>
             <span className="hidden sm:inline text-xs text-slate-600 font-medium tracking-wider uppercase">Alik.eth</span>
@@ -134,25 +174,184 @@ function Demo() {
         </div>
       </header>
 
-      <StepWizard steps={steps} currentStep={state.step} />
+      <StepWizard steps={steps} currentStep={state.step} onStepBack={(step) => {
+        if (step === 1) {
+          // Back to template picker — full reset
+          setState(INITIAL_STATE)
+        } else if (step === 2) {
+          // Back to credential issuer — keep template, reset credentials
+          setState(prev => ({
+            ...prev,
+            step: 2 as const,
+            credentialIndex: 0,
+            credentials: [],
+            bindings: [],
+            qrDataUrls: [],
+            compressedSize: 0,
+            compressedCborBase64: null,
+            partyProofs: [],
+            contractHash: null,
+          }))
+        } else if (step < state.step) {
+          setState(prev => ({ ...prev, step: step as ContractWizardState['step'] }))
+        }
+      }} />
     </div>
   )
 }
 
-// === Step 1: Issuer ===
+// === Step 1: Template Picker ===
 
-function IssuerStep({ setState, t }: { state: WizardState; setState: React.Dispatch<React.SetStateAction<WizardState>>; t: (key: string) => string }) {
-  const { locale } = useLocale()
-  const [loading, setLoading] = useState(false)
-  const [activeType, setActiveType] = useState('pid')
-  const config = CREDENTIAL_TYPES.find(ct => ct.id === activeType)!
-  const variant = resolveVariant(config, locale === 'uk' ? 'uk' : 'en')
-  const [formValues, setFormValues] = useState<Record<string, string>>(() =>
-    Object.fromEntries(variant.fields.map(f => [f.name, f.defaultValue]))
+function TemplateStep({ setState, t }: { setState: React.Dispatch<React.SetStateAction<ContractWizardState>>; t: (key: string) => string }) {
+  return (
+    <div className="space-y-6">
+      <div>
+        <h2 className="text-lg font-semibold text-slate-100">{t('contracts.title')}</h2>
+        <p className="text-sm text-slate-400 mt-1">{t('contracts.step1Desc')}</p>
+      </div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        {CONTRACT_TEMPLATES.map(template => (
+          <button
+            key={template.id}
+            onClick={() =>
+              setState(prev => ({
+                ...prev,
+                step: 2,
+                templateId: template.id,
+                credentialIndex: 0,
+                credentials: [],
+              }))
+            }
+            className="flex flex-col items-start gap-3 p-5 bg-slate-800 border border-slate-700 rounded-xl hover:border-blue-500/60 hover:bg-slate-800/80 transition-all text-left group"
+          >
+            <div className="flex items-center gap-3 w-full">
+              <span className="text-3xl" role="img" aria-label={t(template.titleKey)}>{template.icon}</span>
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-semibold text-slate-200 group-hover:text-white transition-colors">{t(template.titleKey)}</p>
+                <p className="text-xs text-slate-500 mt-0.5 leading-relaxed">{t(template.descKey)}</p>
+              </div>
+              <svg className="w-4 h-4 text-slate-600 group-hover:text-blue-400 transition-colors shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="9 18 15 12 9 6"/>
+              </svg>
+            </div>
+            {/* Stats row */}
+            <div className="flex items-center gap-3 text-[10px] text-slate-500">
+              <span className="flex items-center gap-1">
+                <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                {template.credentials.length} {template.credentials.length === 1 ? t('contracts.credentialSingular') : t('contracts.credentialPlural')}
+              </span>
+              <span className="flex items-center gap-1">
+                <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+                {template.credentials.reduce((sum, r) => sum + r.predicateIds.length, 0)} {t('contracts.proofs')}
+              </span>
+              {template.bindings && template.bindings.length > 0 && (
+                <span className="flex items-center gap-1">
+                  <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+                  {template.bindings.length} {t('contracts.binding.count')}
+                </span>
+              )}
+            </div>
+            {/* Credential breakdown */}
+            <div className="flex flex-wrap gap-1">
+              {template.credentials.map(req => {
+                const credConfig = CREDENTIAL_TYPES.find(c => c.id === req.credentialType)
+                return (
+                  <React.Fragment key={req.role}>
+                    <span className="text-[10px] bg-blue-900/40 text-blue-300 px-1.5 py-0.5 rounded font-medium">
+                      {t(req.roleLabelKey)}
+                    </span>
+                    {req.predicateIds.map(pid => {
+                      const pred = credConfig?.predicates.find(p => p.id === pid)
+                      return (
+                        <span key={`${req.role}-${pid}`} className="text-[10px] bg-slate-700 text-slate-400 px-1.5 py-0.5 rounded">
+                          {pred ? t(pred.labelKey) : pid}
+                        </span>
+                      )
+                    })}
+                  </React.Fragment>
+                )
+              })}
+            </div>
+          </button>
+        ))}
+      </div>
+    </div>
   )
+}
+
+// === Step 2: Credential Issuer (multi-credential, one at a time) ===
+
+function CredentialStep({ state, setState, t }: { state: ContractWizardState; setState: React.Dispatch<React.SetStateAction<ContractWizardState>>; t: (key: string) => string }) {
+  const { locale } = useLocale()
+  const template = CONTRACT_TEMPLATES.find(tpl => tpl.id === state.templateId)
+  const currentReq = template?.credentials[state.credentialIndex]
+  const config = currentReq ? CREDENTIAL_TYPES.find(ct => ct.id === currentReq.credentialType) : null
+  const isSecondary = template && currentReq
+    ? template.credentials.slice(0, state.credentialIndex).some(r => r.credentialType === currentReq.credentialType)
+    : false
+  const variant = config ? resolveVariant(config, locale === 'uk' ? 'uk' : 'en', isSecondary) : null
+
+  const [formValues, setFormValues] = useState<Record<string, string>>(() =>
+    variant ? Object.fromEntries(variant.fields.map(f => [f.name, f.defaultValue])) : {}
+  )
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  // Reset form values when credential index or template changes
+  useEffect(() => {
+    if (variant) {
+      setFormValues(Object.fromEntries(variant.fields.map(f => [f.name, f.defaultValue])))
+    }
+    setError(null)
+  }, [state.credentialIndex, state.templateId, locale]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  if (!template) return null
+
+  const totalCredentials = template.credentials.length
+
+  // All credentials issued — show read-only summary of each credential
+  if (!currentReq || !config) {
+    return (
+      <div className="space-y-6">
+        <div>
+          <div className="flex items-center gap-2 mb-1">
+            <span className="text-2xl">{template.icon}</span>
+            <h2 className="text-lg font-semibold text-slate-100">{t(template.titleKey)}</h2>
+          </div>
+          <p className="text-sm text-slate-400">{t('contracts.step2Desc')}</p>
+        </div>
+        {state.credentials.map((cred, i) => {
+          const req = template.credentials[i]
+          const credConfig = req ? CREDENTIAL_TYPES.find(ct => ct.id === req.credentialType) : null
+          return (
+            <div key={cred.role} className="bg-slate-800 rounded-lg border border-green-700/30 overflow-hidden">
+              <div className="bg-green-900/30 px-6 py-3 flex items-center gap-2">
+                <svg className="w-4 h-4 text-green-400 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="20 6 9 17 4 12"/>
+                </svg>
+                <h3 className="text-sm font-semibold text-green-300">{req ? t(req.roleLabelKey) : cred.role}</h3>
+                {credConfig && <span className="text-xs text-slate-500 ml-auto">{t(credConfig.credLabelKey)}</span>}
+              </div>
+              <div className="p-6">
+                <div className="grid grid-cols-2 gap-3">
+                  {cred.fields.map(f => (
+                    <div key={f.name}>
+                      <span className="block text-xs text-slate-500 mb-0.5">{f.label}</span>
+                      <span className="text-sm text-slate-300 font-mono">{f.value}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    )
+  }
 
   const handleIssue = async () => {
     setLoading(true)
+    setError(null)
     try {
       const res = await fetch(`${API_URL}/issuer/issue`, {
         method: 'POST',
@@ -160,25 +359,41 @@ function IssuerStep({ setState, t }: { state: WizardState; setState: React.Dispa
         body: JSON.stringify({
           credential_type: config.id,
           claims: formValues,
-          issuer: variant.issuer,
+          issuer: variant?.issuer,
         }),
       })
       if (!res.ok) throw new Error(await res.text())
       const data = await res.json()
-      setState(prev => ({
-        ...prev,
-        step: 2,
-        credentialType: config.id,
+      const credentialId = formValues[currentReq.disclosedField] || config.id
+
+      const newCredData: CredentialData = {
+        role: currentReq.role,
+        credentialType: currentReq.credentialType,
         credential: data.credential,
         format: data.format,
         fields: data.credential_display.fields.map((f: FieldDisplay) => {
-          const fieldConfig = variant.fields.find(cf => cf.name === f.name)
+          const fieldConfig = variant?.fields.find(cf => cf.name === f.name)
           return { ...f, label: fieldConfig ? t(fieldConfig.labelKey) : f.label }
         }),
-        credentialId: formValues.document_number || formValues.license_number || formValues.vin || config.id,
+        credentialId,
+        compoundProofJson: null,
+        compoundOp: null,
+        hiddenFields: [],
+        predicateDescriptions: [],
+        qrDataUrls: [],
+      }
+
+      const nextIndex = state.credentialIndex + 1
+      const isLast = nextIndex >= totalCredentials
+
+      setState(prev => ({
+        ...prev,
+        credentials: [...prev.credentials, newCredData],
+        credentialIndex: nextIndex,
+        step: isLast ? 3 : prev.step,
       }))
-    } catch (e: any) {
-      alert(`Issue failed: ${e.message}`)
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : String(e))
     } finally {
       setLoading(false)
     }
@@ -186,30 +401,60 @@ function IssuerStep({ setState, t }: { state: WizardState; setState: React.Dispa
 
   return (
     <div className="space-y-6">
-      <select
-        data-testid="credential-type-select"
-        value={activeType}
-        onChange={e => {
-          const ct = CREDENTIAL_TYPES.find(c => c.id === e.target.value)!
-          setActiveType(ct.id)
-          const v = resolveVariant(ct, locale === 'uk' ? 'uk' : 'en')
-          setFormValues(Object.fromEntries(v.fields.map(f => [f.name, f.defaultValue])))
-        }}
-        className="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2.5 text-sm font-medium text-slate-200 focus:outline-none focus:border-blue-500"
-      >
-        {CREDENTIAL_TYPES.map(ct => (
-          <option key={ct.id} value={ct.id}>{t(ct.labelKey)}</option>
-        ))}
-      </select>
+      <div>
+        <div className="flex items-center gap-2 mb-1">
+          <span className="text-2xl">{template.icon}</span>
+          <h2 className="text-lg font-semibold text-slate-100">{t(template.titleKey)}</h2>
+        </div>
+        <p className="text-sm text-slate-400">{t('contracts.step2Desc')}</p>
+      </div>
+
+      {/* Progress indicator */}
+      {totalCredentials > 1 && (
+        <div className="flex items-center gap-3">
+          {template.credentials.map((req, i) => {
+            const isDone = i < state.credentialIndex
+            const isCurrent = i === state.credentialIndex
+            return (
+              <div key={req.role} className="flex items-center gap-2">
+                {i > 0 && <div className={`w-6 h-px ${isDone ? 'bg-green-500' : 'bg-slate-700'}`} />}
+                <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border ${
+                  isDone
+                    ? 'bg-green-900/30 border-green-700/50 text-green-400'
+                    : isCurrent
+                      ? 'bg-blue-900/30 border-blue-500/50 text-blue-300'
+                      : 'bg-slate-800 border-slate-700 text-slate-500'
+                }`}>
+                  {isDone ? (
+                    <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                  ) : (
+                    <span className="w-3 text-center">{i + 1}</span>
+                  )}
+                  <span>{t(req.roleLabelKey)}</span>
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      )}
+
+      {/* Current credential header */}
+      <div className="bg-slate-800/50 rounded-lg border border-blue-500/30 px-4 py-3">
+        <p className="text-sm font-semibold text-blue-300">
+          {t('contracts.credentialOf')} {state.credentialIndex + 1} / {totalCredentials} — {t(currentReq.roleLabelKey)}
+        </p>
+      </div>
+
+      {/* Issuer form */}
       <div className="bg-slate-800 rounded-lg border border-slate-700 overflow-hidden">
         <div className="bg-blue-700 px-6 py-3">
-          <h2 className="text-lg font-semibold">{t(variant.issuerTitleKey)}</h2>
-          <p className="text-sm text-blue-200">{t(variant.issuerSubtitleKey)}</p>
+          <h3 className="text-base font-semibold">{t(variant!.issuerTitleKey)}</h3>
+          <p className="text-sm text-blue-200">{t(variant!.issuerSubtitleKey)}</p>
         </div>
         <div className="p-6">
           <p className="text-slate-400 text-sm mb-4">{t(config.credLabelKey)}</p>
           <div className="grid grid-cols-2 gap-4">
-            {variant.fields.map(field => (
+            {variant!.fields.map(field => (
               <div key={field.name} className={field.colSpan === 2 ? 'col-span-2' : ''}>
                 <label className="block text-xs text-slate-400 mb-1">{t(field.labelKey)}</label>
                 <input
@@ -224,348 +469,667 @@ function IssuerStep({ setState, t }: { state: WizardState; setState: React.Dispa
         </div>
       </div>
 
+      {/* Already completed credentials */}
+      {state.credentials.length > 0 && (
+        <div className="space-y-2">
+          {state.credentials.map((cred, i) => {
+            const req = template.credentials[i]
+            return (
+              <div key={cred.role} className="flex items-center gap-3 px-4 py-3 bg-green-950/20 rounded-lg border border-green-700/30">
+                <svg className="w-4 h-4 text-green-400 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="20 6 9 17 4 12"/>
+                </svg>
+                <span className="text-sm text-green-300 font-medium">{t(req.roleLabelKey)}</span>
+                <span className="text-xs text-slate-500 font-mono">{cred.credentialId}</span>
+              </div>
+            )
+          })}
+        </div>
+      )}
+
+      {error && (
+        <div className="bg-red-900/30 border border-red-700 rounded-lg p-4 flex items-center justify-between gap-3">
+          <span className="text-sm text-red-300">{error}</span>
+          <button onClick={() => setError(null)} className="text-xs text-red-400 hover:text-red-200 font-medium shrink-0">{t('contracts.dismiss') || 'Dismiss'}</button>
+        </div>
+      )}
+
       <button
         onClick={handleIssue}
         disabled={loading}
         className="flex items-center justify-center gap-2 w-full bg-blue-600 hover:bg-blue-700 disabled:bg-slate-600 disabled:cursor-not-allowed text-white font-semibold py-3 rounded-lg transition-colors"
       >
-        <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/></svg>
+        <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/>
+        </svg>
         {loading ? t('demo.issuing') : t('demo.issueBtn')}
       </button>
     </div>
   )
 }
 
-// === Step 2: Holder ===
+// === Step 3: Prove (all credentials at once) ===
 
-function HolderStep({ state, setState, t }: { state: WizardState; setState: React.Dispatch<React.SetStateAction<WizardState>>; t: (key: string) => string }) {
-  const config = CREDENTIAL_TYPES.find(c => c.id === state.credentialType)
-  if (!config) return null
-  const resolvedPredicates = config.predicates.map(p => ({
-    ...p,
-    predicate: {
-      ...p.predicate,
-      value: p.predicate.value === '__FROM_FORM__'
-        ? state.fields.find(f => f.name === p.predicate.claim)?.value ?? ''
-        : p.predicate.value,
-    },
-  }))
+function ProveStep({ state, setState, t }: { state: ContractWizardState; setState: React.Dispatch<React.SetStateAction<ContractWizardState>>; t: (key: string) => string }) {
+  const { locale } = useLocale()
+  const template = CONTRACT_TEMPLATES.find(tpl => tpl.id === state.templateId)
 
-  const [selected, setSelected] = useState<Record<string, boolean>>(() =>
-    Object.fromEntries(resolvedPredicates.map(p => [p.id, p.defaultChecked]))
-  )
   const [loading, setLoading] = useState(false)
   const [elapsed, setElapsed] = useState(0)
   const [proved, setProved] = useState(false)
-  const [compoundMode, setCompoundMode] = useState<'individual' | 'and' | 'or'>('and')
-  const [proveTimeMs, setProveTimeMs] = useState<number | null>(null)
-  const [presReqLoading, setPresReqLoading] = useState(false)
-  const [presReqResult, setPresReqResult] = useState<{ id: string; input_descriptors: { id: string; constraints: { path: string; predicate_op: string; value: string }[] }[] } | null>(null)
-  // Browser proving state
+  const [error, setError] = useState<string | null>(null)
+  const [currentProvingIndex, setCurrentProvingIndex] = useState(-1)
+  const [skipCache, setSkipCache] = useState(false)
   const [proveMethod, setProveMethod] = useState<ProveMethod>('server')
-  const proveOnDevice = proveMethod === 'device'
   const [browserProgress, setBrowserProgress] = useState('')
-  const [_browserResult, _setBrowserResult] = useState<BrowserProofResult | null>(null)
+  const proveOnDevice = proveMethod === 'device'
 
-  // Reset proved state when user reverts back to this step
+  // Reset local state when credentials change
   useEffect(() => {
-    if (state.step === 2 && proved) {
-      setProved(false)
-      setProveTimeMs(null)
-    }
-  }, [state.step])
+    setProved(false)
+    setError(null)
+    setLoading(false)
+    setElapsed(0)
+    setCurrentProvingIndex(-1)
+    setSkipCache(false)
+  }, [state.credentials.length])
 
-  const selectedCount = Object.values(selected).filter(Boolean).length
+  if (!template || state.credentials.length === 0) return null
 
-  const handlePresentationRequest = async () => {
-    const reqs = resolvedPredicates.filter(p => selected[p.id]).map(p => ({
-      claim: p.predicate.claim,
-      op: p.predicate.op,
-      value: String(Array.isArray(p.predicate.value) ? p.predicate.value.join(',') : p.predicate.value),
-    }))
-    if (reqs.length === 0) return
-    setPresReqLoading(true)
-    try {
-      const res = await fetch(`${API_URL}/verifier/presentation-request`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ requirements: reqs }),
-      })
-      if (!res.ok) throw new Error(await res.text())
-      setPresReqResult(await res.json())
-    } catch (e: any) {
-      alert(`Presentation request failed: ${e.message}`)
-    } finally {
-      setPresReqLoading(false)
-    }
-  }
-
-  // Browser proving (disabled — needs /holder/prepare-witness endpoint)
-  // Will be enabled when lightweight witness endpoint is implemented.
-  // ECDSA (~2M constraints) always runs server-side; only predicate
-  // circuits (~300 constraints) can prove in-browser via snarkjs.
-  const handleProveBrowser = async () => {
+  const handleProve = async (forceSkipCache = false) => {
     setLoading(true)
     setElapsed(0)
-    setBrowserProgress('Preparing inputs...')
-    _setBrowserResult(null)
+    setError(null)
     const timer = setInterval(() => setElapsed(prev => prev + 1), 1000)
     try {
-      const userPredicates = resolvedPredicates.filter(p => selected[p.id]).map(p => p.predicate)
+      const updatedCredentials = [...state.credentials]
+      const allQrDataUrls: string[] = []
+      let totalCompressedSize = 0
+      let anyCached = false
+      const partyProofs: PartyProof[] = []
+      let sharedContractHash: string | null = null
+      const timestamp = new Date().toISOString()
 
-      const result = await proveCompoundInBrowser(
-        state.credential!,
-        state.format!,
-        userPredicates,
-        API_URL,
-        t,
-        (_stage: string, detail: string) => setBrowserProgress(detail),
+      const { encodeProofChunks, LogicalOpFlag, encodeTermsQr, encodeMetadataQr } = await import('../lib/qr-chunking')
+      const QRCode = (await import('qrcode')).default
+      const proofCount = template.credentials.length + 2 // proofs + terms + metadata
+
+      for (let ci = 0; ci < template.credentials.length; ci++) {
+        setCurrentProvingIndex(ci)
+        const req = template.credentials[ci]
+        const cred = updatedCredentials[ci]
+        const config = CREDENTIAL_TYPES.find(ct => ct.id === req.credentialType)
+        if (!config) throw new Error(`Unknown credential type: ${req.credentialType}`)
+
+        const templatePredicates = req.predicateIds
+          .map(pid => config.predicates.find(p => p.id === pid))
+          .filter((p): p is NonNullable<typeof p> => p !== undefined)
+
+        // Build predicates, resolving __FROM_FORM__ values
+        const predicates = templatePredicates.map(p => ({
+          claim: p.predicate.claim,
+          op: p.predicate.op,
+          value: p.predicate.value === '__FROM_FORM__'
+            ? (cred.fields.find(f => f.name === p.predicate.claim)?.value ?? '')
+            : p.predicate.value,
+        }))
+
+        // Prove via /holder/contract-prove (includes nullifier generation)
+        const selectedTemplate = CONTRACT_TEMPLATES.find(tpl => tpl.id === state.templateId)
+        const proveRes = await fetch(`${API_URL}/holder/contract-prove`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            credential: cred.credential,
+            format: cred.format,
+            predicates,
+            contract_terms: JSON.stringify(selectedTemplate),
+            timestamp,
+            nullifier_field: req.nullifierField,
+            role: req.role,
+            ...(forceSkipCache ? { skip_cache: true } : {}),
+          }),
+        })
+        if (!proveRes.ok) throw new Error(await proveRes.text())
+        const proveData = await proveRes.json()
+        if (proveData.cached) anyCached = true
+
+        // Export compound with compression
+        const exportRes = await fetch(`${API_URL}/holder/proof-export-compound?compress=true`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ compound_proof_json: proveData.compound_proof_json }),
+        })
+        if (!exportRes.ok) throw new Error(await exportRes.text())
+        const exportData = await exportRes.json()
+
+        // Generate QR codes for this credential's proof
+        const compressed = Uint8Array.from(atob(exportData.compressed_cbor_base64), c => c.charCodeAt(0))
+        totalCompressedSize += compressed.length
+        const proofId = ci + 1
+        const logicalOp = proofCount > 1 ? LogicalOpFlag.And : LogicalOpFlag.Single
+        const chunks = encodeProofChunks(compressed, proofId, ci, proofCount, logicalOp)
+        const qrStartIndex = allQrDataUrls.length
+        for (const chunk of chunks) {
+          const url = await QRCode.toDataURL([{ data: chunk, mode: 'byte' as const }], {
+            errorCorrectionLevel: 'L',
+            margin: 1,
+            width: 280,
+          })
+          allQrDataUrls.push(url)
+        }
+        const qrUrlsForThisCredential = allQrDataUrls.slice(qrStartIndex)
+
+        // Build predicate descriptions
+        const predicateDescriptions = templatePredicates.map(p => t(p.labelKey))
+
+        // Update credential data with proof info
+        updatedCredentials[ci] = {
+          ...cred,
+          compoundProofJson: proveData.compound_proof_json,
+          compoundOp: proveData.op,
+          hiddenFields: proveData.hidden_fields,
+          predicateDescriptions,
+          qrDataUrls: qrUrlsForThisCredential,
+        }
+
+        // Store per-party nullifier data
+        if (req.nullifierField && proveData.nullifier) {
+          if (!sharedContractHash) {
+            sharedContractHash = proveData.contract_hash
+          }
+          partyProofs.push({
+            role: req.role,
+            roleLabelKey: req.roleLabelKey,
+            nullifier: proveData.nullifier,
+            salt: proveData.salt,
+            issuer: config ? resolveVariant(config, locale === 'uk' ? 'uk' : 'en').issuer : '',
+            qrDataUrls: qrUrlsForThisCredential,
+          })
+        }
+      }
+
+      // Generate terms QR (page 1)
+      const selectedTemplateForTerms = CONTRACT_TEMPLATES.find(tpl => tpl.id === state.templateId)
+      const termsString = JSON.stringify(selectedTemplateForTerms)
+      const termsQrChunk = await encodeTermsQr(termsString, timestamp, proofCount)
+      const termsQrUrl = await QRCode.toDataURL([{ data: termsQrChunk, mode: 'byte' as const }], {
+        errorCorrectionLevel: 'L',
+        margin: 1,
+        width: 280,
+      })
+
+      // Generate metadata QR (page 2 shared section)
+      if (!sharedContractHash) throw new Error('No contract hash — template must have at least one nullifierField credential')
+      const metadataQrChunk = await encodeMetadataQr(
+        sharedContractHash,
+        partyProofs.map(p => ({ role: p.role, nullifier: p.nullifier, salt: p.salt })),
+        proofCount,
       )
+      const metadataQrUrl = await QRCode.toDataURL([{ data: metadataQrChunk, mode: 'byte' as const }], {
+        errorCorrectionLevel: 'L',
+        margin: 1,
+        width: 280,
+      })
 
-      // Build proof results from ECDSA + predicate proofs
-      const proofs: ProofResult[] = [
-        {
-          predicate: 'ecdsa_verify',
-          proof_json: JSON.stringify({ proof: result.ecdsaProof.proof, publicSignals: result.ecdsaProof.publicSignals }),
-          proof_hex: '',
-          op: 'ecdsa',
+      // Build CBOR bundle for download
+      const { decode, encode } = await import('cbor-x')
+      const proofEnvelopes = []
+      for (const cred of updatedCredentials) {
+        if (!cred.compoundProofJson) continue
+        const expRes = await fetch(`${API_URL}/holder/proof-export-compound?compress=true`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ compound_proof_json: cred.compoundProofJson }),
+        })
+        if (!expRes.ok) continue
+        const expData = await expRes.json()
+        const comp = Uint8Array.from(atob(expData.compressed_cbor_base64), c => c.charCodeAt(0))
+        const { decompressDeflate } = await import('../lib/qr-chunking')
+        const cbor = await decompressDeflate(comp)
+        proofEnvelopes.push(decode(cbor))
+      }
+      const bundle = encode({
+        version: 2,
+        proof_envelopes: proofEnvelopes,
+        terms: { terms: termsString, timestamp },
+        metadata: {
+          contract_hash: sharedContractHash,
+          parties: partyProofs.map(p => ({ role: p.role, nullifier: p.nullifier, salt: p.salt })),
         },
-        ...result.predicateProofs.map((p, i) => ({
-          predicate: userPredicates[i]?.claim ?? `predicate_${i}`,
-          proof_json: JSON.stringify({ proof: p.proof, publicSignals: p.publicSignals }),
-          proof_hex: '',
-          op: userPredicates[i]?.op ?? 'unknown',
-        })),
-      ]
+      })
+      const bundleCborUrl = `data:application/cbor;base64,${btoa(String.fromCharCode(...new Uint8Array(bundle)))}`
 
-      setProveTimeMs(result.totalTimeMs)
+      // Prove holder bindings if any
+      const bindingResults: BindingResult[] = []
+      if (template.bindings) {
+        for (const binding of template.bindings) {
+          setCurrentProvingIndex(-2) // signal binding phase
+          const credA = updatedCredentials.find(c => c.role === binding.roleA)
+          const credB = updatedCredentials.find(c => c.role === binding.roleB)
+          if (credA && credB) {
+            const bindingRes = await fetch(`${API_URL}/holder/prove-binding`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                sdjwt_a: credA.credential,
+                sdjwt_b: credB.credential,
+                binding_claim: binding.claimA,
+                binding_claim_b: binding.claimA !== binding.claimB ? binding.claimB : undefined,
+                predicates_a: [],
+                predicates_b: [],
+              }),
+            })
+            if (bindingRes.ok) {
+              const bindingData = await bindingRes.json()
+              bindingResults.push({
+                labelKey: binding.labelKey,
+                bindingHash: bindingData.binding_hash,
+                verified: bindingData.binding_verified,
+              })
+            } else {
+              console.warn('Holder binding failed:', await bindingRes.text())
+            }
+          }
+        }
+      }
+
       clearInterval(timer)
       setLoading(false)
       setProved(true)
-      setBrowserProgress(`Done in ${(result.totalTimeMs / 1000).toFixed(1)}s — all proofs verified locally`)
-      // Build compound proof JSON compatible with server format
-      const compoundProof = {
-        proofs: result.predicateProofs.map((p, i) => ({
-          proof_bytes: Array.from(new TextEncoder().encode(JSON.stringify(p.proof))),
-          public_inputs: p.publicSignals.map(s => Array.from(new TextEncoder().encode(s))),
-          verification_key: [],
-          predicate_op: userPredicates[i]?.op === 'gte' ? 'Gte' :
-            userPredicates[i]?.op === 'lte' ? 'Lte' :
-            userPredicates[i]?.op === 'eq' ? 'Eq' :
-            userPredicates[i]?.op === 'neq' ? 'Neq' :
-            userPredicates[i]?.op === 'set_member' ? 'SetMember' :
-            userPredicates[i]?.op === 'range' ? 'Range' : 'Gte',
-          nullifier: null,
-          claim_name: userPredicates[i]?.claim ?? null,
-        })),
-        op: compoundMode === 'or' ? 'Or' : 'And',
-        ecdsa_proofs: Object.fromEntries(
-          [...new Set(userPredicates.map(p => p.claim))].map(claim => {
-            const ecdsaForClaim = result.ecdsaProofs.get(claim) ?? result.ecdsaProof;
-            return [claim, {
-              proof_bytes: Array.from(new TextEncoder().encode(JSON.stringify(ecdsaForClaim.proof))),
-              public_inputs: ecdsaForClaim.publicSignals.map(s => Array.from(new TextEncoder().encode(s))),
-              verification_key: [],
-              predicate_op: 'Ecdsa',
-              nullifier: null,
-            }];
-          })
-        ),
-      };
-
       setTimeout(() => {
         setState(prev => ({
           ...prev,
-          step: 3,
-          proofs,
-          hiddenFields: userPredicates.map(p => p.claim),
-          nullifier: null,
-          compoundProofJson: JSON.stringify(compoundProof),
-          compoundOp: compoundMode === 'or' ? 'Or' : 'And',
-          selectedPredicateIds: Object.entries(selected).filter(([, v]) => v).map(([k]) => k),
+          step: 4,
+          credentials: updatedCredentials,
+          bindings: bindingResults,
+          qrDataUrls: allQrDataUrls,
+          compressedSize: totalCompressedSize,
+          cached: anyCached,
+          partyProofs,
+          contractHash: sharedContractHash,
+          termsQrUrl,
+          metadataQrUrl,
+          bundleCborUrl,
         }))
-      }, 800)
+      }, 600)
+    } catch (e: unknown) {
+      clearInterval(timer)
+      setLoading(false)
+      setError(e instanceof Error ? e.message : String(e))
+    }
+  }
+
+  const handleProveBrowser = async () => {
+    setLoading(true)
+    setElapsed(0)
+    setError(null)
+    setBrowserProgress('Preparing...')
+    const timer = setInterval(() => setElapsed(prev => prev + 1), 1000)
+    try {
+      // Load WASM for credential parsing
+      const { default: init, prepare_inputs } = await import('zk-eidas-wasm')
+      await init()
+
+      const updatedCredentials = [...state.credentials]
+      const allQrDataUrls: string[] = []
+      let totalCompressedSize = 0
+      const partyProofs: PartyProof[] = []
+      let sharedContractHash: string | null = null
+      const timestamp = new Date().toISOString()
+
+      const { encodeProofChunks, LogicalOpFlag, encodeTermsQr, encodeMetadataQr } = await import('../lib/qr-chunking')
+      const QRCode = (await import('qrcode')).default
+      const proofCount = template!.credentials.length + 2
+
+      // Compute contract_hash client-side: SHA256(terms + timestamp) → first 8 bytes as u64
+      const selectedTemplate = CONTRACT_TEMPLATES.find(tpl => tpl.id === state.templateId)
+      const termsString = JSON.stringify(selectedTemplate)
+      const termsHashBuf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(termsString + timestamp))
+      const termsHashView = new DataView(termsHashBuf)
+      const contractHashU64 = termsHashView.getBigUint64(0)
+      const contractHashHex = `0x${contractHashU64.toString(16).padStart(16, '0')}`
+      sharedContractHash = contractHashHex
+
+      for (let ci = 0; ci < template!.credentials.length; ci++) {
+        setCurrentProvingIndex(ci)
+        const req = template!.credentials[ci]
+        const cred = updatedCredentials[ci]
+        const config = CREDENTIAL_TYPES.find(ct => ct.id === req.credentialType)
+        if (!config) throw new Error(`Unknown credential type: ${req.credentialType}`)
+
+        const templatePredicates = req.predicateIds
+          .map(pid => config.predicates.find(p => p.id === pid))
+          .filter((p): p is NonNullable<typeof p> => p !== undefined)
+
+        const predicates = templatePredicates.map(p => ({
+          claim: p.predicate.claim,
+          op: p.predicate.op,
+          value: p.predicate.value === '__FROM_FORM__'
+            ? (cred.fields.find(f => f.name === p.predicate.claim)?.value ?? '')
+            : p.predicate.value,
+        }))
+
+        // 1. Browser-side ECDSA + predicate proving
+        setBrowserProgress(`[${ci + 1}/${template!.credentials.length}] Proving ${t(req.roleLabelKey)} on device...`)
+        const result = await proveCompoundInBrowser(
+          cred.credential,
+          cred.format,
+          predicates,
+          API_URL,
+          t,
+          (_stage: string, detail: string) => setBrowserProgress(`[${ci + 1}/${template!.credentials.length}] ${detail}`),
+        )
+
+        // 2. Browser-side nullifier proving (if this credential has a nullifier field)
+        let nullifierHex: string | null = null
+        const salt = crypto.getRandomValues(new BigUint64Array(1))[0]
+        const saltHex = `0x${salt.toString(16).padStart(16, '0')}`
+
+        if (req.nullifierField) {
+          setBrowserProgress(`[${ci + 1}/${template!.credentials.length}] ${t("prove.generatingProof")} (nullifier)...`)
+
+          // The nullifier circuit needs an ECDSA commitment for the nullifier field,
+          // which may differ from the predicate claim. Generate a separate ECDSA proof.
+          const nullifierFieldName = req.nullifierField
+          const credIdRaw = prepare_inputs(cred.credential, nullifierFieldName)
+          const credIdData = JSON.parse(credIdRaw)
+          const credentialId = credIdData.claim_value
+
+          // Check if we already have an ECDSA proof for this claim
+          let nullifierEcdsa = result.ecdsaProofs.get(nullifierFieldName)
+          if (!nullifierEcdsa) {
+            // Need a separate ECDSA proof for the nullifier field
+            setBrowserProgress(`[${ci + 1}/${template!.credentials.length}] ECDSA (${nullifierFieldName})...`)
+            nullifierEcdsa = await proveInBrowser(
+              'ecdsa_verify',
+              credIdData.ecdsa_inputs,
+              API_URL,
+              t,
+              (_stage: string, detail: string) => setBrowserProgress(`[${ci + 1}/${template!.credentials.length}] Nullifier ECDSA: ${detail}`),
+            )
+          }
+
+          const commitment = nullifierEcdsa.publicSignals[0]
+          const sdArrayHash = nullifierEcdsa.publicSignals[1]
+          const msgHashField = nullifierEcdsa.publicSignals[2]
+
+          const nullifierInputs: Record<string, string> = {
+            credential_id: credentialId,
+            sd_array_hash: sdArrayHash,
+            message_hash: msgHashField,
+            commitment,
+            contract_hash: contractHashU64.toString(),
+            salt: salt.toString(),
+          }
+
+          const nullifierResult = await proveInBrowser(
+            'nullifier',
+            nullifierInputs,
+            API_URL,
+            t,
+            (_stage: string, detail: string) => setBrowserProgress(`[${ci + 1}/${template!.credentials.length}] Nullifier: ${detail}`),
+          )
+
+          // Nullifier output is publicSignals[0]
+          nullifierHex = `0x${BigInt(nullifierResult.publicSignals[0]).toString(16).padStart(64, '0')}`
+        }
+
+        // 3. Build compound proof JSON matching server format
+        const compoundProof = {
+          proofs: result.predicateProofs.map((p, i) => ({
+            proof_bytes: Array.from(new TextEncoder().encode(JSON.stringify(p.proof))),
+            public_inputs: p.publicSignals.map(s => Array.from(new TextEncoder().encode(s))),
+            verification_key: [],
+            predicate_op: predicates[i]?.op === 'gte' ? 'Gte' :
+              predicates[i]?.op === 'lte' ? 'Lte' :
+              predicates[i]?.op === 'eq' ? 'Eq' :
+              predicates[i]?.op === 'neq' ? 'Neq' :
+              predicates[i]?.op === 'set_member' ? 'SetMember' :
+              predicates[i]?.op === 'range' ? 'Range' : 'Gte',
+            nullifier: null,
+            claim_name: predicates[i]?.claim ?? null,
+          })),
+          op: 'And',
+          ecdsa_proofs: Object.fromEntries(
+            [...new Set(predicates.map(p => p.claim))].map(claim => {
+              const ecdsaForClaim = result.ecdsaProofs.get(claim) ?? result.ecdsaProof
+              return [claim, {
+                proof_bytes: Array.from(new TextEncoder().encode(JSON.stringify(ecdsaForClaim.proof))),
+                public_inputs: ecdsaForClaim.publicSignals.map(s => Array.from(new TextEncoder().encode(s))),
+                verification_key: [],
+                predicate_op: 'Ecdsa',
+                nullifier: null,
+              }]
+            })
+          ),
+        }
+        const compoundProofJson = JSON.stringify(compoundProof)
+
+        // 4. Export compound proof for QR codes (sends proof bytes only, NOT credential)
+        const exportRes = await fetch(`${API_URL}/holder/proof-export-compound?compress=true`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ compound_proof_json: compoundProofJson }),
+        })
+        if (!exportRes.ok) throw new Error(await exportRes.text())
+        const exportData = await exportRes.json()
+
+        // Generate QR codes
+        const compressed = Uint8Array.from(atob(exportData.compressed_cbor_base64), c => c.charCodeAt(0))
+        totalCompressedSize += compressed.length
+        const proofId = ci + 1
+        const logicalOp = proofCount > 1 ? LogicalOpFlag.And : LogicalOpFlag.Single
+        const chunks = encodeProofChunks(compressed, proofId, ci, proofCount, logicalOp)
+        const qrStartIndex = allQrDataUrls.length
+        for (const chunk of chunks) {
+          const url = await QRCode.toDataURL([{ data: chunk, mode: 'byte' as const }], {
+            errorCorrectionLevel: 'L', margin: 1, width: 280,
+          })
+          allQrDataUrls.push(url)
+        }
+        const qrUrlsForThisCredential = allQrDataUrls.slice(qrStartIndex)
+
+        const predicateDescriptions = templatePredicates.map(p => t(p.labelKey))
+
+        updatedCredentials[ci] = {
+          ...cred,
+          compoundProofJson,
+          compoundOp: 'And',
+          hiddenFields: predicates.map(p => p.claim),
+          predicateDescriptions,
+          qrDataUrls: qrUrlsForThisCredential,
+        }
+
+        if (req.nullifierField && nullifierHex) {
+          partyProofs.push({
+            role: req.role,
+            roleLabelKey: req.roleLabelKey,
+            nullifier: nullifierHex,
+            salt: saltHex,
+            issuer: config ? resolveVariant(config, locale === 'uk' ? 'uk' : 'en').issuer : '',
+            qrDataUrls: qrUrlsForThisCredential,
+          })
+        }
+      }
+
+      // Terms QR
+      setBrowserProgress('Generating QR codes...')
+      const termsQrChunk = await encodeTermsQr(termsString, timestamp, proofCount)
+      const termsQrUrl = await QRCode.toDataURL([{ data: termsQrChunk, mode: 'byte' as const }], {
+        errorCorrectionLevel: 'L', margin: 1, width: 280,
+      })
+
+      // Metadata QR
+      const metadataQrChunk = await encodeMetadataQr(
+        sharedContractHash!,
+        partyProofs.map(p => ({ role: p.role, nullifier: p.nullifier, salt: p.salt })),
+        proofCount,
+      )
+      const metadataQrUrl = await QRCode.toDataURL([{ data: metadataQrChunk, mode: 'byte' as const }], {
+        errorCorrectionLevel: 'L', margin: 1, width: 280,
+      })
+
+      // CBOR bundle
+      const { decode, encode } = await import('cbor-x')
+      const proofEnvelopes = []
+      for (const cred of updatedCredentials) {
+        if (!cred.compoundProofJson) continue
+        const expRes = await fetch(`${API_URL}/holder/proof-export-compound?compress=true`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ compound_proof_json: cred.compoundProofJson }),
+        })
+        if (!expRes.ok) continue
+        const expData = await expRes.json()
+        const comp = Uint8Array.from(atob(expData.compressed_cbor_base64), c => c.charCodeAt(0))
+        const { decompressDeflate } = await import('../lib/qr-chunking')
+        const cbor = await decompressDeflate(comp)
+        proofEnvelopes.push(decode(cbor))
+      }
+      const bundle = encode({
+        version: 2,
+        proof_envelopes: proofEnvelopes,
+        terms: { terms: termsString, timestamp },
+        metadata: {
+          contract_hash: sharedContractHash,
+          parties: partyProofs.map(p => ({ role: p.role, nullifier: p.nullifier, salt: p.salt })),
+        },
+      })
+      const bundleCborUrl = `data:application/cbor;base64,${btoa(String.fromCharCode(...new Uint8Array(bundle)))}`
+
+      // Holder bindings (still server-side — only sends claim hashes, not credentials)
+      const bindingResults: BindingResult[] = []
+      if (template!.bindings) {
+        for (const binding of template!.bindings) {
+          setCurrentProvingIndex(-2)
+          const credA = updatedCredentials.find(c => c.role === binding.roleA)
+          const credB = updatedCredentials.find(c => c.role === binding.roleB)
+          if (credA && credB) {
+            const bindingRes = await fetch(`${API_URL}/holder/prove-binding`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                sdjwt_a: credA.credential,
+                sdjwt_b: credB.credential,
+                binding_claim: binding.claimA,
+                binding_claim_b: binding.claimA !== binding.claimB ? binding.claimB : undefined,
+                predicates_a: [],
+                predicates_b: [],
+              }),
+            })
+            if (bindingRes.ok) {
+              const bindingData = await bindingRes.json()
+              bindingResults.push({
+                labelKey: binding.labelKey,
+                bindingHash: bindingData.binding_hash,
+                verified: bindingData.binding_verified,
+              })
+            } else {
+              console.warn('Holder binding failed:', await bindingRes.text())
+            }
+          }
+        }
+      }
+
+      clearInterval(timer)
+      setLoading(false)
+      setProved(true)
+      setBrowserProgress('')
+      setTimeout(() => {
+        setState(prev => ({
+          ...prev,
+          step: 4,
+          credentials: updatedCredentials,
+          bindings: bindingResults,
+          qrDataUrls: allQrDataUrls,
+          compressedSize: totalCompressedSize,
+          cached: false,
+          partyProofs,
+          contractHash: sharedContractHash,
+          termsQrUrl,
+          metadataQrUrl,
+          bundleCborUrl,
+        }))
+      }, 600)
     } catch (e: unknown) {
       clearInterval(timer)
       setLoading(false)
       setBrowserProgress('')
-      alert(`On-device proof failed: ${e instanceof Error ? e.message : String(e)}`)
-    }
-  }
-
-  const handleProve = async () => {
-    setLoading(true)
-    setElapsed(0)
-    const timer = setInterval(() => setElapsed(prev => prev + 1), 1000)
-    try {
-      const predicates = resolvedPredicates.filter(p => selected[p.id]).map(p => p.predicate)
-      const t0 = performance.now()
-
-      if (compoundMode === 'individual') {
-        const body: Record<string, unknown> = { credential: state.credential, format: state.format, predicates }
-        const res = await fetch(`${API_URL}/holder/prove`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(body),
-        })
-        if (!res.ok) throw new Error(await res.text())
-        const data = await res.json()
-        const proveMs = performance.now() - t0
-        setProveTimeMs(proveMs)
-        clearInterval(timer)
-        setLoading(false)
-        setProved(true)
-        setTimeout(() => {
-          setState(prev => ({
-            ...prev,
-            step: 3,
-            proofs: data.proofs,
-            hiddenFields: data.hidden_fields,
-            nullifier: data.nullifier ?? null,
-            compoundProofJson: null,
-            compoundOp: null,
-            selectedPredicateIds: Object.entries(selected).filter(([, v]) => v).map(([k]) => k),
-          }))
-        }, 800)
-      } else {
-        const res = await fetch(`${API_URL}/holder/prove-compound`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ credential: state.credential, format: state.format, predicates, op: compoundMode }),
-        })
-        if (!res.ok) throw new Error(await res.text())
-        const data = await res.json()
-        const proveMs = performance.now() - t0
-        setProveTimeMs(proveMs)
-        clearInterval(timer)
-        setLoading(false)
-        setProved(true)
-        setTimeout(() => {
-          setState(prev => ({
-            ...prev,
-            step: 3,
-            proofs: [],
-            hiddenFields: data.hidden_fields,
-            nullifier: null,
-            compoundProofJson: data.compound_proof_json,
-            compoundOp: data.op,
-            selectedPredicateIds: Object.entries(selected).filter(([, v]) => v).map(([k]) => k),
-          }))
-        }, 800)
-      }
-    } catch (e: any) {
-      clearInterval(timer)
-      setLoading(false)
-      alert(`Proof generation failed: ${e.message}`)
+      setError(`On-device proof failed: ${e instanceof Error ? e.message : String(e)}`)
     }
   }
 
   return (
     <div className="space-y-6">
-      {/* Predicate Picker */}
-      <div className="bg-slate-800 rounded-lg border border-slate-700 overflow-hidden">
-          <div className="bg-slate-700 px-6 py-3">
-            <h2 className="text-lg font-semibold">
-              <Tooltip text={t('demo.predicateTooltip')}>
-                <span>{t('demo.selectClaims')}</span>
-              </Tooltip>
-            </h2>
-            <p className="text-sm text-slate-400">{t('demo.selectClaimsSub')}</p>
-          </div>
-          <div className="p-6 space-y-4">
-            {resolvedPredicates.map(opt => (
-              <label key={opt.id} className={`flex items-start gap-3 p-4 rounded-lg border cursor-pointer transition-colors ${selected[opt.id] ? 'border-blue-500 bg-slate-700/50' : 'border-slate-600 bg-slate-800 hover:border-slate-500'}`}>
-                <input
-                  type="checkbox"
-                  checked={selected[opt.id]}
-                  onChange={e => setSelected(prev => ({ ...prev, [opt.id]: e.target.checked }))}
-                  disabled={loading}
-                  className="mt-0.5 w-4 h-4 rounded border-slate-500 text-blue-600 focus:ring-blue-500 bg-slate-700"
-                />
-                <div className="flex items-center gap-1">
-                  <span className="text-sm font-medium text-white">{t(opt.labelKey)}</span>
-                  <Tooltip text={t(opt.descKey)} />
-                </div>
-              </label>
-            ))}
+      <div>
+        <div className="flex items-center gap-2 mb-1">
+          <span className="text-2xl">{template.icon}</span>
+          <h2 className="text-lg font-semibold text-slate-100">{t(template.titleKey)}</h2>
+        </div>
+        <p className="text-sm text-slate-400">{t('contracts.step3Desc')}</p>
+      </div>
 
-            {/* Compound Mode */}
-            {selectedCount >= 2 && (
-              <div className="mt-4 pt-4 border-t border-slate-600">
-                <label className="block text-sm font-medium text-slate-300 mb-2">
-                  <Tooltip text={t('demo.proofModeTooltip')}>
-                    <span>{t('demo.proofMode')}</span>
-                  </Tooltip>
-                </label>
-                <div className="flex gap-2">
-                  {[
-                    { value: 'individual' as const, label: t('demo.modeIndividual'), desc: t('demo.modeIndividualDesc') },
-                    { value: 'and' as const, label: 'AND', desc: t('demo.modeAndDesc') },
-                    { value: 'or' as const, label: 'OR', desc: t('demo.modeOrDesc') },
-                  ].map(mode => (
-                    <button
-                      key={mode.value}
-                      onClick={() => setCompoundMode(mode.value)}
-                      disabled={loading}
-                      className={`flex-1 py-2 px-3 rounded text-sm font-medium transition-colors ${
-                        compoundMode === mode.value
-                          ? 'bg-blue-600 text-white'
-                          : 'bg-slate-700 text-slate-400 hover:text-white'
-                      }`}
-                    >
-                      {mode.label}
-                    </button>
+      {/* Predicates list grouped by credential */}
+      <div className="bg-slate-800 rounded-lg border border-slate-700 overflow-hidden">
+        <div className="bg-slate-700 px-6 py-3">
+          <h3 className="text-sm font-semibold text-slate-200">{t('contracts.predicatesProved')}</h3>
+        </div>
+        <div className="p-5 space-y-4">
+          {template.credentials.map((req, ci) => {
+            const config = CREDENTIAL_TYPES.find(ct => ct.id === req.credentialType)
+            const cred = state.credentials[ci]
+            const templatePredicates = req.predicateIds
+              .map(pid => config?.predicates.find(p => p.id === pid))
+              .filter((p): p is NonNullable<typeof p> => p !== undefined)
+
+            return (
+              <div key={req.role}>
+                {/* Role header */}
+                <p className="text-xs font-semibold text-slate-400 mb-2">{t(req.roleLabelKey)}</p>
+                <div className="space-y-2">
+                  {templatePredicates.map(p => (
+                    <div key={`${req.role}-${p.id}`} className="flex items-center gap-3 px-4 py-3 bg-slate-900/50 rounded-lg border border-slate-700">
+                      <svg className="w-4 h-4 text-blue-400 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                      </svg>
+                      <span className="text-sm text-slate-200">{t(p.labelKey)}</span>
+                      {loading && currentProvingIndex === ci && (
+                        <svg className="animate-spin h-3 w-3 text-blue-400 ml-auto" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                        </svg>
+                      )}
+                    </div>
                   ))}
                 </div>
-                <p className="text-xs text-slate-500 mt-1">
-                  {compoundMode === 'individual' && t('demo.modeExplainIndividual')}
-                  {compoundMode === 'and' && t('demo.modeExplainAnd')}
-                  {compoundMode === 'or' && t('demo.modeExplainOr')}
-                </p>
               </div>
-            )}
+            )
+          })}
 
-
-          </div>
-        </div>
-
-      {/* OpenID4VP Schema Generation */}
-      {selectedCount > 0 && (
-        <details className="bg-slate-800 rounded-lg border border-slate-700 overflow-hidden">
-          <summary className="px-6 py-3 cursor-pointer text-sm font-semibold text-slate-400 hover:text-slate-200 transition-colors select-none">
-            OpenID4VP
-          </summary>
-          <div className="px-6 pb-4 space-y-3">
-            <p className="text-xs text-slate-500">{t('demo.openid4vpDesc')}</p>
-            {!presReqResult ? (
-              <button
-                onClick={handlePresentationRequest}
-                disabled={presReqLoading}
-                className="px-4 py-2 bg-slate-700 hover:bg-slate-600 disabled:opacity-50 text-white text-sm font-medium rounded-lg transition-colors"
-              >
-                {presReqLoading ? t('demo.openid4vpGenerating') : t('demo.openid4vpBtn')}
-              </button>
-            ) : (
-              <div className="bg-slate-900 rounded border border-slate-600 p-3 space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs text-slate-500">PresentationDefinition</span>
-                  <span className="text-xs font-mono text-slate-500">{presReqResult.id}</span>
+          {/* Holder bindings */}
+          {template.bindings && template.bindings.length > 0 && (
+            <div className="mt-4 pt-4 border-t border-slate-700">
+              <p className="text-xs font-semibold text-slate-400 mb-2">{t('contracts.binding.hashMatch')}</p>
+              {template.bindings.map((binding, bi) => (
+                <div key={bi} className="flex items-center gap-3 px-4 py-3 bg-purple-950/20 rounded-lg border border-purple-700/30">
+                  <svg className="w-4 h-4 text-purple-400 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
+                    <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
+                  </svg>
+                  <span className="text-sm text-purple-300">{t(binding.labelKey)}</span>
+                  {loading && currentProvingIndex === -2 && (
+                    <svg className="animate-spin h-3 w-3 text-purple-400 ml-auto" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                    </svg>
+                  )}
                 </div>
-                {presReqResult.input_descriptors.map((desc, i) => (
-                  <div key={i} className="bg-slate-800 rounded p-2 border border-slate-700">
-                    <p className="text-xs text-slate-400 font-medium mb-1">{desc.id}</p>
-                    {desc.constraints.map((c, j) => (
-                      <p key={j} className="text-xs font-mono text-slate-300">
-                        {c.path} <span className="text-blue-400">{c.predicate_op}</span> {c.value}
-                      </p>
-                    ))}
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        </details>
-      )}
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
 
       {/* Loading state */}
       {loading && (
@@ -575,21 +1139,29 @@ function HolderStep({ state, setState, t }: { state: WizardState; setState: Reac
               <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
               <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
             </svg>
-            <span className="text-blue-300 font-semibold">{t('demo.generating')}{elapsed}s</span>
+            <span className="text-blue-300 font-semibold">
+              {t('contracts.generating')}{elapsed > 0 ? ` ${elapsed}s` : ''}
+              {currentProvingIndex >= 0 && ` (${currentProvingIndex + 1}/${template.credentials.length})`}
+            </span>
           </div>
-          <p className="text-sm text-slate-400">{t('demo.generatingDesc')}</p>
         </div>
       )}
 
       {/* Success state */}
       {proved && !loading && (
         <div className="bg-slate-800 rounded-lg border border-green-500/50 p-6 text-center flex items-center justify-center gap-3">
+          <svg className="w-5 h-5 text-green-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>
+          </svg>
           <span className="text-green-400 font-semibold">{t('demo.proofGenerated')}</span>
-          {proveTimeMs !== null && (
-            <span className="text-xs text-slate-400 bg-slate-700 px-2 py-1 rounded">
-              {(proveTimeMs / 1000).toFixed(1)}s
-            </span>
-          )}
+        </div>
+      )}
+
+      {/* Error state */}
+      {error && !loading && (
+        <div className="bg-red-900/30 border border-red-700 rounded-lg p-4 flex items-center justify-between gap-3">
+          <span className="text-sm text-red-300">{error}</span>
+          <button onClick={() => setError(null)} className="text-xs text-red-400 hover:text-red-200 font-medium shrink-0">{t('contracts.dismiss') || 'Dismiss'}</button>
         </div>
       )}
 
@@ -599,755 +1171,490 @@ function HolderStep({ state, setState, t }: { state: WizardState; setState: Reac
         <ProveMethodToggle
           value={proveMethod}
           onChange={setProveMethod}
-          disabled={loading}
+          disabled={loading || proved}
         />
       </div>
 
-      {/* Progress */}
-      {loading && browserProgress && (
+      {/* Browser proving progress */}
+      {loading && proveOnDevice && browserProgress && (
         <p className="text-xs text-blue-400 mb-2 animate-pulse">{browserProgress}</p>
       )}
 
-      {/* Actions */}
       <button
-        onClick={proveOnDevice ? handleProveBrowser : handleProve}
-        disabled={loading || selectedCount === 0}
+        onClick={proveOnDevice ? handleProveBrowser : () => handleProve()}
+        disabled={loading || proved}
         className="flex items-center justify-center gap-2 w-full bg-blue-600 hover:bg-blue-700 disabled:bg-slate-600 disabled:cursor-not-allowed text-white font-semibold py-3 rounded-lg transition-colors"
       >
-        <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+        <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+        </svg>
         {loading
           ? proveOnDevice
-            ? `${t('demo.generatingShort')} (${elapsed}s)`
-            : t('demo.generatingShort')
+            ? `${t('contracts.generating')} (${elapsed}s)`
+            : t('contracts.generating')
           : proveOnDevice
             ? t('demo.generateBrowserBtn')
-            : t('demo.generateBtn')}
+            : t('contracts.generateProof')}
       </button>
+
+      {proved && state.cached && !loading && (
+        <button
+          onClick={() => { setProved(false); handleProve(true) }}
+          className="text-xs text-slate-500 hover:text-slate-300 transition-colors cursor-pointer"
+        >
+          {t('contracts.cachedNotice')} →
+        </button>
+      )}
+
     </div>
   )
 }
 
-// === Step 3: Verifier ===
+// === Step 4: Document Preview ===
 
-function VerifierStep({ state, setState, t }: { state: WizardState; setState: React.Dispatch<React.SetStateAction<WizardState>>; t: (key: string) => string }) {
+function DocumentStep({ state, setState, t }: { state: ContractWizardState; setState: React.Dispatch<React.SetStateAction<ContractWizardState>>; t: (key: string) => string }) {
+  const template = CONTRACT_TEMPLATES.find(tpl => tpl.id === state.templateId)
+  if (!template) return null
+
+  const today = new Date().toLocaleDateString('en-GB', { year: 'numeric', month: 'long', day: 'numeric' })
+
+  return (
+    <div className="space-y-4">
+      {/* A4 Document */}
+      <div className="print-area">
+        <div className="bg-white text-black rounded-lg overflow-hidden print:rounded-none print:shadow-none">
+          <div className="max-w-[210mm] mx-auto px-6 py-6 print:px-8 print:py-6">
+            {/* Header */}
+            <div className="flex items-baseline justify-between border-b border-gray-300 pb-3 mb-5">
+              <span className="text-base font-bold tracking-tight">zk-eidas</span>
+              <span className="text-xs text-gray-500">{today}</span>
+            </div>
+
+            {/* Title — always bilingual */}
+            <h1 className="text-xl font-bold text-center mb-1">{tLang(template.titleKey, 'en')}</h1>
+            <p className="text-base text-gray-500 italic text-center mb-6">{tLang(template.titleKey, 'uk')}</p>
+
+            {/* Bilingual body — always both languages */}
+            <div className="space-y-3 mb-6">
+              <p className="text-sm text-gray-800 leading-relaxed">{t(template.bodyKey_en)}</p>
+              <p className="text-sm text-gray-500 italic leading-relaxed">{t(template.bodyKey_uk)}</p>
+            </div>
+
+            {/* Terms QR — page 1 (for verifier cross-check) */}
+            {state.termsQrUrl && (
+              <div className="flex justify-end mb-4">
+                <div className="text-center">
+                  <img src={state.termsQrUrl} alt="Terms QR" className="w-20 h-20 print:w-[30mm] print:h-[30mm]" />
+                  <p className="text-[8px] text-gray-400">{t('verify.termsQr')}</p>
+                </div>
+              </div>
+            )}
+
+            {/* Unified credential blocks — one per role */}
+            {(() => {
+              let globalQrIndex = 0
+              const totalQrs = state.qrDataUrls.length
+
+              return template.credentials.map((req, ci) => {
+                const cred = state.credentials[ci]
+                if (!cred) return null
+                const config = CREDENTIAL_TYPES.find(ct => ct.id === req.credentialType)
+                const party = state.partyProofs.find(p => p.role === req.role)
+                const isParty = !!req.nullifierField
+                const templatePredicates = req.predicateIds
+                  .map(pid => config?.predicates.find(p => p.id === pid))
+                  .filter((p): p is NonNullable<typeof p> => p !== undefined)
+
+                // Find bindings where this role is roleB (the "bound" credential)
+                const roleBindings = template.bindings
+                  ?.map((b, bi) => ({ binding: b, result: state.bindings[bi] }))
+                  .filter(({ binding }) => binding.roleB === req.role) ?? []
+
+                // QR global numbering
+                const credQrs = cred.qrDataUrls
+                const qrGlobalStart = globalQrIndex
+                globalQrIndex += credQrs.length
+
+                return (
+                  <div key={req.role} className="mb-5 border border-gray-300 rounded-lg p-4 print:border-black/30">
+                    <p className="text-xs font-semibold text-gray-500 mb-3 uppercase tracking-wider">
+                      {t(req.roleLabelKey)}
+                    </p>
+
+                    {/* Proved predicates */}
+                    <div className="space-y-1 mb-3">
+                      {templatePredicates.map(p => (
+                        <div key={p.id} className="flex items-center gap-2">
+                          <span className="text-green-600 font-bold text-sm print:text-black">&#10003;</span>
+                          <span className="text-sm text-gray-800">{t(p.labelKey)}</span>
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Holder binding (if this role is the bound credential) */}
+                    {roleBindings.map(({ binding, result }) => (
+                      <div key={binding.labelKey} className="flex items-center gap-2 mb-3">
+                        <span className="text-green-600 font-bold text-sm print:text-black">
+                          {result?.verified ? '🔗 ✓' : '✗'}
+                        </span>
+                        <span className="text-sm text-gray-800">{t(binding.labelKey)}</span>
+                      </div>
+                    ))}
+
+                    {/* Nullifier + salt + issuer (party credentials only) */}
+                    {isParty && party && (
+                      <div className="space-y-1.5 mb-3 border-t border-gray-200 pt-3">
+                        <div>
+                          <span className="text-[10px] text-gray-400 font-medium">{t('contracts.nullifier')}</span>
+                          <p className="text-xs text-gray-700 font-mono break-all">{party.nullifier}</p>
+                        </div>
+                        <div>
+                          <span className="text-[10px] text-gray-400 font-medium">{t('contracts.salt')}</span>
+                          <p className="text-xs text-gray-700 font-mono break-all">{party.salt}</p>
+                        </div>
+                        <div>
+                          <span className="text-[10px] text-gray-400 font-medium">{t('contracts.issuer')}</span>
+                          <p className="text-xs text-gray-700 font-mono break-all">{party.issuer}</p>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* QR codes with global numbering */}
+                    {credQrs.length > 0 && (
+                      <div className="mt-2">
+                        <div className="grid grid-cols-3 gap-2 justify-items-center">
+                          {credQrs.map((url, qi) => (
+                            <div key={qi} className="text-center">
+                              <img
+                                src={url}
+                                alt={`QR ${qrGlobalStart + qi + 1}/${totalQrs}`}
+                                className="w-28 h-28 print:w-[50mm] print:h-[50mm]"
+                              />
+                              <p className="text-[9px] text-gray-400 -mt-0.5">{qrGlobalStart + qi + 1}/{totalQrs}</p>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )
+              })
+            })()}
+
+            {/* Shared section */}
+            {state.contractHash && (
+              <div className="mb-5 border border-gray-300 rounded-lg p-4 print:border-black/30">
+                <p className="text-xs font-semibold text-gray-500 mb-2 uppercase tracking-wider">{t('contracts.shared')}</p>
+                <div className="space-y-1.5">
+                  <div>
+                    <span className="text-[10px] text-gray-400 font-medium">{t('contracts.contractHash')}</span>
+                    <p className="text-xs text-gray-700 font-mono break-all">{state.contractHash}</p>
+                  </div>
+                  <div>
+                    <span className="text-[10px] text-gray-400 font-medium">{t('contracts.date')}</span>
+                    <p className="text-xs text-gray-700">{today}</p>
+                  </div>
+                </div>
+                <p className="text-[9px] text-gray-400 mt-2 leading-relaxed italic">{t('contracts.nullifierTooltip')}</p>
+                {state.metadataQrUrl && (
+                  <div className="flex justify-end mt-2">
+                    <div className="text-center">
+                      <img src={state.metadataQrUrl} alt="Metadata QR" className="w-20 h-20 print:w-[30mm] print:h-[30mm]" />
+                      <p className="text-[8px] text-gray-400">{t('verify.metadataQr')}</p>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Signature lines — one per party */}
+            <div className="border-t border-gray-200 pt-4 mt-4 space-y-3">
+              {state.partyProofs.length > 0 ? (
+                state.partyProofs.map((party) => (
+                  <div key={party.role} className="flex justify-between text-xs text-gray-400">
+                    <span>{t(party.roleLabelKey)} {t('contracts.signatureLine')}: ____________________________</span>
+                    <span>{today}</span>
+                  </div>
+                ))
+              ) : (
+                <div className="flex justify-between text-xs text-gray-400">
+                  <span>{t('contracts.signatureLine')}: ____________________________</span>
+                  <span>{today}</span>
+                </div>
+              )}
+            </div>
+
+            {/* Footer */}
+            <div className="text-center text-[9px] text-gray-400 mt-4">
+              <span>zk-eidas.com/verify</span>
+              <span className="mx-2">·</span>
+              <span>{state.qrDataUrls.length} QR · {(state.compressedSize / 1024).toFixed(1)} KB</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Screen-only buttons */}
+      <div className="flex gap-3 print:hidden">
+        <button
+          onClick={() => window.print()}
+          className="flex items-center justify-center gap-2 flex-1 py-3 bg-slate-700 hover:bg-slate-600 text-white font-semibold rounded-lg transition-colors"
+        >
+          <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/>
+          </svg>
+          {t('contracts.print')}
+        </button>
+        {state.bundleCborUrl && (
+          <a
+            href={state.bundleCborUrl}
+            download={`zk-eidas-contract-${state.templateId}.cbor`}
+            className="flex items-center justify-center gap-2 flex-1 py-3 bg-slate-700 hover:bg-slate-600 text-white font-semibold rounded-lg transition-colors"
+          >
+            <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+            </svg>
+            .cbor
+          </a>
+        )}
+        <button
+          onClick={() => setState(prev => ({ ...prev, step: 5 }))}
+          className="flex items-center justify-center gap-2 flex-1 py-3 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg transition-colors"
+        >
+          <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>
+          </svg>
+          {t('contracts.verifyDocument')}
+        </button>
+      </div>
+
+    </div>
+  )
+}
+
+// === Step 5: Verify ===
+
+function VerifyStep({ state, t }: { state: ContractWizardState; t: (key: string) => string }) {
+  const template = CONTRACT_TEMPLATES.find(tpl => tpl.id === state.templateId)
   const [verifying, setVerifying] = useState(false)
   const [verified, setVerified] = useState(false)
-  const [results, setResults] = useState<{ predicate: string; valid: boolean }[]>([])
-  const [notDisclosed, setNotDisclosed] = useState<string[]>([])
+  const [allValid, setAllValid] = useState(false)
+  const [results, setResults] = useState<{ role: string; predicate: string; valid: boolean }[]>([])
   const [error, setError] = useState<string | null>(null)
-  const [exportData, setExportData] = useState<{ cbor_base64: string; cbor_size_bytes: number } | null>(null)
-  const [exportLoading, setExportLoading] = useState(false)
-  const [verificationPath, setVerificationPath] = useState<'server' | 'wasm' | null>(null)
-  const [wasmAvailable, setWasmAvailable] = useState<boolean | null>(null)
+  const [verificationMethod, setVerificationMethod] = useState<'wasm' | 'server' | null>(null)
   const [verifyTimeMs, setVerifyTimeMs] = useState<number | null>(null)
-  const [revoking, setRevoking] = useState(false)
-  const [revocationResult, setRevocationResult] = useState<{ status: string; revocation_root: string } | null>(null)
-  const [currentRoot, setCurrentRoot] = useState<string | null>(null)
-
-  const [chainValid, setChainValid] = useState<boolean | null>(null)
-  const [initProfile, setInitProfile] = useState<{ jsImport: number; wasmCompile: number; total: number } | null>(null)
-
-  useEffect(() => {
-    let cancelled = false
-    ;(async () => {
-      try {
-        const { initVerifier, getInitTiming, loadTrustedVks } = await import('@zk-eidas/verifier-sdk')
-        await loadTrustedVks('/trusted-vks.json')
-        await initVerifier()
-        const timing = getInitTiming()
-        if (!cancelled) {
-          setWasmAvailable(true)
-          if (timing) setInitProfile(timing)
-        }
-      } catch (e) {
-        console.warn('WASM verification unavailable:', e)
-        if (!cancelled) setWasmAvailable(false)
-      }
-    })()
-    return () => { cancelled = true }
-  }, [])
-
-  useEffect(() => {
-    fetch(`${API_URL}/issuer/revocation-root`)
-      .then(res => res.json())
-      .then(data => setCurrentRoot(data.revocation_root))
-      .catch(() => {})
-  }, [])
-
-  // Auto-export CBOR on mount so buttons are instantly available
-  useEffect(() => {
-    const doExport = state.compoundProofJson ? handleExportCompound : handleExport
-    doExport()
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Auto-verify on mount: try WASM first, fallback to server
   const autoVerifyRan = useRef(false)
+
+  const allProofs = state.credentials.map(c => c.compoundProofJson).filter(Boolean)
+
   useEffect(() => {
-    if (autoVerifyRan.current || verified || wasmAvailable === null) return
+    if (autoVerifyRan.current || allProofs.length === 0) return
     autoVerifyRan.current = true
     ;(async () => {
-      if (wasmAvailable) {
+      setVerifying(true)
+      setError(null)
+      const t0 = performance.now()
+      const subResults: { role: string; predicate: string; valid: boolean }[] = []
+
+      // Try WASM first
+      try {
+        const sdk = await import('@zk-eidas/verifier-sdk')
+        const trustedVks = await sdk.loadTrustedVks('/trusted-vks.json')
+        await sdk.initVerifier()
+
+        for (let ci = 0; ci < state.credentials.length; ci++) {
+          const cred = state.credentials[ci]
+          const req = template?.credentials[ci]
+          if (!cred.compoundProofJson || !req) continue
+
+          const envelope = JSON.parse(cred.compoundProofJson)
+          const chainResult = await sdk.verifyCompoundProof(envelope, trustedVks)
+
+          for (let i = 0; i < chainResult.predicateResults.length; i++) {
+            const pr = chainResult.predicateResults[i]
+            const desc = cred.predicateDescriptions[i] || pr.op || 'unknown'
+            subResults.push({ role: req.role, predicate: desc, valid: pr.valid })
+          }
+        }
+
+        const valid = subResults.every(r => r.valid)
+        setResults(subResults)
+        setAllValid(valid)
+        setVerificationMethod('wasm')
+        setVerifyTimeMs(performance.now() - t0)
+        setVerified(true)
+      } catch (wasmErr) {
+        console.warn('WASM verification failed, falling back to server:', wasmErr)
+        // Fall back to server — verify each credential's proof
         try {
-          await handleVerifyWasm()
-        } catch {
-          // WASM failed, fallback to server
-          await handleVerifyServer()
-        }
-      } else {
-        await handleVerifyServer()
-      }
-    })()
-  }, [wasmAvailable]) // eslint-disable-line react-hooks/exhaustive-deps
+          subResults.length = 0
+          for (let ci = 0; ci < state.credentials.length; ci++) {
+            const cred = state.credentials[ci]
+            const req = template?.credentials[ci]
+            if (!cred.compoundProofJson || !req) continue
 
-  const handleExport = async () => {
-    setExportLoading(true)
-    try {
-      const res = await fetch(`${API_URL}/holder/proof-export`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          proofs: state.proofs.map(p => ({ proof_json: p.proof_json, predicate: p.predicate })),
-        }),
-      })
-      if (!res.ok) throw new Error(await res.text())
-      setExportData(await res.json())
-    } catch (e: any) {
-      alert(`Export failed: ${e.message}`)
-    } finally {
-      setExportLoading(false)
-    }
-  }
+            const res = await fetch(`${API_URL}/verifier/verify-compound`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                compound_proof_json: cred.compoundProofJson,
+                hidden_fields: cred.hiddenFields,
+              }),
+            })
+            if (!res.ok) throw new Error(await res.text())
+            const data = await res.json()
 
-  const handleExportCompound = async () => {
-    setExportLoading(true)
-    try {
-      const res = await fetch(`${API_URL}/holder/proof-export-compound`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ compound_proof_json: state.compoundProofJson }),
-      })
-      if (!res.ok) throw new Error(await res.text())
-      setExportData(await res.json())
-    } catch (e: any) {
-      alert(`Export failed: ${e.message}`)
-    } finally {
-      setExportLoading(false)
-    }
-  }
-
-  const handleVerifyServer = async () => {
-    setVerifying(true)
-    setError(null)
-    try {
-      const t0 = performance.now()
-      if (state.compoundProofJson) {
-        const res = await fetch(`${API_URL}/verifier/verify-compound`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            compound_proof_json: state.compoundProofJson,
-            hidden_fields: state.hiddenFields,
-          }),
-        })
-        if (!res.ok) throw new Error(await res.text())
-        const data = await res.json()
-        setResults([{
-          predicate: `compound[${data.op}]: ${data.sub_proofs_verified} sub-proofs verified`,
-          valid: data.valid,
-        }])
-        setNotDisclosed(data.not_disclosed ?? state.hiddenFields)
-        setVerificationPath('server')
-        setVerified(true)
-        setVerifyTimeMs(performance.now() - t0)
-      } else {
-        const res = await fetch(`${API_URL}/verifier/verify`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            proofs: state.proofs.map(p => ({ proof_json: p.proof_json, predicate: p.predicate })),
-            hidden_fields: state.hiddenFields,
-          }),
-        })
-        if (!res.ok) throw new Error(await res.text())
-        const data = await res.json()
-        setResults(data.results)
-        setNotDisclosed(data.not_disclosed ?? state.hiddenFields)
-        setVerificationPath('server')
-        setVerified(true)
-        setVerifyTimeMs(performance.now() - t0)
-      }
-
-    } catch (e: any) {
-      setError(`Server verification failed: ${e.message}`)
-    } finally {
-      setVerifying(false)
-    }
-  }
-
-  const [wasmProfile, setWasmProfile] = useState<{ vkDecode: number; proofParse: number; snarkjsInit: number; snarkjsVerify: number; total: number }[] | null>(null)
-
-  const handleVerifyWasm = async () => {
-    setVerifying(true)
-    setError(null)
-    try {
-      const t0 = performance.now()
-      const { verifyCompoundProof, verifyProofWithProfile, loadTrustedVks } = await import('@zk-eidas/verifier-sdk')
-      const vks = await loadTrustedVks('/trusted-vks.json')
-      const timings: typeof wasmProfile = []
-
-      if (state.compoundProofJson) {
-        const envelope = JSON.parse(state.compoundProofJson)
-        const chainResult = await verifyCompoundProof(envelope, vks)
-        const subCount = chainResult.predicateResults.filter(r => r.valid).length
-        setResults([{
-          predicate: `compound[${envelope.op}]: ${subCount} sub-proofs verified`,
-          valid: chainResult.valid,
-        }])
-        setChainValid(chainResult.chainValid)
-        setNotDisclosed(state.hiddenFields)
-        setWasmProfile(timings)
-        setVerificationPath('wasm')
-        setVerified(true)
-        setVerifyTimeMs(performance.now() - t0)
-      } else {
-        const verResults: { predicate: string; valid: boolean }[] = []
-        for (const proof of state.proofs) {
-          const parsed = JSON.parse(proof.proof_json) as { proof_bytes: number[]; public_inputs: number[][]; predicate_op: string }
-          const proofJson = new TextDecoder().decode(new Uint8Array(parsed.proof_bytes))
-          const publicSignals = (parsed.public_inputs || []).map(
-            (inp: number[]) => new TextDecoder().decode(new Uint8Array(inp))
-          )
-          const combined = JSON.stringify({ ...JSON.parse(proofJson), publicSignals })
-          const res = await verifyProofWithProfile(new TextEncoder().encode(combined), parsed.predicate_op, vks)
-          verResults.push({ predicate: proof.predicate, valid: res.valid })
-          timings.push(res.timing)
-        }
-        setResults(verResults)
-        setChainValid(null)
-        setNotDisclosed(state.hiddenFields)
-        setWasmProfile(timings)
-        setVerificationPath('wasm')
-        setVerified(true)
-        setVerifyTimeMs(performance.now() - t0)
-      }
-    } catch (e: any) {
-      console.error('WASM verification error:', e)
-      setError(`WASM verification failed: ${e?.message || e?.toString() || String(e)}`)
-    } finally {
-      setVerifying(false)
-    }
-  }
-
-  const handleRevoke = async () => {
-    if (!state.credentialId) return
-    setRevoking(true)
-    try {
-      const res = await fetch(`${API_URL}/issuer/revoke`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ credential_id: state.credentialId }),
-      })
-      if (!res.ok) throw new Error(await res.text())
-      const data = await res.json()
-      setRevocationResult(data)
-      setCurrentRoot(data.revocation_root)
-    } catch (e: any) {
-      alert(`Revocation failed: ${e.message}`)
-    } finally {
-      setRevoking(false)
-    }
-  }
-
-  const handlePrintProof = async () => {
-    try {
-      const logicalOp = state.compoundOp === 'And' ? 'and' as const : state.compoundOp === 'Or' ? 'or' as const : 'single' as const
-      let proofs: PrintProofItem[]
-      const predicates: PrintPredicate[] = []
-      const config = CREDENTIAL_TYPES.find(c => c.id === state.credentialType)
-      const opSymbol = (op: string) => ({ gte: '\u2265', lte: '\u2264', eq: '=', neq: '\u2260', range: '\u2208', set_member: '\u2208' }[op] || op)
-      const resolveValue = (pred: { claim: string; op: string; value: string | number | string[] | number[] }) => {
-        if (pred.value === '__FROM_FORM__') return state.fields.find(f => f.name === pred.claim)?.value ?? ''
-        if (Array.isArray(pred.value)) return pred.value.length <= 5 ? pred.value.join(', ') : `${pred.value.slice(0, 3).join(', ')} … (${pred.value.length})`
-        return String(pred.value)
-      }
-      if (state.compoundProofJson) {
-        const compound = (() => { try { return JSON.parse(state.compoundProofJson) } catch { return null } })() as { proofs?: { predicate_op?: string }[] } | null
-        if (compound?.proofs && config) {
-          const selectedPreds = config.predicates.filter(p => state.selectedPredicateIds.includes(p.id))
-          for (let pi = 0; pi < compound.proofs.length; pi++) {
-            const matched = selectedPreds[pi]
-            if (matched) {
-              const fieldConfig = resolveVariant(config, 'uk').fields.find(f => f.name === matched.predicate.claim)
-              predicates.push({
-                claim: fieldConfig ? t(fieldConfig.labelKey) : matched.predicate.claim,
-                claimKey: fieldConfig?.labelKey,
-                op: opSymbol(matched.predicate.op),
-                publicValue: resolveValue(matched.predicate),
-                disclosed: false,
+            if (data.sub_proofs_verified != null) {
+              cred.predicateDescriptions.forEach((desc, i) => {
+                subResults.push({
+                  role: req.role,
+                  predicate: desc,
+                  valid: i < data.sub_proofs_verified,
+                })
+              })
+            } else {
+              subResults.push({
+                role: req.role,
+                predicate: `compound[${data.op}]`,
+                valid: data.valid,
               })
             }
           }
+
+          const valid = subResults.every(r => r.valid)
+          setResults(subResults)
+          setAllValid(valid)
+          setVerificationMethod('server')
+          setVerifyTimeMs(performance.now() - t0)
+          setVerified(true)
+        } catch (serverErr) {
+          setError(`Verification failed: ${serverErr instanceof Error ? serverErr.message : String(serverErr)}`)
         }
-        const res = await fetch(`${API_URL}/holder/proof-export-compound?compress=true`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ compound_proof_json: state.compoundProofJson }),
-        })
-        if (!res.ok) throw new Error(await res.text())
-        const data = await res.json()
-        proofs = [{ predicate: `${logicalOp.toUpperCase()} compound`, op: logicalOp, compressedCbor: data.compressed_cbor_base64 }]
-      } else {
-        proofs = await Promise.all(state.proofs.map(async (p) => {
-          predicates.push({ claim: p.predicate, op: p.op, publicValue: '', disclosed: false })
-          const res = await fetch(`${API_URL}/holder/proof-export?compress=true`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ proofs: [{ proof_json: p.proof_json, predicate: p.predicate }] }),
-          })
-          if (!res.ok) throw new Error(await res.text())
-          const data = await res.json()
-          return { predicate: p.predicate, op: p.op, compressedCbor: data.compressed_cbor_base64 }
-        }))
+      } finally {
+        setVerifying(false)
       }
-      setState(prev => ({
-        ...prev,
-        step: 4,
-        printProofs: proofs,
-        printPredicates: predicates,
-        printLogicalOp: logicalOp,
-        printCredentialLabel: config ? t(config.labelKey) : state.credentialType || '',
-        printCredentialLabelKey: config?.labelKey,
-      }))
-    } catch (e: unknown) {
-      alert(`Print export failed: ${e instanceof Error ? e.message : e}`)
-    }
-  }
+    })()
+  }, [allProofs.length]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Group results by role for display
+  const resultsByRole = results.reduce<Record<string, { role: string; predicate: string; valid: boolean }[]>>((acc, r) => {
+    if (!acc[r.role]) acc[r.role] = []
+    acc[r.role].push(r)
+    return acc
+  }, {})
 
   return (
     <div className="space-y-6">
-      {/* Auto-verifying state */}
-      {!verified && (
+      {/* Spinner */}
+      {verifying && (
         <div className="flex flex-col items-center justify-center gap-4 py-12">
-          {error ? (
-            <div className="bg-red-900/30 border border-red-700 rounded-lg p-4 text-red-300 text-sm w-full">{error}</div>
-          ) : (
-            <>
-              <svg className="animate-spin h-8 w-8 text-purple-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-              </svg>
-              <p className="text-sm text-slate-400">{t('demo.autoVerifying')}</p>
-            </>
-          )}
+          <svg className="animate-spin h-8 w-8 text-purple-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+          </svg>
+          <p className="text-sm text-slate-400">{t('contracts.verifying')}</p>
         </div>
       )}
 
-      {/* Verification Results */}
-      {verified && (
+      {/* Error */}
+      {error && !verifying && (
+        <div className="bg-red-900/30 border border-red-700 rounded-lg p-4 text-red-300 text-sm">{error}</div>
+      )}
+
+      {/* Results */}
+      {verified && !verifying && (
         <div className="space-y-4">
-
-          {/* Zero-Knowledge Explainer — 3 step visual story */}
-          {(() => {
-            // Build list of individual predicates with human descriptions
-            // For compound proofs, extract sub-proofs and match to config descriptions
-            const config = CREDENTIAL_TYPES.find(c => c.id === state.credentialType)
-            const predicateDescriptions: { claim: string; description: string; proofSize: number }[] = []
-
-            if (state.compoundProofJson) {
-              const compound = (() => { try { return JSON.parse(state.compoundProofJson) } catch { return null } })() as { proofs?: { proof_bytes?: number[]; predicate_op?: string }[] } | null
-              if (compound?.proofs && config) {
-                for (const sub of compound.proofs) {
-                  const matchedConfig = config.predicates.find(p => {
-                    const opMap: Record<string, string[]> = {
-                      gte: ['Gte', 'GteSigned'], lte: ['Lte', 'LteSigned'], eq: ['Eq', 'EqSigned'],
-                      neq: ['Neq', 'NeqSigned'], range: ['Range', 'RangeSigned'],
-                      set_member: ['SetMember', 'SetMemberSigned'],
-                    }
-                    const ops = opMap[p.predicate.op] || []
-                    return ops.includes(sub.predicate_op || '') && !predicateDescriptions.some(d => d.claim === p.predicate.claim)
-                  })
-                  const resolveVal = (v: unknown) => v === '__FROM_FORM__' && matchedConfig ? (state.fields.find(f => f.name === matchedConfig.predicate.claim)?.value ?? v) : v
-                  const label = matchedConfig
-                    ? `${matchedConfig.predicate.claim} ${matchedConfig.predicate.op === 'set_member' ? 'in allowed set' : matchedConfig.predicate.op === 'gte' ? '>= ' + resolveVal(matchedConfig.predicate.value) : matchedConfig.predicate.op === 'lte' ? '<= ' + resolveVal(matchedConfig.predicate.value) : matchedConfig.predicate.op === 'eq' ? '= ' + resolveVal(matchedConfig.predicate.value) : matchedConfig.predicate.op + ' ' + resolveVal(matchedConfig.predicate.value)}`
-                    : sub.predicate_op || '?'
-                  predicateDescriptions.push({ claim: matchedConfig?.predicate.claim || '', description: label, proofSize: sub.proof_bytes?.length || 0 })
-                }
-              }
-            } else {
-              for (const proof of state.proofs) {
-                const parsed = (() => { try { return JSON.parse(proof.proof_json) } catch { return null } })() as { proof_bytes?: number[] } | null
-                predicateDescriptions.push({ claim: '', description: proof.predicate, proofSize: parsed?.proof_bytes?.length || 0 })
-              }
-            }
-
-            const fieldMatchesPredicate = (fieldName: string) => {
-              const fn = fieldName.toLowerCase()
-              // Check individual proof results first
-              const fromResults = results.find(r => {
-                const p = r.predicate.toLowerCase()
-                return p.includes(fn) || ((fn === 'birthdate' || fn === 'birth_date') && p.includes('age')) || (fn === 'expiry_date' && p.includes('valid')) || (fn === 'issue_date' && p.includes('experience')) || (fn === 'graduation_year' && p.includes('grad'))
-              })
-              if (fromResults) return fromResults.predicate
-              // For compound proofs, match against extracted descriptions
-              const fromDesc = predicateDescriptions.find(d => {
-                const c = d.claim.toLowerCase()
-                return c === fn || ((fn === 'birthdate' || fn === 'birth_date') && (c === 'birthdate' || c === 'birth_date')) || (fn === 'nationality' && c === 'nationality') || (fn === 'expiry_date' && c === 'expiry_date') || (fn === 'field_of_study' && c === 'field_of_study') || (fn === 'category' && c === 'category') || (fn === 'issue_date' && c === 'issue_date') || (fn === 'graduation_year' && c === 'graduation_year')
-              })
-              return fromDesc?.description || null
-            }
-
-            return (
-              <div className="bg-slate-800 rounded-lg border border-slate-700 overflow-hidden">
-                <div className="px-6 py-4 border-b border-slate-700">
-                  <h3 className="text-sm font-semibold text-slate-200 tracking-wide">{t('demo.zkTitle')}</h3>
-                  <p className="text-xs text-slate-500 mt-1">{t('demo.zkSubtitle')}</p>
-                </div>
-                <div className="p-5 space-y-0">
-
-                  {/* STEP 1 — Your data */}
-                  <div className="relative">
-                    <div className="flex items-center gap-3 mb-3">
-                      <div className="w-7 h-7 rounded-full bg-blue-500/20 border border-blue-500/40 flex items-center justify-center shrink-0">
-                        <span className="text-blue-400 text-xs font-bold">1</span>
-                      </div>
-                      <div>
-                        <p className="text-sm font-semibold text-slate-200">{t('demo.zkStep1Title')}</p>
-                        <p className="text-xs text-slate-500">{t('demo.zkStep1Desc')}</p>
-                      </div>
-                    </div>
-                    <div className="ml-3.5 border-l-2 border-blue-500/20 pl-6 pb-6">
-                      <div className="rounded-lg border border-slate-600/60 bg-slate-900/50 overflow-hidden">
-                        {state.fields.map((field, i) => (
-                          <div key={field.name} className={`flex items-center justify-between px-4 py-2 ${i > 0 ? 'border-t border-slate-700/40' : ''}`}>
-                            <span className="text-slate-400 text-xs shrink-0">{field.label || field.name}</span>
-                            <span className="text-slate-200 text-xs font-mono text-right truncate ml-4">{field.value}</span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* STEP 2 — The math */}
-                  <div className="relative">
-                    <div className="flex items-center gap-3 mb-3">
-                      <div className="w-7 h-7 rounded-full bg-amber-500/20 border border-amber-500/40 flex items-center justify-center shrink-0">
-                        <span className="text-amber-400 text-xs font-bold">2</span>
-                      </div>
-                      <div>
-                        <p className="text-sm font-semibold text-slate-200">{t('demo.zkStep2Title')}</p>
-                        <p className="text-xs text-slate-500">{t('demo.zkStep2Desc')}</p>
-                      </div>
-                    </div>
-                    <div className="ml-3.5 border-l-2 border-amber-500/20 pl-6 pb-6 space-y-2">
-                      {predicateDescriptions.map((pred, i) => (
-                        <div key={i} className="rounded-lg border border-amber-800/30 bg-amber-950/15 px-4 py-3">
-                          <div className="flex items-center justify-between mb-2">
-                            <span className="text-amber-300 text-xs font-semibold">{pred.description}</span>
-                            <span className="text-amber-500/60 text-xs font-mono">{(pred.proofSize / 1024).toFixed(1)} KB</span>
-                          </div>
-                          <div className="flex items-center gap-2 text-xs">
-                            <span className="text-slate-500">{t('demo.zkRealValue')}</span>
-                            <span className="bg-slate-700/60 text-slate-600 font-mono px-1.5 py-0.5 rounded text-xs tracking-widest select-none" aria-hidden="true">{'\u2588'.repeat(8)}</span>
-                            <span className="text-amber-300 font-medium">{t('demo.zkOnlyAnswer')}</span>
-                          </div>
-                        </div>
-                      ))}
-                      <p className="text-xs text-slate-600 italic">{t('demo.zkStep2Note')}</p>
-                    </div>
-                  </div>
-
-                  {/* STEP 3 — What verifier gets */}
-                  <div className="relative">
-                    <div className="flex items-center gap-3 mb-3">
-                      <div className="w-7 h-7 rounded-full bg-green-500/20 border border-green-500/40 flex items-center justify-center shrink-0">
-                        <span className="text-green-400 text-xs font-bold">3</span>
-                      </div>
-                      <div className="flex-1">
-                        <p className="text-sm font-semibold text-slate-200">{t('demo.zkStep3Title')}</p>
-                        <p className="text-xs text-slate-500">{t('demo.zkStep3Desc')}</p>
-                      </div>
-                      {verificationPath === 'wasm' && verifyTimeMs !== null && (
-                        <span className="text-xs text-purple-400 bg-purple-900/30 border border-purple-700/30 px-2 py-0.5 rounded-full font-mono shrink-0">WASM {Math.round(verifyTimeMs)}ms</span>
-                      )}
-                    </div>
-                    <div className="ml-3.5 pl-6">
-                      <div className="rounded-lg border border-green-800/30 bg-green-950/10 overflow-hidden">
-                        {state.fields.map((field, i) => {
-                          const matched = fieldMatchesPredicate(field.name)
-                          return (
-                            <div key={field.name} className={`flex items-center justify-between px-4 py-2 ${i > 0 ? 'border-t border-slate-700/30' : ''}`}>
-                              <span className={`shrink-0 ${matched ? 'text-slate-300 text-xs' : 'text-slate-600 text-xs'}`}>{field.label || field.name}</span>
-                              {matched ? (
-                                <span className="text-green-400 text-xs font-semibold text-right truncate ml-4">&#10003; {matched}</span>
-                              ) : (
-                                <span className="font-mono text-xs text-slate-700 select-none tracking-widest" aria-hidden="true">{'\u2588'.repeat(6)}</span>
-                              )}
-                            </div>
-                          )
-                        })}
-                      </div>
-                      {chainValid === true && (
-                        <div className="text-xs text-green-400 mt-1">{t('verify.chainVerified')}</div>
-                      )}
-                      {chainValid === false && (
-                        <div className="text-xs text-red-400 mt-1">{t('verify.chainFailed')}</div>
-                      )}
-                    </div>
-                  </div>
-
-                </div>
-
-                {/* WASM Performance Profile */}
-                {wasmProfile && wasmProfile.length > 0 && (
-                  <div className="px-5 pb-4">
-                    <details className="group">
-                      <summary className="text-xs text-slate-500 cursor-pointer hover:text-slate-400 transition-colors select-none list-none [&::-webkit-details-marker]:hidden">
-                        {t('demo.zkProfileToggle')}
-                      </summary>
-                      <div className="mt-3 space-y-3">
-                        {initProfile && (
-                          <div>
-                            <p className="text-xs text-slate-500 mb-1.5">{t('demo.zkProfileWasmInit')}</p>
-                            <div className="space-y-1">
-                              {[
-                                { label: t('demo.zkProfileJsImport'), ms: initProfile.jsImport, color: 'bg-indigo-500' },
-                                { label: t('demo.zkProfileWasmBoot'), ms: initProfile.wasmCompile, color: 'bg-cyan-500' },
-                              ].map((step) => {
-                                const maxMs = Math.max(initProfile.jsImport, initProfile.wasmCompile, 1)
-                                return (
-                                  <div key={step.label} className="flex items-center gap-2">
-                                    <span className="text-xs text-slate-500 w-28 text-right shrink-0">{step.label}</span>
-                                    <div className="flex-1 h-4 bg-slate-700/30 rounded overflow-hidden">
-                                      <div className={`h-full ${step.color} rounded opacity-60`} style={{ width: `${Math.max((step.ms / maxMs) * 100, 2)}%` }} />
-                                    </div>
-                                    <span className="text-xs font-mono text-slate-400 w-14 text-right shrink-0">{step.ms < 1 ? '<1' : Math.round(step.ms)}ms</span>
-                                  </div>
-                                )
-                              })}
-                            </div>
-                            <div className="flex justify-end mt-1 mb-3">
-                              <span className="text-xs font-mono text-slate-300">{t('demo.zkProfileTotal')}: {Math.round(initProfile.total)}ms</span>
-                            </div>
-                            <div className="border-t border-slate-700/50 mb-3" />
-                          </div>
-                        )}
-                        {wasmProfile.map((p, i) => {
-                          const steps = [
-                            { label: t('demo.zkProfileVk'), ms: p.vkDecode, color: 'bg-blue-500' },
-                            { label: t('demo.zkProfileParse'), ms: p.proofParse, color: 'bg-amber-500' },
-                            { label: t('demo.zkProfileInit'), ms: p.snarkjsInit, color: 'bg-slate-500' },
-                            { label: t('demo.zkProfileVerify'), ms: p.snarkjsVerify, color: 'bg-green-500' },
-                          ]
-                          const maxMs = Math.max(...steps.map(s => s.ms), 1)
-                          return (
-                            <div key={i}>
-                              {wasmProfile.length > 1 && (
-                                <p className="text-xs text-slate-500 mb-1.5">{t('demo.zkProfileProof')} {i + 1}</p>
-                              )}
-                              <div className="space-y-1">
-                                {steps.map((step) => (
-                                  <div key={step.label} className="flex items-center gap-2">
-                                    <span className="text-xs text-slate-500 w-28 text-right shrink-0">{step.label}</span>
-                                    <div className="flex-1 h-4 bg-slate-700/30 rounded overflow-hidden">
-                                      <div className={`h-full ${step.color} rounded opacity-60`} style={{ width: `${Math.max((step.ms / maxMs) * 100, 2)}%` }} />
-                                    </div>
-                                    <span className="text-xs font-mono text-slate-400 w-14 text-right shrink-0">{step.ms < 1 ? '<1' : Math.round(step.ms)}ms</span>
-                                  </div>
-                                ))}
-                              </div>
-                              <div className="flex justify-end mt-1">
-                                <span className="text-xs font-mono text-slate-300">{t('demo.zkProfileTotal')}: {Math.round(p.total)}ms</span>
-                              </div>
-                            </div>
-                          )
-                        })}
-                      </div>
-                    </details>
-                  </div>
-                )}
-
-                {/* Bottom banner */}
-                <div className="px-6 py-4 bg-green-950/20 border-t border-green-800/20">
-                  <p className="text-sm text-green-300 font-medium text-center">{t('demo.privacyBanner')}</p>
-                </div>
-              </div>
-            )
-          })()}
-
-          {/* Save & Print buttons */}
-          {(state.proofs.length > 0 || state.compoundProofJson) && (
-            <div className="space-y-3">
-              <a href={exportData ? `data:application/cbor;base64,${exportData.cbor_base64}` : '#'} download="zk-eidas-proof.cbor"
-                className={`flex items-center justify-center gap-2 w-full py-3 text-white font-semibold rounded-lg transition-colors ${exportData ? 'bg-blue-600 hover:bg-blue-700' : 'bg-slate-700 opacity-50 pointer-events-none'}`}>
-                <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-                {exportLoading ? t('demo.encoding') : t('demo.saveProof')}
-              </a>
-              <button
-                disabled={exportLoading || (state.compoundOp === 'Or') || (!state.compoundProofJson && state.proofs.length > 1)}
-                onClick={handlePrintProof}
-                className="flex items-center justify-center gap-2 w-full py-3 bg-slate-700 hover:bg-slate-600 disabled:bg-slate-800 disabled:text-slate-500 disabled:cursor-not-allowed text-white font-semibold rounded-lg transition-colors"
-              >
-                <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
-                {t('demo.printProof')}
-              </button>
-              {(state.compoundOp === 'Or' || (!state.compoundProofJson && state.proofs.length > 1)) && (
-                <p className="text-xs text-amber-400/70">{t('demo.printRequiresAnd')}</p>
-              )}
-            </div>
-          )}
-        </div>
-      )}
-    </div>
-  )
-}
-
-// === Step 4: Print ===
-
-function PrintStep({ state, t }: { state: WizardState; t: (key: string) => string }) {
-  const [qrSections, setQrSections] = useState<{ predicate: string; dataUrls: string[]; compressedSize: number }[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-
-  useEffect(() => {
-    if (state.printProofs.length === 0) return
-    generateQRCodes()
-  }, [state.printProofs])
-
-  async function generateQRCodes() {
-    try {
-      const { encodeProofChunks, LogicalOpFlag } = await import('../lib/qr-chunking')
-      const QRCode = (await import('qrcode')).default
-      const opFlag = state.printLogicalOp === 'and' ? LogicalOpFlag.And : state.printLogicalOp === 'or' ? LogicalOpFlag.Or : LogicalOpFlag.Single
-
-      const sections: typeof qrSections = []
-      for (let i = 0; i < state.printProofs.length; i++) {
-        const proof = state.printProofs[i]
-        const compressed = Uint8Array.from(atob(proof.compressedCbor), c => c.charCodeAt(0))
-        const chunks = encodeProofChunks(compressed, i + 1, i, state.printProofs.length, opFlag)
-        const dataUrls: string[] = []
-        for (const chunk of chunks) {
-          const url = await QRCode.toDataURL([{ data: chunk, mode: 'byte' as const }], {
-            errorCorrectionLevel: 'L',
-            margin: 1,
-            width: 280,
-          })
-          dataUrls.push(url)
-        }
-        sections.push({ predicate: proof.predicate, dataUrls, compressedSize: compressed.length })
-      }
-      setQrSections(sections)
-    } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : String(e))
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  if (state.printProofs.length === 0) return null
-
-  const totalQRs = qrSections.reduce((sum, s) => sum + s.dataUrls.length, 0)
-  const totalSize = qrSections.reduce((sum, s) => sum + s.compressedSize, 0)
-
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center p-8">
-        <p className="text-slate-500">{t('print.generating')}</p>
-      </div>
-    )
-  }
-
-  if (error) {
-    return (
-      <div className="bg-red-900/30 border border-red-700 rounded-lg px-8 py-6 text-center">
-        <p className="text-red-300 text-sm">{error}</p>
-      </div>
-    )
-  }
-
-  return (
-    <div className="space-y-4 print-area">
-      {/* Print content */}
-      <div className="bg-white text-black rounded-lg overflow-hidden print:rounded-none print:shadow-none">
-        <div className="max-w-[210mm] mx-auto px-6 py-4 print:px-8 print:py-3">
-          {/* Header */}
-          <div className="border-b border-gray-300 pb-3 mb-4">
-            <div className="flex items-baseline justify-between">
-              <h1 className="text-lg font-bold">{t('print.title')}</h1>
-              <span className="text-xs text-gray-400 font-mono">zk-eidas.com/verify</span>
-            </div>
-            <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-600">
-              {state.printLogicalOp !== 'single' && (
-                <span className="font-semibold text-gray-800">
-                  {state.printLogicalOp === 'and' ? t('print.allMustVerify') : t('print.anyMustVerify')}
-                </span>
-              )}
-              {(state.printCredentialLabelKey || state.printCredentialLabel) && (
-                <span>{state.printCredentialLabelKey ? t(state.printCredentialLabelKey) : state.printCredentialLabel}</span>
-              )}
-              <span>{totalQRs} {t('print.qrCount')} · {(totalSize / 1024).toFixed(1)} KB</span>
-            </div>
-            {state.printPredicates.length > 0 && (
-              <div className="mt-2">
-                <span className="text-xs font-medium text-gray-500">{t('print.predicates')}:</span>
-                <table className="mt-1 text-xs text-gray-700 w-full">
-                  <tbody>
-                    {state.printPredicates.map((p, i) => (
-                      <tr key={i} className="border-b border-gray-100 last:border-0">
-                        <td className="py-0.5 pr-2 font-medium">{p.claimKey ? t(p.claimKey) : p.claim}</td>
-                        <td className="py-0.5 pr-2 font-mono text-gray-500">{p.op}</td>
-                        <td className="py-0.5 pr-2">{p.publicValue}</td>
-                        <td className="py-0.5 text-right">
-                          {p.disclosed
-                            ? <span className="text-blue-600 font-semibold">{t('print.public')}</span>
-                            : <span className="text-gray-400">{t('print.private')}</span>
-                          }
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+          {/* Overall result banner */}
+          <div className={`flex items-center gap-3 rounded-lg px-5 py-4 border ${
+            allValid
+              ? 'bg-green-950/30 border-green-700/40 text-green-300'
+              : 'bg-red-950/30 border-red-700/40 text-red-300'
+          }`}>
+            {allValid ? (
+              <svg className="w-6 h-6 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>
+              </svg>
+            ) : (
+              <svg className="w-6 h-6 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/>
+              </svg>
             )}
+            <div className="flex-1">
+              <p className="font-semibold text-sm">{allValid ? t('contracts.verified') : t('contracts.verifyFailed')}</p>
+              {verifyTimeMs !== null && (
+                <p className="text-xs opacity-70 mt-0.5">
+                  {verificationMethod === 'wasm' ? 'WASM' : 'Server'} · {Math.round(verifyTimeMs)}ms · {state.credentials.length} credential{state.credentials.length > 1 ? 's' : ''}
+                </p>
+              )}
+            </div>
           </div>
 
-          {/* QR codes */}
-          {qrSections.map((section, si) => (
-            <div key={si} className="mb-4">
-              {qrSections.length > 1 && (
-                <h2 className="text-sm font-semibold mb-2">
-                  {t('print.proofSection')} {si + 1}/{qrSections.length}: {section.predicate}
-                </h2>
-              )}
-              <div className="grid grid-cols-3 gap-1 justify-items-center print:grid-cols-3 print:gap-1">
-                {section.dataUrls.map((url, qi) => (
-                  <div key={qi} className="text-center">
-                    <img
-                      src={url}
-                      alt={`QR ${qi + 1}/${section.dataUrls.length}`}
-                      className="w-36 h-36 print:w-[55mm] print:h-[55mm]"
-                    />
-                    <p className="text-[9px] text-gray-400 -mt-0.5">{qi + 1}/{section.dataUrls.length}</p>
+          {/* Per-predicate results grouped by role */}
+          <div className="bg-slate-800 rounded-lg border border-slate-700 overflow-hidden">
+            <div className="bg-slate-700 px-6 py-3">
+              <h3 className="text-sm font-semibold text-slate-200">{t('contracts.predicatesProved')}</h3>
+            </div>
+            <div className="divide-y divide-slate-700">
+              {template?.credentials.map(req => {
+                const roleResults = resultsByRole[req.role] || []
+                return (
+                  <div key={req.role}>
+                    <div className="px-5 py-2 bg-slate-800/80">
+                      <span className="text-xs font-semibold text-slate-400">{t(req.roleLabelKey)}</span>
+                    </div>
+                    {roleResults.map((r, i) => (
+                      <div key={i} className="flex items-center justify-between px-5 py-3">
+                        <span className="text-sm text-slate-300">{r.predicate}</span>
+                        {r.valid ? (
+                          <span className="text-green-400 text-xs font-semibold flex items-center gap-1">
+                            <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                            OK
+                          </span>
+                        ) : (
+                          <span className="text-red-400 text-xs font-semibold flex items-center gap-1">
+                            <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                            FAIL
+                          </span>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+
+          {/* Holder bindings */}
+          {state.bindings.length > 0 && (
+            <div className="bg-slate-800 rounded-lg border border-purple-700/30 overflow-hidden">
+              <div className="bg-purple-900/30 px-6 py-3">
+                <h3 className="text-sm font-semibold text-purple-300">{t('contracts.binding.hashMatch')}</h3>
+              </div>
+              <div className="divide-y divide-slate-700">
+                {state.bindings.map((binding, bi) => (
+                  <div key={bi} className="flex items-center justify-between px-5 py-3">
+                    <div className="flex items-center gap-2">
+                      <svg className="w-4 h-4 text-purple-400 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
+                        <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
+                      </svg>
+                      <span className="text-sm text-slate-300">{t(binding.labelKey)}</span>
+                    </div>
+                    {binding.verified ? (
+                      <span className="text-purple-400 text-xs font-semibold flex items-center gap-1">
+                        <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                        {binding.bindingHash.slice(0, 10)}…
+                      </span>
+                    ) : (
+                      <span className="text-red-400 text-xs font-semibold">MISMATCH</span>
+                    )}
                   </div>
                 ))}
               </div>
             </div>
-          ))}
-
-          {/* Footer */}
-          <div className="text-center text-xs text-gray-400 mt-4 pt-3 border-t border-gray-200">
-            {t('print.scanToVerify')} · {t('print.verifyAt')}: zk-eidas.com/verify
-          </div>
+          )}
         </div>
-      </div>
-
-      {/* Print button — below the preview */}
-      <button
-        onClick={() => window.print()}
-        className="flex items-center justify-center gap-2 w-full py-3 bg-slate-700 hover:bg-slate-600 text-white font-semibold rounded-lg transition-colors print:hidden"
-      >
-        <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
-        {t('print.printBtn')}
-      </button>
+      )}
     </div>
   )
 }

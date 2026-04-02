@@ -1075,6 +1075,15 @@ function PaperContractsSection() {
                 <p className="text-xs text-slate-300 leading-relaxed">{t(key)}</p>
               </div>
             ))}
+            <div className="flex items-start gap-2.5">
+              <div className="w-4 h-4 rounded-full bg-emerald-500/20 flex items-center justify-center shrink-0 mt-0.5">
+                <svg className="w-2.5 h-2.5 text-emerald-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <rect width="18" height="11" x="3" y="11" rx="2" ry="2" />
+                  <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                </svg>
+              </div>
+              <p className="text-xs text-slate-300 leading-relaxed">{t("paperContracts.escrowLine")}</p>
+            </div>
             <div className="pt-1">
               <p className="text-[11px] text-emerald-500/60 italic">
                 {t("paperContracts.noNames")}
@@ -1140,7 +1149,7 @@ function PaperContractsSection() {
       {/* CTA */}
       <div className="text-center mt-8">
         <Link
-          to="/contracts"
+          to="/demo"
           className="inline-flex px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg transition-colors text-sm"
         >
           {t("paperContracts.cta")}
@@ -1195,7 +1204,7 @@ function Landing() {
           {/* Right: Demo (button) | language | Verify | Sandbox */}
           <nav className="flex items-center gap-2 sm:gap-4 flex-wrap justify-end">
             <Link
-              to="/contracts"
+              to="/demo"
               className="text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 px-3.5 py-1.5 rounded-lg transition-colors"
             >
               {t("nav.contracts")}
@@ -1219,7 +1228,7 @@ function Landing() {
               {t("nav.verify")}
             </Link>
             <Link
-              to="/demo"
+              to="/sandbox"
               className="text-xs text-slate-400 hover:text-slate-200 transition-colors font-medium"
             >
               {t("nav.demo")}
@@ -1246,7 +1255,7 @@ function Landing() {
             <p className="text-base text-slate-400 mb-8">{t("hero.tagline")}</p>
             <div className="flex items-center gap-3">
               <Link
-                to="/contracts"
+                to="/demo"
                 className="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg transition-colors text-sm"
               >
                 {t("hero.tryDemo")}

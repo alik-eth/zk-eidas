@@ -43,7 +43,7 @@ function PipelineStep({
       >
         {num}
       </div>
-      <h4 className="text-lg font-semibold mb-1">{title}</h4>
+      {title && <h4 className="text-lg font-semibold mb-1">{title}</h4>}
       <p className="text-slate-400 leading-relaxed">{description}</p>
     </div>
   );
@@ -101,6 +101,7 @@ function Learn() {
             { href: "#trust-gap", label: t("learn.tocTrustGap") },
             { href: "#how-it-works", label: t("learn.tocHowItWorks") },
             { href: "#capabilities", label: t("learn.tocCapabilities") },
+            { href: "#escrow", label: t("learn.tocEscrow") },
             { href: "#standards", label: t("learn.tocStandards") },
             { href: "#privacy", label: t("learn.tocPrivacy") },
           ].map((item) => (
@@ -609,6 +610,82 @@ function Learn() {
           <p className="text-sm text-slate-500">{t("learn.capNote")}</p>
         </section>
 
+        {/* ── 6b. Identity Escrow ─────────────────────────────────────── */}
+        <section>
+          <SectionHeading
+            id="escrow"
+            title={t("learn.escrowTitle")}
+            subtitle={t("learn.escrowSubtitle")}
+          />
+
+          {/* How it works — numbered steps */}
+          <div className="mb-8">
+            <h4 className="text-sm font-semibold mb-4" style={{ color: "#FFD500" }}>
+              {t("learn.escrowHowTitle")}
+            </h4>
+            <p className="text-sm text-slate-400 mb-4">{t("learn.escrowHowIntro")}</p>
+            <div className="space-y-4">
+              {[
+                t("learn.escrowStep1"),
+                t("learn.escrowStep2"),
+                t("learn.escrowStep3"),
+                t("learn.escrowStep4"),
+                t("learn.escrowStep5"),
+              ].map((step, i) => (
+                <PipelineStep key={i} num={i + 1} title="" description={step} />
+              ))}
+            </div>
+          </div>
+
+          {/* Honest encryption */}
+          <div className="bg-slate-800/50 rounded-xl border border-slate-700/50 p-5 mb-8">
+            <h4 className="text-sm font-semibold mb-2" style={{ color: "#FFD500" }}>
+              {t("learn.escrowHonestTitle")}
+            </h4>
+            <p className="text-sm text-slate-400 leading-relaxed">
+              {t("learn.escrowHonestDesc")}
+            </p>
+          </div>
+
+          {/* Pluggable escrow authority */}
+          <div className="mb-8">
+            <h4 className="text-sm font-semibold mb-2" style={{ color: "#FFD500" }}>
+              {t("learn.escrowPluggableTitle")}
+            </h4>
+            <p className="text-sm text-slate-400 leading-relaxed mb-4">
+              {t("learn.escrowPluggableDesc")}
+            </p>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-slate-700">
+                    <th className="text-left py-3 px-4 text-slate-400 font-semibold">{t("learn.escrowAuthorityCol")}</th>
+                    <th className="text-left py-3 px-4 text-slate-400 font-semibold">{t("learn.escrowTriggerCol")}</th>
+                    <th className="text-left py-3 px-4 text-slate-400 font-semibold">{t("learn.escrowTrustCol")}</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-800">
+                  {[
+                    { auth: t("learn.escrowNotary"), trigger: t("learn.escrowNotaryTrigger"), trust: t("learn.escrowNotaryTrust") },
+                    { auth: t("learn.escrowArbitration"), trigger: t("learn.escrowArbitrationTrigger"), trust: t("learn.escrowArbitrationTrust") },
+                    { auth: t("learn.escrowRegistry"), trigger: t("learn.escrowRegistryTrigger"), trust: t("learn.escrowRegistryTrust") },
+                    { auth: t("learn.escrowSmartContract"), trigger: t("learn.escrowSmartContractTrigger"), trust: t("learn.escrowSmartContractTrust") },
+                  ].map((row) => (
+                    <tr key={row.auth} className="hover:bg-slate-800/50">
+                      <td className="py-3 px-4 text-slate-300 font-medium">{row.auth}</td>
+                      <td className="py-3 px-4 text-slate-400">{row.trigger}</td>
+                      <td className="py-3 px-4 text-slate-400">{row.trust}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* Overhead note */}
+          <p className="text-sm text-slate-500">{t("learn.escrowOverhead")}</p>
+        </section>
+
         {/* ── 7. Standards & Compliance ─────────────────────────────────── */}
         <section>
           <SectionHeading
@@ -688,7 +765,7 @@ function Learn() {
         {/* ── CTA ─────────────────────────────────────────────────────── */}
         <section className="text-center py-8">
           <Link
-            to="/demo"
+            to="/sandbox"
             className="inline-flex items-center gap-2 px-6 py-3 rounded-lg font-semibold transition-colors"
             style={{ backgroundColor: "#FFD500", color: "#0f172a" }}
           >

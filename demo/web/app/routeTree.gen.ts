@@ -11,10 +11,10 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as VerifyRouteImport } from './routes/verify'
 import { Route as UkraineRouteImport } from './routes/ukraine'
+import { Route as SandboxRouteImport } from './routes/sandbox'
 import { Route as PrintRouteImport } from './routes/print'
 import { Route as LearnRouteImport } from './routes/learn'
 import { Route as DemoRouteImport } from './routes/demo'
-import { Route as ContractsRouteImport } from './routes/contracts'
 import { Route as IndexRouteImport } from './routes/index'
 
 const VerifyRoute = VerifyRouteImport.update({
@@ -25,6 +25,11 @@ const VerifyRoute = VerifyRouteImport.update({
 const UkraineRoute = UkraineRouteImport.update({
   id: '/ukraine',
   path: '/ukraine',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SandboxRoute = SandboxRouteImport.update({
+  id: '/sandbox',
+  path: '/sandbox',
   getParentRoute: () => rootRouteImport,
 } as any)
 const PrintRoute = PrintRouteImport.update({
@@ -42,11 +47,6 @@ const DemoRoute = DemoRouteImport.update({
   path: '/demo',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ContractsRoute = ContractsRouteImport.update({
-  id: '/contracts',
-  path: '/contracts',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
@@ -55,29 +55,29 @@ const IndexRoute = IndexRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
-  '/contracts': typeof ContractsRoute
   '/demo': typeof DemoRoute
   '/learn': typeof LearnRoute
   '/print': typeof PrintRoute
+  '/sandbox': typeof SandboxRoute
   '/ukraine': typeof UkraineRoute
   '/verify': typeof VerifyRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
-  '/contracts': typeof ContractsRoute
   '/demo': typeof DemoRoute
   '/learn': typeof LearnRoute
   '/print': typeof PrintRoute
+  '/sandbox': typeof SandboxRoute
   '/ukraine': typeof UkraineRoute
   '/verify': typeof VerifyRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
-  '/contracts': typeof ContractsRoute
   '/demo': typeof DemoRoute
   '/learn': typeof LearnRoute
   '/print': typeof PrintRoute
+  '/sandbox': typeof SandboxRoute
   '/ukraine': typeof UkraineRoute
   '/verify': typeof VerifyRoute
 }
@@ -85,38 +85,31 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
-    | '/contracts'
     | '/demo'
     | '/learn'
     | '/print'
+    | '/sandbox'
     | '/ukraine'
     | '/verify'
   fileRoutesByTo: FileRoutesByTo
-  to:
-    | '/'
-    | '/contracts'
-    | '/demo'
-    | '/learn'
-    | '/print'
-    | '/ukraine'
-    | '/verify'
+  to: '/' | '/demo' | '/learn' | '/print' | '/sandbox' | '/ukraine' | '/verify'
   id:
     | '__root__'
     | '/'
-    | '/contracts'
     | '/demo'
     | '/learn'
     | '/print'
+    | '/sandbox'
     | '/ukraine'
     | '/verify'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
-  ContractsRoute: typeof ContractsRoute
   DemoRoute: typeof DemoRoute
   LearnRoute: typeof LearnRoute
   PrintRoute: typeof PrintRoute
+  SandboxRoute: typeof SandboxRoute
   UkraineRoute: typeof UkraineRoute
   VerifyRoute: typeof VerifyRoute
 }
@@ -135,6 +128,13 @@ declare module '@tanstack/react-router' {
       path: '/ukraine'
       fullPath: '/ukraine'
       preLoaderRoute: typeof UkraineRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/sandbox': {
+      id: '/sandbox'
+      path: '/sandbox'
+      fullPath: '/sandbox'
+      preLoaderRoute: typeof SandboxRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/print': {
@@ -158,13 +158,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DemoRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/contracts': {
-      id: '/contracts'
-      path: '/contracts'
-      fullPath: '/contracts'
-      preLoaderRoute: typeof ContractsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/': {
       id: '/'
       path: '/'
@@ -177,10 +170,10 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
-  ContractsRoute: ContractsRoute,
   DemoRoute: DemoRoute,
   LearnRoute: LearnRoute,
   PrintRoute: PrintRoute,
+  SandboxRoute: SandboxRoute,
   UkraineRoute: UkraineRoute,
   VerifyRoute: VerifyRoute,
 }

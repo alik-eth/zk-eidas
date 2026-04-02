@@ -150,7 +150,7 @@ function UkrainePage() {
       <section className="max-w-4xl mx-auto px-4 sm:px-8 py-12 border-t border-slate-800 text-center">
         <div className="flex items-center justify-center gap-3">
           <Link
-            to="/demo"
+            to="/sandbox"
             className="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg transition-colors text-sm"
           >
             {t("hero.tryDemo")}

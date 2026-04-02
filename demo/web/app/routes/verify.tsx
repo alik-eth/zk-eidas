@@ -314,7 +314,7 @@ function VerifyPage() {
             </h1>
           </Link>
           <div className="flex items-center gap-6">
-            <Link to="/demo" className="text-sm text-slate-300 hover:text-white transition-colors">
+            <Link to="/sandbox" className="text-sm text-slate-300 hover:text-white transition-colors">
               {t('nav.demo')}
             </Link>
             <span className="text-sm text-slate-500 font-medium tracking-wide">{t('verify.offlineVerifier')}</span>
