@@ -393,6 +393,26 @@ async fn main() {
             "expiry_date": "2034-11-03",
             "issuing_authority": "Міністерство цифрової трансформації"
         }), "https://diia.gov.ua"),
+        // EU Seller PID (EN locale)
+        ("eu_seller_pid", serde_json::json!({
+            "given_name": "Maximilian", "family_name": "Schneider",
+            "birth_date": "1998-05-14", "age_over_18": "true",
+            "nationality": "DE", "issuing_country": "DE",
+            "resident_country": "DE", "resident_city": "Berlin",
+            "gender": "M", "document_number": "DE-1234567890",
+            "expiry_date": "2035-05-14",
+            "issuing_authority": "Bundesdruckerei GmbH"
+        }), "https://bundesdruckerei.de"),
+        // EU Buyer PID (EN locale)
+        ("eu_buyer_pid", serde_json::json!({
+            "given_name": "Sophie", "family_name": "Müller",
+            "birth_date": "1995-11-03", "age_over_18": "true",
+            "nationality": "DE", "issuing_country": "DE",
+            "resident_country": "DE", "resident_city": "München",
+            "gender": "F", "document_number": "DE-9876543210",
+            "expiry_date": "2034-11-03",
+            "issuing_authority": "Bundesdruckerei GmbH"
+        }), "https://bundesdruckerei.de"),
     ];
 
     for (label, claims, issuer) in &escrow_presets {
