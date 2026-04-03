@@ -178,7 +178,7 @@ const translations: Record<string, Record<Locale, string>> = {
   "learn.whyZkCompleteness": { en: "Completeness", uk: "Повнота" },
   "learn.whyZkCompletenessDesc": { en: "Valid credentials always produce valid proofs. A legitimate holder is never rejected.", uk: "Дійсні посвідчення завжди створюють дійсні докази. Легітимний власник ніколи не відхиляється." },
   "learn.whyZkSoundness": { en: "Soundness", uk: "Надійність" },
-  "learn.whyZkSoundnessDesc": { en: "Invalid credentials cannot produce valid proofs. Fabrication is computationally impossible.", uk: "Недійсні посвідчення не можуть створити дійсні докази. Фабрикація обчислювально неможлива." },
+  "learn.whyZkSoundnessDesc": { en: "Invalid credentials cannot produce valid proofs. Fabrication is computationally infeasible under standard cryptographic assumptions.", uk: "Недійсні посвідчення не можуть створити дійсні докази. Фабрикація обчислювально нездійсненна за стандартних криптографічних припущень." },
   "learn.whyZkZeroKnowledge": { en: "Zero Knowledge", uk: "Нуль знань" },
   "learn.whyZkZeroKnowledgeDesc": { en: "The verifier learns only the boolean predicate result. No claim values, no signature, no metadata.", uk: "Верифікатор дізнається лише булевий результат предиката. Жодних значень полів, підписів, метаданих." },
   "learn.whyZkClosing": {
@@ -253,7 +253,7 @@ const translations: Record<string, Record<Locale, string>> = {
   "learn.trustGapZkTitle": { en: "zk-eidas: Full-Chain Verification", uk: "zk-eidas: повноланцюгова верифікація" },
   "learn.trustGapZk1": { en: "ECDSA P-256 signature verification runs inside the same Circom circuit as the predicate.", uk: "Перевірка підпису ECDSA P-256 відбувається всередині тієї ж Circom схеми, що й предикат." },
   "learn.trustGapZk2": { en: "The circuit re-derives the SHA-256 disclosure hash and checks it against the signed payload.", uk: "Схема повторно обчислює SHA-256 хеш розкриття та перевіряє його проти підписаного payload." },
-  "learn.trustGapZk3": { en: "Fabrication is impossible — the proof covers the entire chain:", uk: "Фабрикація неможлива — доказ покриває весь ланцюг:" },
+  "learn.trustGapZk3": { en: "Fabrication is computationally infeasible — the proof covers the entire chain:", uk: "Фабрикація обчислювально нездійсненна — доказ покриває весь ланцюг:" },
   "learn.trustGapChain": { en: "Issuer Signature → Claim Binding → Predicate Logic", uk: "Підпис видавця → Прив'язка поля → Логіка предиката" },
   "learn.trustGapClosing": {
     en: "Other ZK systems prove predicates. zk-eidas proves the predicate AND that the data is authentic.",
@@ -278,7 +278,7 @@ const translations: Record<string, Record<Locale, string>> = {
   "learn.howVerifier": { en: "Verifier", uk: "Верифікатор" },
   "learn.howVerifierSub": { en: "Pass / Fail", uk: "Так / Ні" },
   "learn.howStep1Title": { en: "Parse", uk: "Розбір" },
-  "learn.howStep1Desc": { en: "Extract individual claims and the issuer's public key from the SD-JWT VC or mdoc credential.", uk: "Витягнути окремі поля та публічний ключ видавця з SD-JWT VC або mdoc посвідчення." },
+  "learn.howStep1Desc": { en: "Extract individual claims and the issuer's public key from the credential. Both formats are supported: SD-JWT VC (used by most EU wallets) and mdoc/mDL (used for driving licenses).", uk: "Витягнути окремі поля та публічний ключ видавця з посвідчення. Підтримуються обидва формати: SD-JWT VC (використовується більшістю гаманців ЄС) та mdoc/mDL (використовується для водійських посвідчень)." },
   "learn.howStep2Title": { en: "Witness", uk: "Свідок" },
   "learn.howStep2Desc": { en: "Convert claim values to circuit inputs: dates become integers, strings become hashes.", uk: "Конвертувати значення полів у входи схеми: дати стають цілими числами, рядки — хешами." },
   "learn.howStep3Title": { en: "Circuit", uk: "Схема" },
@@ -373,8 +373,8 @@ const translations: Record<string, Record<Locale, string>> = {
   },
   "learn.escrowPluggableTitle": { en: "Pluggable escrow authority", uk: "Підключаємий ескроу-орган" },
   "learn.escrowPluggableDesc": {
-    en: "The escrow authority is a contract parameter \u2014 like jurisdiction or arbitration clause. Both parties agree at signing.",
-    uk: "Ескроу-орган \u2014 це параметр контракту, як юрисдикція чи арбітражне застереження. Обидві сторони домовляються при підписанні.",
+    en: "The escrow authority is a contract parameter \u2014 like jurisdiction or arbitration clause. Both parties agree at signing. In production, the authority\u2019s ML-KEM seed is stored in an HSM with key rotation policy.",
+    uk: "Ескроу-орган \u2014 це параметр контракту, як юрисдикція чи арбітражне застереження. Обидві сторони домовляються при підписанні. У продакшні ML-KEM seed органу зберігається в HSM з політикою ротації ключів.",
   },
   "learn.escrowAuthorityCol": { en: "Escrow authority", uk: "Ескроу-орган" },
   "learn.escrowTriggerCol": { en: "Trigger", uk: "Тригер" },
@@ -1340,7 +1340,7 @@ const translations: Record<string, Record<Locale, string>> = {
   },
   "cred.revoke": { en: "Revoke", uk: "Відкликати" },
   "cred.sigLine": { en: "sig: secp256r1 verified in-circuit", uk: "secp256r1 в схемі" },
-  "cred.proofSize": { en: "ZK proof: 2.1 KB", uk: "ZK: 2.1 КБ" },
+  "cred.proofSize": { en: "ZK proof: ~800 B compressed", uk: "ZK: ~800 Б стиснений" },
   "cred.tagline": { en: "Any eIDAS 2.0 credential \u2014 selective disclosure without compromise", uk: "Будь-яке eIDAS 2.0 посвідчення \u2014 вибіркове розкриття без компромісів" },
 
   // ── Credential showcase: document type labels ──────────────────────────
