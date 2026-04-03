@@ -24,73 +24,73 @@ const translations: Record<string, Record<Locale, string>> = {
 
   // ── Hero ────────────────────────────────────────────────────────────────
   "hero.subtitle": {
-    en: "An eIDAS 2.0 compatible unlinkability layer",
-    uk: "Шар незв'язуваності, сумісний з eIDAS 2.0",
+    en: "Prove who you are without revealing who you are",
+    uk: "Доведіть, хто ви є, не розкриваючи хто ви є",
   },
   "hero.tagline": {
-    en: "EU mandates unlinkability. The approved credential formats can't provide it. We fix that.",
-    uk: "ЄС вимагає незв'язуваність. Затверджені формати посвідчень не можуть її забезпечити. Ми це виправляємо.",
+    en: "EU digital IDs expose your data every time you show them. We wrap them in zero-knowledge proofs — so you prove facts (\"I'm 18+\") without sharing personal details.",
+    uk: "Цифрові ID ЄС розкривають ваші дані щоразу, коли ви їх показуєте. Ми загортаємо їх у ZK-докази — ви доводите факти («мені є 18»), не ділячись персональними даними.",
   },
   "hero.tryDemo": { en: "Try the Demo", uk: "Спробувати демо" },
   "hero.viewGithub": { en: "View on GitHub", uk: "Переглянути на GitHub" },
 
   // ── Problem ──────────────────────────────────────────────────────────
   "problem.title": {
-    en: "The Unlinkability Gap",
-    uk: "Прогалина незв'язуваності",
+    en: "The problem with EU digital IDs",
+    uk: "Проблема з цифровими ID ЄС",
   },
   "problem.subtitle": {
-    en: "eIDAS 2.0 Article 5a(16) requires unlinkability. SD-JWT VC with ES256 structurally can't deliver it — every presentation is linkable by the issuer's signature. BBS+ is not on the SOG-IS approved algorithm list. Batch issuance doesn't support predicates.",
-    uk: "Стаття 5a(16) eIDAS 2.0 вимагає незв'язуваність. SD-JWT VC з ES256 структурно не може її забезпечити — кожна презентація зв'язувана через підпис видавця. BBS+ не включено до списку схвалених алгоритмів SOG-IS. Пакетна видача не підтримує предикати.",
+    en: "EU law says your digital ID should be private — no one should track where you use it. But the formats chosen for eIDAS 2.0 can't do that. Every time you show your credential, it carries the same signature — like a fingerprint that follows you everywhere.",
+    uk: "Закон ЄС каже, що ваш цифровий ID має бути приватним — ніхто не повинен відстежувати, де ви його використовуєте. Але обрані для eIDAS 2.0 формати не можуть цього забезпечити. Щоразу, коли ви показуєте посвідчення, воно несе той самий підпис — як відбиток пальця, що слідує за вами всюди.",
   },
   "problem.criterion": { en: "Criterion", uk: "Критерій" },
   "problem.sdjwt": { en: "SD-JWT VC", uk: "SD-JWT VC" },
   "problem.bbs": { en: "BBS+", uk: "BBS+" },
   "problem.batch": { en: "Batch Issuance", uk: "Пакетна видача" },
   "problem.zk": { en: "ZK Proofs", uk: "ZK-докази" },
-  "problem.row1": { en: "eIDAS 2.0 format compliant", uk: "Сумісність з форматом eIDAS 2.0" },
-  "problem.row2": { en: "SOG-IS approved algorithms", uk: "Алгоритми схвалені SOG-IS" },
-  "problem.row3": { en: "Unlinkable presentations", uk: "Незв'язувані презентації" },
-  "problem.row4": { en: "Selective disclosure", uk: "Вибіркове розкриття" },
-  "problem.row5": { en: "Predicate proofs (e.g. age \u2265 18)", uk: "Предикатні докази (напр. вік \u2265 18)" },
-  "problem.row6": { en: "No infrastructure changes", uk: "Без змін інфраструктури" },
+  "problem.row1": { en: "Works with existing EU credentials", uk: "Працює з існуючими посвідченнями ЄС" },
+  "problem.row2": { en: "EU-approved cryptography", uk: "Схвалена ЄС криптографія" },
+  "problem.row3": { en: "Can't be tracked across services", uk: "Неможливо відстежити між сервісами" },
+  "problem.row4": { en: "Show only what's needed", uk: "Показує лише необхідне" },
+  "problem.row5": { en: "Prove facts without raw data (e.g. age \u2265 18)", uk: "Доведення фактів без сирих даних (напр. вік \u2265 18)" },
+  "problem.row6": { en: "No changes to existing systems", uk: "Без змін існуючих систем" },
 
   // ── Solution ─────────────────────────────────────────────────────────
   "solution.title": {
-    en: "ZK proofs over existing credentials",
-    uk: "ZK-докази поверх існуючих посвідчень",
+    en: "How it works",
+    uk: "Як це працює",
   },
   "solution.subtitle": {
-    en: "No format changes. No new algorithms. No infrastructure.",
-    uk: "Без змін формату. Без нових алгоритмів. Без інфраструктури.",
+    en: "A privacy layer on top of existing EU credentials. Nothing changes for governments or businesses — only the citizen gets new superpowers.",
+    uk: "Шар приватності поверх існуючих посвідчень ЄС. Нічого не змінюється для урядів чи бізнесу — лише громадянин отримує нові суперсили.",
   },
   "solution.step1Title": {
-    en: "Issuer signs ES256",
-    uk: "Видавець підписує ES256",
+    en: "Government issues credential",
+    uk: "Держава видає посвідчення",
   },
   "solution.step1Desc": {
-    en: "Standard SD-JWT VC or mdoc issuance. No changes to the issuer's infrastructure.",
-    uk: "Стандартна видача SD-JWT VC або mdoc. Без змін інфраструктури видавця.",
+    en: "Exactly as today. Standard digital ID, signed the usual way. No changes needed.",
+    uk: "Як і сьогодні. Стандартний цифровий ID, підписаний звичайним чином. Без змін.",
   },
   "solution.step1Label": {
-    en: "as usual",
-    uk: "як зазвичай",
+    en: "nothing changes",
+    uk: "нічого не змінюється",
   },
   "solution.step2Title": {
-    en: "User proves in ZK circuit",
-    uk: "Користувач доводить у ZK-схемі",
+    en: "You create a proof",
+    uk: "Ви створюєте доказ",
   },
   "solution.step2Desc": {
-    en: "ECDSA signature verified inside the circuit. The claim value never leaves the device.",
-    uk: "Підпис ECDSA перевіряється всередині схеми. Значення поля ніколи не залишає пристрій.",
+    en: "Your phone wraps the credential in a ZK proof. Only the answer leaves — \"yes, I'm 18+\" — never the actual birthdate.",
+    uk: "Ваш телефон загортає посвідчення в ZK-доказ. Виходить лише відповідь — «так, мені є 18» — ніколи справжня дата народження.",
   },
   "solution.step3Title": {
-    en: "Verifier checks proof",
-    uk: "Верифікатор перевіряє доказ",
+    en: "Anyone can verify",
+    uk: "Будь-хто може перевірити",
   },
   "solution.step3Desc": {
-    en: "Millisecond verification. Works offline. Zero personal data exposed.",
-    uk: "Верифікація за мілісекунди. Працює офлайн. Нуль персональних даних розкрито.",
+    en: "Verification takes milliseconds, works offline, and reveals zero personal data. A QR code on paper is enough.",
+    uk: "Верифікація за мілісекунди, працює офлайн і не розкриває жодних персональних даних. QR-коду на папері достатньо.",
   },
 
   // ── Ukraine ──────────────────────────────────────────────────────────
@@ -456,8 +456,8 @@ const translations: Record<string, Record<Locale, string>> = {
 
   // Landing page — quantum callout
   "paperContracts.quantumSafe": {
-    en: "Escrow envelope uses ML-KEM-768 (NIST FIPS 203) \u2014 post-quantum encryption. Contracts signed today stay sealed against future quantum computers.",
-    uk: "Ескроу-конверт використовує ML-KEM-768 (NIST FIPS 203) \u2014 постквантове шифрування. Контракти підписані сьогодні залишаються запечатаними проти майбутніх квантових комп\u2019ютерів.",
+    en: "Quantum-proof encryption: the identity envelope can't be cracked even by future quantum computers (ML-KEM-768, NIST standard).",
+    uk: "Квантовостійке шифрування: конверт особи неможливо зламати навіть майбутніми квантовими комп\u2019ютерами (ML-KEM-768, стандарт NIST).",
   },
 
   // Escrow UI (shared between sandbox and contracts)
@@ -541,12 +541,12 @@ const translations: Record<string, Record<Locale, string>> = {
 
   // ── Live Proof ─────────────────────────────────────────────────────────
   "liveProof.title": {
-    en: "See eIDAS 2.0 unlinkability in action",
-    uk: "Незв'язуваність eIDAS 2.0 в дії",
+    en: "Try it right now",
+    uk: "Спробуйте прямо зараз",
   },
   "liveProof.subtitle": {
-    en: "Generate a real ZK proof, then verify it entirely in your browser. Each proof is randomized — no two presentations are linkable.",
-    uk: "Згенеруйте справжній ZK-доказ, потім перевірте його у вашому браузері. Кожен доказ рандомізований — жодні дві презентації не зв'язувані.",
+    en: "Real proof, real verification — running in your browser. Press the button, prove you're 18+, and verify the result. No personal data ever leaves this page.",
+    uk: "Справжній доказ, справжня верифікація — прямо у вашому браузері. Натисніть кнопку, доведіть, що вам є 18, і перевірте результат. Жодних персональних даних.",
   },
   "liveProof.scenario": {
     en: "Prove: age \u2265 18 (from a national ID credential)",
@@ -631,48 +631,48 @@ const translations: Record<string, Record<Locale, string>> = {
 
   // ── Paper Contracts ───────────────────────────────────────────────────
   "paperContracts.title": {
-    en: "Real-world application: Contracts without personal data",
-    uk: "Реальне застосування: контракти без персональних даних",
+    en: "Contracts without personal data",
+    uk: "Контракти без персональних даних",
   },
   "paperContracts.subtitle": {
-    en: "Today, selling a car means handing over your full name, address, birth date, and ID number to a stranger. ZK proofs change that: every contractual condition is cryptographically proven without revealing any personal data.",
-    uk: "Сьогодні продаж авто означає передачу повного імені, адреси, дати народження та номера документа незнайомцю. ZK-докази змінюють це: кожна умова контракту криптографічно доведена без розкриття персональних даних.",
+    en: "Selling a car today means handing your passport data to a stranger. With ZK proofs, the contract proves every condition — age, insurance, ownership — without revealing a single personal detail.",
+    uk: "Продаж авто сьогодні означає передачу паспортних даних незнайомцю. З ZK-доказами контракт доводить кожну умову — вік, страховку, власність — не розкриваючи жодної персональної деталі.",
   },
   "paperContracts.todayLabel": {
     en: "Today's paper contract",
     uk: "Сьогоднішній паперовий контракт",
   },
   "paperContracts.todayItems": {
-    en: "Full name, address, birth date printed in plain text|Government ID number visible to the counterparty|No way to verify claims without calling authorities|Personal data sitting in filing cabinets forever",
-    uk: "ПІБ, адреса, дата народження — відкритим текстом|Номер документа видно контрагенту|Неможливо перевірити дані без дзвінка в органи|Персональні дані лежать у шафах назавжди",
+    en: "Your full name, address, birthdate — printed for anyone to see|Passport number shared with a stranger|No way to check if claims are true without calling authorities|Your personal data stored in filing cabinets forever",
+    uk: "Ваше ПІБ, адреса, дата народження — надруковані для всіх|Номер паспорта передано незнайомцю|Неможливо перевірити дані без дзвінка в органи|Ваші персональні дані зберігаються у шафах назавжди",
   },
   "paperContracts.zkLabel": {
     en: "With ZK proofs",
     uk: "З ZK-доказами",
   },
   "paperContracts.sellerProved": {
-    en: "Seller: age \u2265 18, identity cryptographically bound to vehicle",
-    uk: "Продавець: вік \u2265 18, особу криптографічно прив\u2019язано до ТЗ",
+    en: "Seller is 18+, and is the actual vehicle owner",
+    uk: "Продавець має 18+, і є фактичним власником ТЗ",
   },
   "paperContracts.vehicleProved": {
-    en: "Vehicle: insurance valid, VIN not revoked",
-    uk: "ТЗ: страховка дійсна, VIN не відкликано",
+    en: "Vehicle is insured, VIN is clean",
+    uk: "ТЗ застраховано, VIN чистий",
   },
   "paperContracts.buyerProved": {
-    en: "Buyer: age \u2265 18",
-    uk: "Покупець: вік \u2265 18",
+    en: "Buyer is 18+",
+    uk: "Покупець має 18+",
   },
   "paperContracts.noNames": {
-    en: "Zero personal data disclosed. Every condition machine-verifiable.",
-    uk: "Жодних персональних даних. Кожна умова верифікується машиною.",
+    en: "All proven. No names, no addresses, no birthdates shared.",
+    uk: "Все доведено. Жодних імен, адрес чи дат народження.",
   },
   "paperContracts.escrowLine": {
-    en: "Personal data encrypted in proof \u2014 decryption only by escrow authority per established procedure",
-    uk: "Персональні дані зашифровані в доказі \u2014 розшифровка тільки ескроу-органом за встановленою процедурою",
+    en: "Identity encrypted inside the proof \u2014 only a trusted authority (notary, court, arbitrator) can unlock it",
+    uk: "Особу зашифровано в доказі \u2014 розшифрувати може лише довірений орган (нотаріус, суд, арбітр)",
   },
   "paperContracts.courtResolution": {
-    en: "Dispute? Each party\u2019s data is encrypted inside the ZK proof.\nThe symmetric key is encrypted under the escrow authority\u2019s public key \u2014 notary, arbitrator, state registry, or smart contract.\nThe escrow authority decrypts the key per established procedure \u2014 claimant receives name and address.\nIdentification is a procedural act, not a property of the document.",
-    uk: "Спір? Дані кожної сторони зашифровані всередині ZK-доказу.\nСиметричний ключ зашифрований під публічним ключем ескроу-органу \u2014 нотаріуса, арбітражу, державного реєстру або смарт-контракту.\nЕскроу-орган розшифровує ключ за встановленою процедурою \u2014 позивач отримує ім\u2019я та адресу відповідача.\nІдентифікація \u2014 дія за процедурою, а не властивість документу.",
+    en: "Dispute? Each party's identity is encrypted inside their proof.\nA chosen authority (notary, arbitrator, or court) holds the decryption key.\nOn court order, the authority decrypts \u2014 the claimant learns who the other party is.\nAnonymity is the default. Identification only happens through due process.",
+    uk: "Спір? Особу кожної сторони зашифровано в їхньому доказі.\nОбраний орган (нотаріус, арбітр чи суд) тримає ключ розшифровки.\nЗа рішенням суду орган розшифровує \u2014 позивач дізнається, хто інша сторона.\nАнонімність за замовчуванням. Ідентифікація \u2014 лише за процедурою.",
   },
   "paperContracts.qrLabel": {
     en: "Real QR codes embedding compressed ZK proofs — scannable and verifiable offline",
@@ -695,16 +695,16 @@ const translations: Record<string, Record<Locale, string>> = {
     uk: "Спробувати демо",
   },
   "paperContracts.isolationTitle": {
-    en: "One Ringset to Rule Them All",
-    uk: "Один набір схем, щоб керувати всіма",
+    en: "Works across all of Europe",
+    uk: "Працює по всій Європі",
   },
   "paperContracts.isolationDesc1": {
-    en: "One set of ZK circuits. Every registry in the EU can verify against it. Civil registry, vehicle registry, university registry, health insurance \u2014 none of them talk to each other. None of them need to. The citizen carries the proof. The registries stay in their lanes.",
-    uk: "Один набір ZK-схем. Кожен реєстр в ЄС може верифікувати проти нього. Цивільний реєстр, реєстр ТЗ, університетський реєстр, медичне страхування \u2014 жоден з них не спілкується з іншим. І не треба. Громадянин несе доказ. Реєстри залишаються у своїх смугах.",
+    en: "One set of circuits works with every registry in the EU \u2014 civil, vehicle, university, insurance. They don't need to talk to each other. The citizen carries the proof.",
+    uk: "Один набір схем працює з кожним реєстром ЄС \u2014 цивільним, транспортним, університетським, страховим. Їм не потрібно спілкуватися між собою. Громадянин несе доказ.",
   },
   "paperContracts.isolationDesc2": {
-    en: "27 countries. 27 different IT systems. 27 different data protection laws. Zero bilateral integrations needed. A French citizen proves age to a German authority. France and Germany exchange exactly zero bytes. That\u2019s not a roadmap \u2014 that\u2019s nine Circom circuits and a compact proof.",
-    uk: "27 країн. 27 різних ІТ-систем. 27 різних законів про захист даних. Нуль двосторонніх інтеграцій. Французький громадянин доводить вік німецькому відомству. Франція і Німеччина обмінюються рівно нулем байтів. Це не дорожня карта \u2014 це дев\u2019ять Circom-схем і компактний доказ.",
+    en: "27 countries, 27 IT systems, zero integrations needed. A French citizen proves age to a German authority \u2014 France and Germany exchange nothing.",
+    uk: "27 країн, 27 ІТ-систем, нуль інтеграцій. Французький громадянин доводить вік німецькому відомству \u2014 Франція і Німеччина не обмінюються нічим.",
   },
   "paperContracts.isolationRegistry1": {
     en: "Civil Registry",

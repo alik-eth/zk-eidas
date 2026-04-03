@@ -59,13 +59,13 @@ test.describe('Landing Page', () => {
     await page.goto('/')
     await expect(page.getByRole('heading', { name: 'zk-eidas', level: 2 })).toBeVisible()
     // Subtitle
-    await expect(page.getByText(/незв'язуваності|unlinkability/i).first()).toBeVisible()
-    // Unlinkability gap section
-    await expect(page.getByText(/Прогалина незв'язуваності|Unlinkability Gap/i).first()).toBeVisible()
+    await expect(page.getByText(/Доведіть, хто ви є|Prove who you are/i).first()).toBeVisible()
+    // Problem section
+    await expect(page.getByText(/Проблема з цифровими ID|problem with EU digital/i).first()).toBeVisible()
     // Live proof section
-    await expect(page.getByText(/eIDAS 2.0 в дії|in action/i).first()).toBeVisible()
+    await expect(page.getByText(/Спробуйте прямо зараз|Try it right now/i).first()).toBeVisible()
     // Paper contracts section
-    await expect(page.getByText(/контракти без персональних даних|contracts/i).first()).toBeVisible()
+    await expect(page.getByText(/Контракти без персональних даних|Contracts without personal data/i).first()).toBeVisible()
     // Footer
     await expect(page.getByText(/Apache 2.0/).first()).toBeVisible()
   })
@@ -79,7 +79,7 @@ test.describe('Learn Page', () => {
   test('renders all 8 sections', async ({ page }) => {
     await page.goto('/learn')
     // Section 1: eIDAS problem
-    await expect(page.getByText(/eIDAS 2.0|незв'язуваності/).first()).toBeVisible()
+    await expect(page.getByText(/eIDAS 2.0|Доведіть, хто ви є|Prove who you are/).first()).toBeVisible()
     // Section 3: Comparison table
     await expect(page.getByText(/SD-JWT VC/).first()).toBeVisible()
     await expect(page.getByText(/BBS\+/).first()).toBeVisible()
@@ -306,8 +306,8 @@ test.describe('i18n', () => {
   test('EN/UA toggle works', async ({ page }) => {
     await page.goto('/')
     await page.waitForTimeout(2000)
-    await expect(page.getByText(/незв'язуваності|eIDAS 2.0/).first()).toBeVisible()
+    await expect(page.getByText(/Доведіть, хто ви є/).first()).toBeVisible()
     await page.getByRole('button', { name: 'EN' }).click()
-    await expect(page.getByText(/unlinkability|eIDAS 2.0/i).first()).toBeVisible()
+    await expect(page.getByText(/Prove who you are/i).first()).toBeVisible()
   })
 })
