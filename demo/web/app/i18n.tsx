@@ -122,6 +122,7 @@ const translations: Record<string, Record<Locale, string>> = {
   "learn.tocTrustGap": { en: "Trust Gap", uk: "Прогалина довіри" },
   "learn.tocHowItWorks": { en: "How It Works", uk: "Як це працює" },
   "learn.tocCapabilities": { en: "Capabilities", uk: "Можливості" },
+  "learn.tocEscrow": { en: "Escrow", uk: "Ескроу" },
   "learn.tocStandards": { en: "Standards", uk: "Стандарти" },
   "learn.tocPrivacy": { en: "GDPR", uk: "GDPR" },
 
@@ -334,6 +335,158 @@ const translations: Record<string, Record<Locale, string>> = {
     uk: "Кожна схема предиката включає повну перевірку підпису ECDSA P-256. Всі докази криптографічно прив'язані до автентичних посвідчень.",
   },
 
+  // 6b. Identity Escrow
+  "learn.escrowTitle": { en: "Identity Escrow for Persistent Documents", uk: "Ідентіті ескроу для постійних документів" },
+  "learn.escrowSubtitle": {
+    en: "ZK proofs remove personal data from documents. But if parties are anonymous \u2014 how do you protect your rights in court? Identity escrow solves this: data is encrypted in the proof, decryption is only possible by a chosen escrow authority per established procedure.",
+    uk: "ZK-докази видаляють персональні дані з документів. Але якщо сторони анонімні \u2014 як захистити свої права в суді? Ідентіті ескроу вирішує це: дані зашифровані в доказі, розшифровка можлива тільки обраним ескроу-органом за встановленою процедурою.",
+  },
+  "learn.escrowHowTitle": { en: "How it works", uk: "Як це працює" },
+  "learn.escrowHowIntro": {
+    en: "At signing, each party:",
+    uk: "При підписанні кожна сторона:",
+  },
+  "learn.escrowStep1": {
+    en: "Packs their data (name, address, document number) into field elements",
+    uk: "Пакує свої дані (ім\u2019я, адреса, номер документа) в елементи поля",
+  },
+  "learn.escrowStep2": {
+    en: "Derives a symmetric key K deterministically from wallet secret and contract hash",
+    uk: "Виводить симетричний ключ K детерміновано з секрету гаманця та хешу контракту",
+  },
+  "learn.escrowStep3": {
+    en: "Generates a single ZK proof that simultaneously: verifies the government credential signature (ECDSA P-256 in-circuit), computes a nullifier binding identity to contract, encrypts credential data with symmetric cipher inside the circuit, commits to key K via hash commitment",
+    uk: "Генерує єдиний ZK-доказ, який одночасно: верифікує підпис державного посвідчення (ECDSA P-256 в схемі), обчислює нуліфікатор, що прив\u2019язує особу до контракту, шифрує дані посвідчення симетричним шифром всередині схеми, комітить ключ K через хеш-комітмент",
+  },
+  "learn.escrowStep4": {
+    en: "Encrypts K under the escrow authority\u2019s ML-KEM-768 key (post-quantum safe, NIST FIPS 203)",
+    uk: "Шифрує K під ML-KEM-768 ключем ескроу-органу (постквантово стійкий, NIST FIPS 203)",
+  },
+  "learn.escrowStep5": {
+    en: "Counterparty verifies the proof and confirms key commitment before co-signing",
+    uk: "Контрагент верифікує доказ і підтверджує комітмент ключа перед підписанням",
+  },
+  "learn.escrowHonestTitle": { en: "Why encryption is honest", uk: "Чому шифрування чесне" },
+  "learn.escrowHonestDesc": {
+    en: "Encryption happens inside the ZK circuit \u2014 the same one that verifies the issuer\u2019s signature. A party cannot encrypt garbage because the proof binds ciphertext to government-signed data. After decryption, the data hash must match the proof\u2019s public output.",
+    uk: "Шифрування відбувається всередині ZK-схеми \u2014 тієї самої, що верифікує підпис видавця. Сторона не може зашифрувати сміття, бо доказ прив\u2019язує шифротекст до даних, підписаних державою. Після розшифровки хеш даних повинен збігатися з публічним виходом доказу.",
+  },
+  "learn.escrowPluggableTitle": { en: "Pluggable escrow authority", uk: "Підключаємий ескроу-орган" },
+  "learn.escrowPluggableDesc": {
+    en: "The escrow authority is a contract parameter \u2014 like jurisdiction or arbitration clause. Both parties agree at signing.",
+    uk: "Ескроу-орган \u2014 це параметр контракту, як юрисдикція чи арбітражне застереження. Обидві сторони домовляються при підписанні.",
+  },
+  "learn.escrowAuthorityCol": { en: "Escrow authority", uk: "Ескроу-орган" },
+  "learn.escrowTriggerCol": { en: "Trigger", uk: "Тригер" },
+  "learn.escrowTrustCol": { en: "Trust model", uk: "Модель довіри" },
+  "learn.escrowNotary": { en: "Notary", uk: "Нотаріус" },
+  "learn.escrowNotaryTrigger": { en: "Court order", uk: "Ухвала суду" },
+  "learn.escrowNotaryTrust": { en: "Notary already stores originals", uk: "Нотаріус вже зберігає оригінали" },
+  "learn.escrowArbitration": { en: "Arbitration (ICC, LCIA)", uk: "Арбітраж (ICC, LCIA)" },
+  "learn.escrowArbitrationTrigger": { en: "Arbitration award", uk: "Арбітражне рішення" },
+  "learn.escrowArbitrationTrust": { en: "Standard commercial practice", uk: "Стандартна комерційна практика" },
+  "learn.escrowRegistry": { en: "State registry (Diia)", uk: "Держреєстр (Дія)" },
+  "learn.escrowRegistryTrigger": { en: "Court order", uk: "Ухвала суду" },
+  "learn.escrowRegistryTrust": { en: "Issuer already has the data \u2014 zero new trust", uk: "Видавець вже має дані \u2014 нуль нової довіри" },
+  "learn.escrowSmartContract": { en: "Smart contract", uk: "Смарт-контракт" },
+  "learn.escrowSmartContractTrigger": { en: "On-chain ruling", uk: "Он-чейн рішення" },
+  "learn.escrowSmartContractTrust": { en: "Decentralized fallback", uk: "Децентралізований фолбек" },
+  "learn.escrowOverhead": {
+    en: "In-circuit encryption adds ~2,500 constraints \u2014 +0.13% over the ~2M base ECDSA constraints. Effectively free.",
+    uk: "Шифрування всередині схеми додає ~2,500 обмежень \u2014 +0.13% до ~2M базових обмежень ECDSA. Фактично безкоштовно.",
+  },
+
+  // Escrow — Offline vs On-Chain
+  "learn.escrowModesTitle": { en: "Offline & On-Chain", uk: "Офлайн та он-чейн" },
+  "learn.escrowOfflineTitle": { en: "Offline (Paper Contracts)", uk: "Офлайн (паперові договори)" },
+  "learn.escrowOffline1": {
+    en: "Proof QR codes printed on paper \u2014 publicly verifiable by any scanner",
+    uk: "QR-коди доказів друкуються на папері \u2014 публічно верифіковані будь-яким сканером",
+  },
+  "learn.escrowOffline2": {
+    en: "Escrow QR stored separately by the escrow authority",
+    uk: "Ескроу QR зберігається окремо ескроу-органом",
+  },
+  "learn.escrowOffline3": {
+    en: "Court order \u2192 authority decrypts \u2192 reveals identity",
+    uk: "Ухвала суду \u2192 орган розшифровує \u2192 розкриває особу",
+  },
+  "learn.escrowOffline4": {
+    en: "The proof and the envelope never travel together",
+    uk: "Доказ і конверт ніколи не подорожують разом",
+  },
+  "learn.escrowOnchainTitle": { en: "On-Chain (Smart Contracts)", uk: "Он-чейн (смарт-контракти)" },
+  "learn.escrowOnchain1": {
+    en: "Full envelope on-chain \u2014 ciphertext + encrypted key published in the transaction",
+    uk: "Повний конверт в ланцюгу \u2014 шифротекст + зашифрований ключ публікуються в транзакції",
+  },
+  "learn.escrowOnchain2": {
+    en: "No dependency on authority storage \u2014 the contract is fully self-contained",
+    uk: "Жодної залежності від сховища органу \u2014 контракт повністю самодостатній",
+  },
+  "learn.escrowOnchain3": {
+    en: "Authority needs only their ML-KEM seed to decrypt \u2014 nothing to store",
+    uk: "Органу потрібен лише ML-KEM seed для розшифровки \u2014 нічого зберігати",
+  },
+  "learn.escrowOnchain4": {
+    en: "Quantum-safe: ML-KEM-768 (NIST FIPS 203) \u2014 no known quantum attack",
+    uk: "Квантово-стійкий: ML-KEM-768 (NIST FIPS 203) \u2014 жодної відомої квантової атаки",
+  },
+
+  // Escrow — Quantum Safety
+  "learn.escrowQuantumTitle": { en: "Post-Quantum Escrow Envelope", uk: "Постквантовий ескроу-конверт" },
+  "learn.escrowQuantumDesc": {
+    en: "The escrow envelope is encrypted with ML-KEM-768 (NIST FIPS 203) \u2014 a lattice-based key encapsulation mechanism resistant to quantum attacks. ECIES on secp256k1 would let a future quantum computer decrypt every published contract retroactively. ML-KEM ensures contracts signed today stay sealed against tomorrow\u2019s quantum computers.",
+    uk: "Ескроу-конверт зашифрований ML-KEM-768 (NIST FIPS 203) \u2014 решітковий механізм інкапсуляції ключів, стійкий до квантових атак. ECIES на secp256k1 дозволив би майбутньому квантовому комп\u2019ютеру розшифрувати кожен опублікований контракт ретроактивно. ML-KEM гарантує, що контракти підписані сьогодні залишаться запечатаними проти квантових комп\u2019ютерів завтрашнього дня.",
+  },
+
+  // Escrow — Architecture
+  "learn.escrowArchTitle": { en: "Architecture", uk: "Архітектура" },
+  "learn.escrowArchCircuit": { en: "Inside ZK Circuit", uk: "Всередині ZK-схеми" },
+  "learn.escrowArchOutside": { en: "Outside Circuit", uk: "Поза схемою" },
+  "learn.escrowArchCircuitItems": {
+    en: "Commitment chain|ECDSA P-256 binding|Poseidon-CTR encrypt|Poseidon(K) commitment",
+    uk: "Ланцюг комітментів|ECDSA P-256 прив\u2019язка|Poseidon-CTR шифрування|Poseidon(K) комітмент",
+  },
+  "learn.escrowArchOutputs": {
+    en: "credential_hash|ciphertext[8]|key_commitment",
+    uk: "credential_hash|ciphertext[8]|key_commitment",
+  },
+  "learn.escrowArchMlkem": { en: "ML-KEM-768 encrypt(K)", uk: "ML-KEM-768 encrypt(K)" },
+
+  // Landing page — quantum callout
+  "paperContracts.quantumSafe": {
+    en: "Escrow envelope uses ML-KEM-768 (NIST FIPS 203) \u2014 post-quantum encryption. Contracts signed today stay sealed against future quantum computers.",
+    uk: "Ескроу-конверт використовує ML-KEM-768 (NIST FIPS 203) \u2014 постквантове шифрування. Контракти підписані сьогодні залишаються запечатаними проти майбутніх квантових комп\u2019ютерів.",
+  },
+
+  // Escrow UI (shared between sandbox and contracts)
+  "escrow.toggle": { en: "Identity Escrow", uk: "Ідентіті ескроу" },
+  "escrow.toggleDesc": {
+    en: "Encrypt personal data inside the proof — decryption only by escrow authority",
+    uk: "Зашифрувати персональні дані в доказі — розшифровка тільки ескроу-органом",
+  },
+  "escrow.fieldsLabel": { en: "Fields to encrypt", uk: "Поля для шифрування" },
+  "escrow.lockedFieldsLabel": {
+    en: "Encrypted fields (required for court filing)",
+    uk: "Зашифровані поля (потрібні для подання до суду)",
+  },
+  "escrow.ecdsaBinding": { en: "ECDSA binding claim", uk: "ECDSA-прив'язка" },
+  "escrow.keypairGenerated": { en: "Throwaway keypair generated", uk: "Одноразову пару ключів згенеровано" },
+  "escrow.envelopeTitle": { en: "Escrow Envelope", uk: "Ескроу-конверт" },
+  "escrow.credentialHash": { en: "Credential hash", uk: "Хеш посвідчення" },
+  "escrow.ciphertext": { en: "Ciphertext", uk: "Шифротекст" },
+  "escrow.keyCommitment": { en: "Key commitment", uk: "Комітмент ключа" },
+  "escrow.authorityPubkey": { en: "Authority pubkey", uk: "Публічний ключ органу" },
+  "escrow.decryptBtn": { en: "Decrypt as Authority", uk: "Розшифрувати як орган" },
+  "escrow.decryptedTitle": { en: "Decrypted Identity", uk: "Розшифрована особа" },
+  "escrow.decrypting": { en: "Decrypting...", uk: "Розшифровуємо..." },
+  "escrow.qrLabel": { en: "Escrow Envelope (ML-KEM-768)", uk: "Ескроу-конверт (ML-KEM-768)" },
+  "escrow.qrSubtitle": {
+    en: "Post-quantum encrypted. Decryption only by escrow authority.",
+    uk: "Постквантове шифрування. Розшифровка тільки ескроу-органом.",
+  },
+
   // 7. Standards & Compliance
   "learn.standardsTitle": { en: "Standards & Compliance", uk: "Стандарти та відповідність" },
   "learn.standardsSubtitle": {
@@ -513,9 +666,13 @@ const translations: Record<string, Record<Locale, string>> = {
     en: "Zero personal data disclosed. Every condition machine-verifiable.",
     uk: "Жодних персональних даних. Кожна умова верифікується машиною.",
   },
+  "paperContracts.escrowLine": {
+    en: "Personal data encrypted in proof \u2014 decryption only by escrow authority per established procedure",
+    uk: "Персональні дані зашифровані в доказі \u2014 розшифровка тільки ескроу-органом за встановленою процедурою",
+  },
   "paperContracts.courtResolution": {
-    en: "Dispute? Court subpoenas the credential issuer by nullifier.\nThe issuer searches their database \u2014 finds the counterparty.\nIdentification is a judicial act, not a property of the document.",
-    uk: "Спір? Суд запитує видавця посвідчень за нуліфікатором.\nВидавець перебирає свою базу \u2014 знаходить контрагента.\nІдентифікація \u2014 судова дія, а не властивість документу.",
+    en: "Dispute? Each party\u2019s data is encrypted inside the ZK proof.\nThe symmetric key is encrypted under the escrow authority\u2019s public key \u2014 notary, arbitrator, state registry, or smart contract.\nThe escrow authority decrypts the key per established procedure \u2014 claimant receives name and address.\nIdentification is a procedural act, not a property of the document.",
+    uk: "Спір? Дані кожної сторони зашифровані всередині ZK-доказу.\nСиметричний ключ зашифрований під публічним ключем ескроу-органу \u2014 нотаріуса, арбітражу, державного реєстру або смарт-контракту.\nЕскроу-орган розшифровує ключ за встановленою процедурою \u2014 позивач отримує ім\u2019я та адресу відповідача.\nІдентифікація \u2014 дія за процедурою, а не властивість документу.",
   },
   "paperContracts.qrLabel": {
     en: "Real QR codes embedding compressed ZK proofs — scannable and verifiable offline",
@@ -628,524 +785,524 @@ const translations: Record<string, Record<Locale, string>> = {
   },
 
   // ── Demo page ───────────────────────────────────────────────────────────
-  "demo.subtitle": {
+  "sandbox.subtitle": {
     en: "Zero-Knowledge Selective Disclosure for eIDAS 2.0 Credentials",
     uk: "Вибіркове розкриття з нульовим розголошенням для eIDAS 2.0 посвідчень",
   },
-  "demo.step1Label": { en: "Issuer", uk: "Видавець" },
-  "demo.step1Desc": { en: "Issue a verifiable credential", uk: "Видати верифіковане посвідчення" },
-  "demo.step2Label": { en: "Schema", uk: "Схема" },
-  "demo.step2Desc": { en: "Select predicates & generate proof", uk: "Обрати предикати та згенерувати доказ" },
-  "demo.step3Label": { en: "Verifier", uk: "Верифікатор" },
-  "demo.step3Desc": { en: "Zero-knowledge verification result", uk: "Результат верифікації з нульовим розголошенням" },
-  "demo.step4Label": { en: "Print", uk: "Друк" },
-  "demo.step4Desc": { en: "QR codes for offline verification", uk: "QR-коди для офлайн верифікації" },
-  "demo.saveProof": { en: "Save Proof", uk: "Зберегти доказ" },
+  "sandbox.step1Label": { en: "Issuer", uk: "Видавець" },
+  "sandbox.step1Desc": { en: "Issue a verifiable credential", uk: "Видати верифіковане посвідчення" },
+  "sandbox.step2Label": { en: "Schema", uk: "Схема" },
+  "sandbox.step2Desc": { en: "Select predicates & generate proof", uk: "Обрати предикати та згенерувати доказ" },
+  "sandbox.step3Label": { en: "Verifier", uk: "Верифікатор" },
+  "sandbox.step3Desc": { en: "Zero-knowledge verification result", uk: "Результат верифікації з нульовим розголошенням" },
+  "sandbox.step4Label": { en: "Print", uk: "Друк" },
+  "sandbox.step4Desc": { en: "QR codes for offline verification", uk: "QR-коди для офлайн верифікації" },
+  "sandbox.saveProof": { en: "Save Proof", uk: "Зберегти доказ" },
 
   // ── Tab labels ──────────────────────────────────────────────────────────
-  "demo.tabPid": { en: "National ID (PID)", uk: "Національний ID (PID)" },
-  "demo.tabDrivers": { en: "Driver\u2019s License", uk: "Водійське посвідчення" },
-  "demo.tabDiploma": { en: "University Diploma", uk: "Диплом університету" },
-  "demo.tabStudentId": { en: "Student Card", uk: "Студентський квиток" },
-  "demo.tabVehicle": { en: "Vehicle Registration", uk: "Реєстрація ТЗ" },
+  "sandbox.tabPid": { en: "National ID (PID)", uk: "Національний ID (PID)" },
+  "sandbox.tabDrivers": { en: "Driver\u2019s License", uk: "Водійське посвідчення" },
+  "sandbox.tabDiploma": { en: "University Diploma", uk: "Диплом університету" },
+  "sandbox.tabStudentId": { en: "Student Card", uk: "Студентський квиток" },
+  "sandbox.tabVehicle": { en: "Vehicle Registration", uk: "Реєстрація ТЗ" },
 
   // ── Issuer titles per credential type ───────────────────────────────────
-  "demo.issuerTitlePid": { en: "Credential Issuer \u2014 Diia", uk: "Видавець посвідчення \u2014 Дія" },
-  "demo.issuerSubtitlePid": { en: "Ministry of Digital Transformation of Ukraine", uk: "Міністерство цифрової трансформації України" },
-  "demo.issuerTitleDrivers": { en: "Credential Issuer \u2014 PPA", uk: "Видавець посвідчення \u2014 PPA" },
-  "demo.issuerSubtitleDrivers": { en: "Police and Border Guard Board \u2014 Estonia", uk: "Поліцейсько-прикордонне управління \u2014 Естонія" },
-  "demo.issuerTitleDiploma": { en: "Credential Issuer \u2014 Sorbonne Universit\u00e9", uk: "Видавець посвідчення \u2014 Сорбонна" },
-  "demo.issuerSubtitleDiploma": { en: "Sorbonne Universit\u00e9 \u2014 France", uk: "Університет Сорбонни \u2014 Франція" },
-  "demo.issuerTitleStudentId": { en: "Student Card Issuer \u2014 University of Warsaw", uk: "Видавець студентського квитка \u2014 Варшавський університет" },
-  "demo.issuerSubtitleStudentId": { en: "Uniwersytet Warszawski \u2014 Poland", uk: "Uniwersytet Warszawski \u2014 Польща" },
-  "demo.issuerTitleVehicle": { en: "Credential Issuer \u2014 KBA", uk: "Видавець посвідчення \u2014 KBA" },
-  "demo.issuerSubtitleVehicle": { en: "Kraftfahrt-Bundesamt \u2014 Germany", uk: "Федеральне відомство автотранспорту \u2014 Німеччина" },
-  "demo.issuerTitlePidDe": { en: "Bundesdruckerei", uk: "Bundesdruckerei" },
-  "demo.issuerSubtitlePidDe": { en: "Federal Printing Office \u2014 Germany", uk: "Федеральна друкарня \u2014 Німеччина" },
-  "demo.issuerTitleDriversUa": { en: "HSC MVS", uk: "ГСЦ МВС" },
-  "demo.issuerSubtitleDriversUa": { en: "Main Service Centre of MIA \u2014 Ukraine", uk: "Головний сервісний центр МВС України" },
-  "demo.issuerTitleStudentIdUa": { en: "Taras Shevchenko KNU", uk: "КНУ ім. Шевченка" },
-  "demo.issuerSubtitleStudentIdUa": { en: "Taras Shevchenko National University \u2014 Ukraine", uk: "Київський національний університет ім. Тараса Шевченка" },
-  "demo.issuerTitleDiplomaUa": { en: "Igor Sikorsky KPI", uk: "КПІ ім. Сікорського" },
-  "demo.issuerSubtitleDiplomaUa": { en: "Igor Sikorsky Kyiv Polytechnic Institute \u2014 Ukraine", uk: "Київський політехнічний інститут ім. Ігоря Сікорського" },
-  "demo.issuerTitleVehicleUa": { en: "MVS Ukraine", uk: "МВС України" },
-  "demo.issuerSubtitleVehicleUa": { en: "Ministry of Internal Affairs \u2014 Ukraine", uk: "Міністерство внутрішніх справ України" },
+  "sandbox.issuerTitlePid": { en: "Credential Issuer \u2014 Diia", uk: "Видавець посвідчення \u2014 Дія" },
+  "sandbox.issuerSubtitlePid": { en: "Ministry of Digital Transformation of Ukraine", uk: "Міністерство цифрової трансформації України" },
+  "sandbox.issuerTitleDrivers": { en: "Credential Issuer \u2014 PPA", uk: "Видавець посвідчення \u2014 PPA" },
+  "sandbox.issuerSubtitleDrivers": { en: "Police and Border Guard Board \u2014 Estonia", uk: "Поліцейсько-прикордонне управління \u2014 Естонія" },
+  "sandbox.issuerTitleDiploma": { en: "Credential Issuer \u2014 Sorbonne Universit\u00e9", uk: "Видавець посвідчення \u2014 Сорбонна" },
+  "sandbox.issuerSubtitleDiploma": { en: "Sorbonne Universit\u00e9 \u2014 France", uk: "Університет Сорбонни \u2014 Франція" },
+  "sandbox.issuerTitleStudentId": { en: "Student Card Issuer \u2014 University of Warsaw", uk: "Видавець студентського квитка \u2014 Варшавський університет" },
+  "sandbox.issuerSubtitleStudentId": { en: "Uniwersytet Warszawski \u2014 Poland", uk: "Uniwersytet Warszawski \u2014 Польща" },
+  "sandbox.issuerTitleVehicle": { en: "Credential Issuer \u2014 KBA", uk: "Видавець посвідчення \u2014 KBA" },
+  "sandbox.issuerSubtitleVehicle": { en: "Kraftfahrt-Bundesamt \u2014 Germany", uk: "Федеральне відомство автотранспорту \u2014 Німеччина" },
+  "sandbox.issuerTitlePidDe": { en: "Bundesdruckerei", uk: "Bundesdruckerei" },
+  "sandbox.issuerSubtitlePidDe": { en: "Federal Printing Office \u2014 Germany", uk: "Федеральна друкарня \u2014 Німеччина" },
+  "sandbox.issuerTitleDriversUa": { en: "HSC MVS", uk: "ГСЦ МВС" },
+  "sandbox.issuerSubtitleDriversUa": { en: "Main Service Centre of MIA \u2014 Ukraine", uk: "Головний сервісний центр МВС України" },
+  "sandbox.issuerTitleStudentIdUa": { en: "Taras Shevchenko KNU", uk: "КНУ ім. Шевченка" },
+  "sandbox.issuerSubtitleStudentIdUa": { en: "Taras Shevchenko National University \u2014 Ukraine", uk: "Київський національний університет ім. Тараса Шевченка" },
+  "sandbox.issuerTitleDiplomaUa": { en: "Igor Sikorsky KPI", uk: "КПІ ім. Сікорського" },
+  "sandbox.issuerSubtitleDiplomaUa": { en: "Igor Sikorsky Kyiv Polytechnic Institute \u2014 Ukraine", uk: "Київський політехнічний інститут ім. Ігоря Сікорського" },
+  "sandbox.issuerTitleVehicleUa": { en: "MVS Ukraine", uk: "МВС України" },
+  "sandbox.issuerSubtitleVehicleUa": { en: "Ministry of Internal Affairs \u2014 Ukraine", uk: "Міністерство внутрішніх справ України" },
 
   // ── Credential labels ──────────────────────────────────────────────────
-  "demo.credLabelPid": { en: "Personal Identification Data (PID)", uk: "Персональні ідентифікаційні дані (PID)" },
-  "demo.credLabelDrivers": { en: "EU Driver\u2019s License (mDL)", uk: "Водійське посвідчення ЄС (mDL)" },
-  "demo.credLabelDiploma": { en: "University Diploma (EAA)", uk: "Диплом університету (EAA)" },
-  "demo.credLabelStudentId": { en: "Student Card (EAA)", uk: "Студентський квиток (EAA)" },
-  "demo.credLabelVehicle": { en: "Vehicle Registration Certificate", uk: "Свідоцтво про реєстрацію ТЗ" },
+  "sandbox.credLabelPid": { en: "Personal Identification Data (PID)", uk: "Персональні ідентифікаційні дані (PID)" },
+  "sandbox.credLabelDrivers": { en: "EU Driver\u2019s License (mDL)", uk: "Водійське посвідчення ЄС (mDL)" },
+  "sandbox.credLabelDiploma": { en: "University Diploma (EAA)", uk: "Диплом університету (EAA)" },
+  "sandbox.credLabelStudentId": { en: "Student Card (EAA)", uk: "Студентський квиток (EAA)" },
+  "sandbox.credLabelVehicle": { en: "Vehicle Registration Certificate", uk: "Свідоцтво про реєстрацію ТЗ" },
 
   // ── Field labels ───────────────────────────────────────────────────────
-  "demo.fieldBirthDate": { en: "Date of Birth", uk: "Дата народження" },
-  "demo.fieldAgeOver18": { en: "Age Over 18", uk: "Вік понад 18" },
-  "demo.fieldIssuingCountry": { en: "Issuing Country", uk: "Країна видачі" },
-  "demo.fieldGender": { en: "Gender", uk: "Стать" },
-  "demo.fieldResidentCity": { en: "Resident City", uk: "Місто проживання" },
-  "demo.fieldExpiryDate": { en: "Expiry Date", uk: "Дата закінчення" },
-  "demo.predAgeOver18": { en: "Age confirmed (boolean)", uk: "Вік підтверджено (булеве)" },
-  "demo.predAgeOver18Desc": { en: "Proves age_over_18 is true without revealing birthdate", uk: "Доводить, що age_over_18 є true без розкриття дати народження" },
-  "demo.predIssuingCountry": { en: "Issuing country is in eIDAS zone", uk: "Країна видачі в зоні eIDAS" },
-  "demo.predIssuingCountryDesc": { en: "Proves issuing country is an EU/eIDAS member", uk: "Доводить, що країна видачі є членом ЄС/eIDAS" },
-  "demo.predDocValid": { en: "Document is not expired", uk: "Документ не прострочений" },
-  "demo.predDocValidDesc": { en: "Proves expiry date is in the future", uk: "Доводить, що дата закінчення в майбутньому" },
-  "demo.field.holderName": { en: "Holder Name", uk: "Ім'я власника" },
-  "demo.field.category": { en: "Category", uk: "Категорія" },
-  "demo.field.issueDate": { en: "Issue Date", uk: "Дата видачі" },
-  "demo.field.expiryDate": { en: "Expiry Date", uk: "Дата закінчення" },
-  "demo.field.restrictions": { en: "Restrictions", uk: "Обмеження" },
-  "demo.field.licenseNumber": { en: "License Number", uk: "Номер посвідчення" },
-  "demo.field.studentName": { en: "Student Name", uk: "Ім'я студента" },
-  "demo.field.university": { en: "University", uk: "Університет" },
-  "demo.field.degree": { en: "Degree", uk: "Ступінь" },
-  "demo.field.fieldOfStudy": { en: "Field of Study", uk: "Спеціальність" },
-  "demo.field.graduationYear": { en: "Graduation Year", uk: "Рік випуску" },
-  "demo.field.diplomaNumber": { en: "Diploma Number", uk: "Номер диплома" },
-  "demo.field.honors": { en: "Honors", uk: "Відзнака" },
-  "demo.field.faculty": { en: "Faculty", uk: "Факультет" },
-  "demo.field.enrollmentYear": { en: "Enrollment Year", uk: "Рік вступу" },
-  "demo.field.validUntil": { en: "Valid Until", uk: "Дійсний до" },
-  "demo.field.studentNumber": { en: "Student Number", uk: "Номер студентського квитка" },
-  "demo.field.ownerName": { en: "Owner Name", uk: "Ім'я власника" },
-  "demo.field.ownerDocNumber": { en: "Owner Document No.", uk: "Номер документа власника" },
-  "demo.field.plateNumber": { en: "Plate Number", uk: "Номерний знак" },
-  "demo.field.makeModel": { en: "Make & Model", uk: "Марка та модель" },
-  "demo.field.vin": { en: "VIN", uk: "VIN" },
-  "demo.field.insuranceExpiry": { en: "Insurance Expiry", uk: "Закінчення страховки" },
-  "demo.field.registrationDate": { en: "Registration Date", uk: "Дата реєстрації" },
+  "sandbox.fieldBirthDate": { en: "Date of Birth", uk: "Дата народження" },
+  "sandbox.fieldAgeOver18": { en: "Age Over 18", uk: "Вік понад 18" },
+  "sandbox.fieldIssuingCountry": { en: "Issuing Country", uk: "Країна видачі" },
+  "sandbox.fieldGender": { en: "Gender", uk: "Стать" },
+  "sandbox.fieldResidentCity": { en: "Resident City", uk: "Місто проживання" },
+  "sandbox.fieldExpiryDate": { en: "Expiry Date", uk: "Дата закінчення" },
+  "sandbox.predAgeOver18": { en: "Age confirmed (boolean)", uk: "Вік підтверджено (булеве)" },
+  "sandbox.predAgeOver18Desc": { en: "Proves age_over_18 is true without revealing birthdate", uk: "Доводить, що age_over_18 є true без розкриття дати народження" },
+  "sandbox.predIssuingCountry": { en: "Issuing country is in eIDAS zone", uk: "Країна видачі в зоні eIDAS" },
+  "sandbox.predIssuingCountryDesc": { en: "Proves issuing country is an EU/eIDAS member", uk: "Доводить, що країна видачі є членом ЄС/eIDAS" },
+  "sandbox.predDocValid": { en: "Document is not expired", uk: "Документ не прострочений" },
+  "sandbox.predDocValidDesc": { en: "Proves expiry date is in the future", uk: "Доводить, що дата закінчення в майбутньому" },
+  "sandbox.field.holderName": { en: "Holder Name", uk: "Ім'я власника" },
+  "sandbox.field.category": { en: "Category", uk: "Категорія" },
+  "sandbox.field.issueDate": { en: "Issue Date", uk: "Дата видачі" },
+  "sandbox.field.expiryDate": { en: "Expiry Date", uk: "Дата закінчення" },
+  "sandbox.field.restrictions": { en: "Restrictions", uk: "Обмеження" },
+  "sandbox.field.licenseNumber": { en: "License Number", uk: "Номер посвідчення" },
+  "sandbox.field.studentName": { en: "Student Name", uk: "Ім'я студента" },
+  "sandbox.field.university": { en: "University", uk: "Університет" },
+  "sandbox.field.degree": { en: "Degree", uk: "Ступінь" },
+  "sandbox.field.fieldOfStudy": { en: "Field of Study", uk: "Спеціальність" },
+  "sandbox.field.graduationYear": { en: "Graduation Year", uk: "Рік випуску" },
+  "sandbox.field.diplomaNumber": { en: "Diploma Number", uk: "Номер диплома" },
+  "sandbox.field.honors": { en: "Honors", uk: "Відзнака" },
+  "sandbox.field.faculty": { en: "Faculty", uk: "Факультет" },
+  "sandbox.field.enrollmentYear": { en: "Enrollment Year", uk: "Рік вступу" },
+  "sandbox.field.validUntil": { en: "Valid Until", uk: "Дійсний до" },
+  "sandbox.field.studentNumber": { en: "Student Number", uk: "Номер студентського квитка" },
+  "sandbox.field.ownerName": { en: "Owner Name", uk: "Ім'я власника" },
+  "sandbox.field.ownerDocNumber": { en: "Owner Document No.", uk: "Номер документа власника" },
+  "sandbox.field.plateNumber": { en: "Plate Number", uk: "Номерний знак" },
+  "sandbox.field.makeModel": { en: "Make & Model", uk: "Марка та модель" },
+  "sandbox.field.vin": { en: "VIN", uk: "VIN" },
+  "sandbox.field.insuranceExpiry": { en: "Insurance Expiry", uk: "Закінчення страховки" },
+  "sandbox.field.registrationDate": { en: "Registration Date", uk: "Дата реєстрації" },
 
   // ── Predicate labels + descriptions ────────────────────────────────────
-  "demo.predCategoryB": { en: "License includes category B", uk: "Посвідчення включає категорію B" },
-  "demo.predCategoryBDesc": { en: "Proves category matches expected value", uk: "Доводить відповідність категорії очікуваному значенню" },
-  "demo.predValid": { en: "License is valid (not expired)", uk: "Посвідчення дійсне (не прострочене)" },
-  "demo.predValidDesc": { en: "Proves expiry date is in the future", uk: "Доводить, що дата закінчення в майбутньому" },
-  "demo.predExperienced": { en: "Issued at least 2 years ago", uk: "Видано щонайменше 2 роки тому" },
-  "demo.predExperiencedDesc": { en: "Proves driving experience of 2+ years", uk: "Доводить водійський досвід 2+ роки" },
-  "demo.predNoRestrictions": { en: "No restrictions on license", uk: "Без обмежень на посвідченні" },
-  "demo.predNoRestrictionsDesc": { en: "Proves restrictions field equals 'None'", uk: "Доводить, що поле обмежень дорівнює 'None'" },
-  "demo.predStem": { en: "Field is in STEM", uk: "Спеціальність в STEM" },
-  "demo.predStemDesc": { en: "Proves field of study is in STEM disciplines", uk: "Доводить, що спеціальність належить до STEM" },
-  "demo.predRecentGrad": { en: "Graduated in 2020 or later", uk: "Закінчив у 2020 або пізніше" },
-  "demo.predRecentGradDesc": { en: "Proves graduation year >= 2020", uk: "Доводить рік випуску >= 2020" },
-  "demo.predMasters": { en: "Holds a Master's degree", uk: "Має ступінь магістра" },
-  "demo.predMastersDesc": { en: "Proves degree is Master or PhD level", uk: "Доводить ступінь магістра або PhD" },
-  "demo.predUniversityMatch": { en: "University matches value", uk: "Університет відповідає значенню" },
-  "demo.predUniversityMatchDesc": { en: "Proves university equals expected value", uk: "Доводить, що університет дорівнює очікуваному" },
-  "demo.predActiveStudent": { en: "Student card is valid", uk: "Студентський квиток дійсний" },
-  "demo.predActiveStudentDesc": { en: "Proves the student card has not expired", uk: "Доводить, що студентський квиток не прострочений" },
-  "demo.predEnrolledRecently": { en: "Enrolled in 2020 or later", uk: "Вступив у 2020 або пізніше" },
-  "demo.predEnrolledRecentlyDesc": { en: "Proves enrollment year is 2020 or later", uk: "Доводить, що рік вступу — 2020 або пізніше" },
-  "demo.predInsured": { en: "Vehicle is insured (not expired)", uk: "ТЗ застраховано (не прострочено)" },
-  "demo.predInsuredDesc": { en: "Proves insurance expiry date is in the future", uk: "Доводить, що страховка не закінчилась" },
-  "demo.predEuType": { en: "Make is EU type-approved", uk: "Марка сертифікована в ЄС" },
-  "demo.predEuTypeDesc": { en: "Proves vehicle make is in EU type-approved list", uk: "Доводить, що марка авто в списку сертифікованих ЄС" },
-  "demo.predVinActive": { en: "VIN not revoked", uk: "VIN не відкликано" },
-  "demo.predVinActiveDesc": { en: "Proves VIN is not in revocation registry", uk: "Доводить, що VIN не в реєстрі відкликань" },
+  "sandbox.predCategoryB": { en: "License includes category B", uk: "Посвідчення включає категорію B" },
+  "sandbox.predCategoryBDesc": { en: "Proves category matches expected value", uk: "Доводить відповідність категорії очікуваному значенню" },
+  "sandbox.predValid": { en: "License is valid (not expired)", uk: "Посвідчення дійсне (не прострочене)" },
+  "sandbox.predValidDesc": { en: "Proves expiry date is in the future", uk: "Доводить, що дата закінчення в майбутньому" },
+  "sandbox.predExperienced": { en: "Issued at least 2 years ago", uk: "Видано щонайменше 2 роки тому" },
+  "sandbox.predExperiencedDesc": { en: "Proves driving experience of 2+ years", uk: "Доводить водійський досвід 2+ роки" },
+  "sandbox.predNoRestrictions": { en: "No restrictions on license", uk: "Без обмежень на посвідченні" },
+  "sandbox.predNoRestrictionsDesc": { en: "Proves restrictions field equals 'None'", uk: "Доводить, що поле обмежень дорівнює 'None'" },
+  "sandbox.predStem": { en: "Field is in STEM", uk: "Спеціальність в STEM" },
+  "sandbox.predStemDesc": { en: "Proves field of study is in STEM disciplines", uk: "Доводить, що спеціальність належить до STEM" },
+  "sandbox.predRecentGrad": { en: "Graduated in 2020 or later", uk: "Закінчив у 2020 або пізніше" },
+  "sandbox.predRecentGradDesc": { en: "Proves graduation year >= 2020", uk: "Доводить рік випуску >= 2020" },
+  "sandbox.predMasters": { en: "Holds a Master's degree", uk: "Має ступінь магістра" },
+  "sandbox.predMastersDesc": { en: "Proves degree is Master or PhD level", uk: "Доводить ступінь магістра або PhD" },
+  "sandbox.predUniversityMatch": { en: "University matches value", uk: "Університет відповідає значенню" },
+  "sandbox.predUniversityMatchDesc": { en: "Proves university equals expected value", uk: "Доводить, що університет дорівнює очікуваному" },
+  "sandbox.predActiveStudent": { en: "Student card is valid", uk: "Студентський квиток дійсний" },
+  "sandbox.predActiveStudentDesc": { en: "Proves the student card has not expired", uk: "Доводить, що студентський квиток не прострочений" },
+  "sandbox.predEnrolledRecently": { en: "Enrolled in 2020 or later", uk: "Вступив у 2020 або пізніше" },
+  "sandbox.predEnrolledRecentlyDesc": { en: "Proves enrollment year is 2020 or later", uk: "Доводить, що рік вступу — 2020 або пізніше" },
+  "sandbox.predInsured": { en: "Vehicle is insured (not expired)", uk: "ТЗ застраховано (не прострочено)" },
+  "sandbox.predInsuredDesc": { en: "Proves insurance expiry date is in the future", uk: "Доводить, що страховка не закінчилась" },
+  "sandbox.predEuType": { en: "Make is EU type-approved", uk: "Марка сертифікована в ЄС" },
+  "sandbox.predEuTypeDesc": { en: "Proves vehicle make is in EU type-approved list", uk: "Доводить, що марка авто в списку сертифікованих ЄС" },
+  "sandbox.predVinActive": { en: "VIN not revoked", uk: "VIN не відкликано" },
+  "sandbox.predVinActiveDesc": { en: "Proves VIN is not in revocation registry", uk: "Доводить, що VIN не в реєстрі відкликань" },
 
-  "demo.issuerTitle": {
+  "sandbox.issuerTitle": {
     en: "Credential Issuer \u2014 Diia",
     uk: "Видавець посвідчення \u2014 Дія",
   },
-  "demo.issuerSubtitle": {
+  "sandbox.issuerSubtitle": {
     en: "Ministry of Digital Transformation of Ukraine \u2014 PID Credential Example",
     uk: "Міністерство цифрової трансформації України \u2014 приклад PID посвідчення",
   },
-  "demo.pidLabel": {
+  "sandbox.pidLabel": {
     en: "Personal Identification Data (PID) \u2014 one of many eIDAS 2.0 credential types",
     uk: "Персональні ідентифікаційні дані (PID) \u2014 один з багатьох типів eIDAS 2.0 посвідчень",
   },
-  "demo.fieldGivenName": { en: "Given Name", uk: "Ім'я" },
-  "demo.fieldFamilyName": { en: "Family Name", uk: "Прізвище" },
-  "demo.fieldBirthdate": { en: "Date of Birth", uk: "Дата народження" },
-  "demo.fieldNationality": { en: "Nationality", uk: "Громадянство" },
-  "demo.fieldResidentCountry": {
+  "sandbox.fieldGivenName": { en: "Given Name", uk: "Ім'я" },
+  "sandbox.fieldFamilyName": { en: "Family Name", uk: "Прізвище" },
+  "sandbox.fieldBirthdate": { en: "Date of Birth", uk: "Дата народження" },
+  "sandbox.fieldNationality": { en: "Nationality", uk: "Громадянство" },
+  "sandbox.fieldResidentCountry": {
     en: "Resident Country",
     uk: "Країна проживання",
   },
-  "demo.fieldDocNumber": { en: "Document Number", uk: "Номер документа" },
-  "demo.fieldIssuingAuthority": {
+  "sandbox.fieldDocNumber": { en: "Document Number", uk: "Номер документа" },
+  "sandbox.fieldIssuingAuthority": {
     en: "Issuing Authority",
     uk: "Орган видачі",
   },
-  "demo.issuing": {
+  "sandbox.issuing": {
     en: "Issuing Credential...",
     uk: "Видача посвідчення...",
   },
-  "demo.issueBtn": {
+  "sandbox.issueBtn": {
     en: "Issue Credential",
     uk: "Видати посвідчення",
   },
-  "demo.issuingShort": { en: "Issuing...", uk: "Видача..." },
-  "demo.pidCredential": { en: "PID Credential", uk: "PID посвідчення" },
-  "demo.digitalCredential": {
+  "sandbox.issuingShort": { en: "Issuing...", uk: "Видача..." },
+  "sandbox.pidCredential": { en: "PID Credential", uk: "PID посвідчення" },
+  "sandbox.digitalCredential": {
     en: "Digital Credential",
     uk: "Цифрове посвідчення",
   },
-  "demo.sdjwtVc": {
+  "sandbox.sdjwtVc": {
     en: "SD-JWT Verifiable Credential",
     uk: "SD-JWT верифіковане посвідчення",
   },
-  "demo.sdjwtTooltip": {
+  "sandbox.sdjwtTooltip": {
     en: "A Selective Disclosure JSON Web Token. Each claim can be independently revealed or hidden.",
     uk: "Selective Disclosure JSON Web Token. Кожне твердження може бути незалежно розкрите або приховане.",
   },
-  "demo.selectClaims": {
+  "sandbox.selectClaims": {
     en: "Select Claims to Prove",
     uk: "Оберіть дані для доведення",
   },
-  "demo.selectClaimsSub": {
+  "sandbox.selectClaimsSub": {
     en: "Choose predicates for zero-knowledge proof",
     uk: "Оберіть предикати для доказу з нульовим розголошенням",
   },
-  "demo.predicateTooltip": {
+  "sandbox.predicateTooltip": {
     en: "A yes/no condition checked inside the ZK circuit, e.g. 'age >= 18'. The verifier learns only that the condition holds.",
     uk: "Умова так/ні, що перевіряється всередині ZK схеми, напр. 'вік >= 18'. Верифікатор дізнається лише, що умова виконана.",
   },
-  "demo.predAge": {
+  "sandbox.predAge": {
     en: "I am at least 18 years old",
     uk: "Мені щонайменше 18 років",
   },
-  "demo.predAgeDesc": {
+  "sandbox.predAgeDesc": {
     en: "Proves age >= 18 without revealing birthdate",
     uk: "Доводить вік >= 18 без розкриття дати народження",
   },
-  "demo.predNat": {
+  "sandbox.predNat": {
     en: "My nationality is in the eIDAS zone",
     uk: "Моє громадянство — в зоні eIDAS",
   },
-  "demo.predNatDesc": {
+  "sandbox.predNatDesc": {
     en: "Proves eIDAS zone membership without revealing country",
     uk: "Доводить членство в зоні eIDAS без розкриття країни",
   },
-  "demo.predName": {
+  "sandbox.predName": {
     en: "My name matches a specific value",
     uk: "Моє ім'я збігається з конкретним значенням",
   },
-  "demo.predNameDesc": {
+  "sandbox.predNameDesc": {
     en: "Proves name equality without revealing it in plaintext",
     uk: "Доводить рівність імені без розкриття його у відкритому вигляді",
   },
-  "demo.predAgeLte": {
+  "sandbox.predAgeLte": {
     en: "I am at most 65 years old",
     uk: "Мені не більше 65 років",
   },
-  "demo.predAgeLteDesc": {
+  "sandbox.predAgeLteDesc": {
     en: "Proves age <= 65 without revealing birthdate",
     uk: "Доводить вік <= 65 без розкриття дати народження",
   },
-  "demo.predNotRevoked": {
+  "sandbox.predNotRevoked": {
     en: "My credential is not revoked",
     uk: "Моє посвідчення не відкликане",
   },
-  "demo.predNotRevokedDesc": {
+  "sandbox.predNotRevokedDesc": {
     en: 'Proves document number is not "REVOKED"',
     uk: 'Доводить, що номер документа не "REVOKED"',
   },
-  "demo.predAgeRange": {
+  "sandbox.predAgeRange": {
     en: "My age is between 18 and 65",
     uk: "Мій вік від 18 до 65 років",
   },
-  "demo.predAgeRangeDesc": {
+  "sandbox.predAgeRangeDesc": {
     en: "Proves age is between 18 and 65 in a single circuit",
     uk: "Доводить, що вік від 18 до 65 в одній схемі",
   },
-  "demo.proofMode": { en: "Proof Mode", uk: "Режим доказу" },
-  "demo.proofModeTooltip": {
+  "sandbox.proofMode": { en: "Proof Mode", uk: "Режим доказу" },
+  "sandbox.proofModeTooltip": {
     en: "Individual proofs are verified separately. Compound proofs combine multiple predicates with AND/OR logic into a single proof.",
     uk: "Індивідуальні докази перевіряються окремо. Складені докази об'єднують кілька предикатів за логікою AND/OR в один доказ.",
   },
-  "demo.modeIndividual": { en: "Individual", uk: "Індивідуальний" },
-  "demo.modeIndividualDesc": {
+  "sandbox.modeIndividual": { en: "Individual", uk: "Індивідуальний" },
+  "sandbox.modeIndividualDesc": {
     en: "Separate proof per predicate",
     uk: "Окремий доказ на предикат",
   },
-  "demo.modeAndDesc": { en: "All must hold", uk: "Усі мають виконуватись" },
-  "demo.modeOrDesc": {
+  "sandbox.modeAndDesc": { en: "All must hold", uk: "Усі мають виконуватись" },
+  "sandbox.modeOrDesc": {
     en: "At least one must hold",
     uk: "Щонайменше один має виконуватись",
   },
-  "demo.modeExplainIndividual": {
+  "sandbox.modeExplainIndividual": {
     en: "Each predicate generates a separate proof",
     uk: "Кожен предикат генерує окремий доказ",
   },
-  "demo.modeExplainAnd": {
+  "sandbox.modeExplainAnd": {
     en: "Single compound proof \u2014 ALL predicates must be true",
     uk: "Один складений доказ \u2014 УСІ предикати мають бути істинними",
   },
-  "demo.modeExplainDocNumber": {
+  "sandbox.modeExplainDocNumber": {
     en: "Locked to AND \u2014 document number binds all predicates to one credential.",
     uk: "Зафіксовано AND \u2014 номер документа прив'язує всі предикати до одного посвідчення.",
   },
-  "demo.modeUnlock": {
+  "sandbox.modeUnlock": {
     en: "Disable document disclosure to unlock.",
     uk: "Вимкніть розкриття документа для розблокування.",
   },
-  "demo.printRequiresAnd": {
+  "sandbox.printRequiresAnd": {
     en: "Paper proofs require AND mode with document number disclosure for holder binding.",
     uk: "Паперові докази потребують режим AND з розкриттям номера документа для прив'язки до власника.",
   },
-  "demo.modeExplainOr": {
+  "sandbox.modeExplainOr": {
     en: "Single compound proof \u2014 AT LEAST ONE predicate must be true",
     uk: "Один складений доказ \u2014 ЩОНАЙМЕНШЕ ОДИН предикат має бути істинним",
   },
-  "demo.nullifierScope": {
+  "sandbox.nullifierScope": {
     en: "Nullifier Scope",
     uk: "Скоп нуліфікатора",
   },
-  "demo.nullifierTooltip": {
+  "sandbox.nullifierTooltip": {
     en: "A deterministic hash scoped to a context. Same credential + same scope = same nullifier, enabling double-spend detection.",
     uk: "Детермінований хеш, прив'язаний до контексту. Те саме посвідчення + той самий скоп = той самий нуліфікатор, що дозволяє виявити подвійне використання.",
   },
-  "demo.optional": { en: "(optional)", uk: "(необов'язково)" },
-  "demo.discloseDocNumber": {
+  "sandbox.optional": { en: "(optional)", uk: "(необов'язково)" },
+  "sandbox.discloseDocNumber": {
     en: "Disclose document number",
     uk: "Розкрити номер документа",
   },
-  "demo.discloseDocNumberDesc": {
+  "sandbox.discloseDocNumberDesc": {
     en: "Include the document number in plaintext so the verifier can cross-reference it against a physical ID. Recommended for paper proofs.",
     uk: "Включити номер документа у відкритому вигляді, щоб верифікатор міг звірити його з фізичним документом. Рекомендовано для паперових доказів.",
   },
-  "demo.docNumberWarning": {
+  "sandbox.docNumberWarning": {
     en: "Without a disclosed document number, a paper proof cannot be tied to a specific person. The verifier will have no way to confirm who the credential belongs to.",
     uk: "Без розкритого номера документа паперовий доказ не може бути прив'язаний до конкретної особи. Верифікатор не зможе підтвердити, кому належить посвідчення.",
   },
-  "demo.disclosed": {
+  "sandbox.disclosed": {
     en: "disclosed",
     uk: "розкрито",
   },
-  "demo.nullifierDesc": {
+  "sandbox.nullifierDesc": {
     en: "Generates a deterministic nullifier for double-spend detection. Same scope = same nullifier.",
     uk: "Генерує детермінований нуліфікатор для виявлення подвійного використання. Той самий скоп = той самий нуліфікатор.",
   },
-  "demo.generating": {
+  "sandbox.generating": {
     en: "Generating cryptographic proof... ",
     uk: "Генерація криптографічного доказу... ",
   },
-  "demo.generatingDesc": {
+  "sandbox.generatingDesc": {
     en: "Real ECDSA signature verification + zero-knowledge circuit execution in progress",
     uk: "Реальна перевірка ECDSA підпису + виконання схеми з нульовим розголошенням",
   },
-  "demo.proofGenerated": {
+  "sandbox.proofGenerated": {
     en: "Proof generated successfully",
     uk: "Доказ успішно згенеровано",
   },
-  "demo.backToIssuer": {
+  "sandbox.backToIssuer": {
     en: "\u2190 Back to Issuer",
     uk: "\u2190 Назад до видавця",
   },
-  "demo.generatingShort": { en: "Generating...", uk: "Генерація..." },
-  "demo.proofGeneratedBtn": {
+  "sandbox.generatingShort": { en: "Generating...", uk: "Генерація..." },
+  "sandbox.proofGeneratedBtn": {
     en: "Proof Generated",
     uk: "Доказ згенеровано",
   },
-  "demo.generateBtn": {
+  "sandbox.generateBtn": {
     en: "Generate ZK Proof",
     uk: "Згенерувати доказ з НР",
   },
-  "demo.generateBrowserBtn": {
+  "sandbox.generateBrowserBtn": {
     en: "Prove in Browser (snarkjs)",
     uk: "Довести у браузері (snarkjs)",
   },
-  "demo.browserHint": {
+  "sandbox.browserHint": {
     en: "Browser proving requires a lightweight witness endpoint (coming soon). ECDSA signature verification (~2M constraints) runs server-side; only predicate circuits (~300 constraints) can prove in-browser.",
     uk: "Доведення у браузері потребує легковагий ендпоінт для свідка (незабаром). Верифікація підпису ECDSA (~2M обмежень) виконується на сервері; лише предикатні схеми (~300 обмежень) можуть працювати у браузері.",
   },
-  "demo.verifierTitle": {
+  "sandbox.verifierTitle": {
     en: "Service Provider \u2014 Verification Portal",
     uk: "Постачальник послуг \u2014 Портал верифікації",
   },
-  "demo.verifierSubtitle": {
+  "sandbox.verifierSubtitle": {
     en: "Zero-Knowledge Proof Verification",
     uk: "Верифікація доказу з нульовим розголошенням",
   },
-  "demo.receivedArtifact": {
+  "sandbox.receivedArtifact": {
     en: "Received Proof Artifact",
     uk: "Отриманий артефакт доказу",
   },
-  "demo.opaqueNote": {
+  "sandbox.opaqueNote": {
     en: "Opaque cryptographic artifact \u2014 no credential data visible to verifier",
     uk: "Непрозорий криптографічний артефакт \u2014 дані посвідчення не видимі верифікатору",
   },
-  "demo.verifyServer": {
+  "sandbox.verifyServer": {
     en: "Verify on Server",
     uk: "Перевірити на сервері",
   },
-  "demo.verifyServerBoring": {
+  "sandbox.verifyServerBoring": {
     en: "or verify on server, if you\u2019re old school",
     uk: "або перевірити на сервері, якщо ви старої школи",
   },
-  "demo.verifyWasm": {
+  "sandbox.verifyWasm": {
     en: "Verify right here, in your browser",
     uk: "Перевірити прямо тут, у вашому браузері",
   },
-  "demo.wasmUnavailable": { en: "WASM Unavailable", uk: "WASM недоступний" },
-  "demo.verifyingShort": { en: "Verifying...", uk: "Перевірка..." },
-  "demo.autoVerifying": { en: "Verifying proof in your browser...", uk: "Верифікація доказу у вашому браузері..." },
-  "demo.verificationResults": {
+  "sandbox.wasmUnavailable": { en: "WASM Unavailable", uk: "WASM недоступний" },
+  "sandbox.verifyingShort": { en: "Verifying...", uk: "Перевірка..." },
+  "sandbox.autoVerifying": { en: "Verifying proof in your browser...", uk: "Верифікація доказу у вашому браузері..." },
+  "sandbox.verificationResults": {
     en: "Verification Results",
     uk: "Результати верифікації",
   },
-  "demo.verifiedServer": {
+  "sandbox.verifiedServer": {
     en: "Verified server-side",
     uk: "Перевірено на сервері",
   },
-  "demo.verifiedServerTooltip": {
+  "sandbox.verifiedServerTooltip": {
     en: "Proof verified on the server using Groth16 (ark-circom). Per-circuit trusted setup via .zkey files.",
     uk: "Доказ перевірено на сервері за допомогою Groth16 (ark-circom). Довірена ініціалізація для кожної схеми через .zkey файли.",
   },
-  "demo.verifiedWasm": {
+  "sandbox.verifiedWasm": {
     en: "Verified client-side (WASM)",
     uk: "Перевірено на клієнті (WASM)",
   },
-  "demo.verifiedWasmTooltip": {
+  "sandbox.verifiedWasmTooltip": {
     en: "Proof verified entirely in your browser using WebAssembly. No data sent to any server.",
     uk: "Доказ перевірено повністю у вашому браузері за допомогою WebAssembly. Дані не відправлено на жоден сервер.",
   },
-  "demo.verified": { en: "Verified", uk: "Перевірено" },
-  "demo.notDisclosed": { en: "Not Disclosed", uk: "Не розкрито" },
-  "demo.nullifierChecking": {
+  "sandbox.verified": { en: "Verified", uk: "Перевірено" },
+  "sandbox.notDisclosed": { en: "Not Disclosed", uk: "Не розкрито" },
+  "sandbox.nullifierChecking": {
     en: "Checking nullifier registry...",
     uk: "Перевірка реєстру нуліфікаторів...",
   },
-  "demo.doubleSpend": {
+  "sandbox.doubleSpend": {
     en: "DOUBLE-SPEND DETECTED \u2014 This proof was already used",
     uk: "ВИЯВЛЕНО ПОДВІЙНЕ ВИКОРИСТАННЯ \u2014 Цей доказ вже був використаний",
   },
-  "demo.firstUse": {
+  "sandbox.firstUse": {
     en: "First use \u2014 Nullifier registered",
     uk: "Перше використання \u2014 Нуліфікатор зареєстровано",
   },
-  "demo.registryCount": { en: "recorded", uk: "записано" },
-  "demo.privacyBanner": {
+  "sandbox.registryCount": { en: "recorded", uk: "записано" },
+  "sandbox.privacyBanner": {
     en: "The verifier learned NOTHING about the credential holder — only the document number (as a public anchor) and that these predicates are true.",
     uk: "Верифікатор не дізнався НІЧОГО про власника посвідчення — лише номер документа (як публічний ідентифікатор) та що ці предикати істинні.",
   },
-  "demo.zkTitle": {
+  "sandbox.zkTitle": {
     en: "How it works: from your data to a proof",
     uk: "Як це працює: від ваших даних до доказу",
   },
-  "demo.zkSubtitle": {
+  "sandbox.zkSubtitle": {
     en: "Your personal data never leaves your device. Only a mathematical proof is shared.",
     uk: "Ваші персональні дані ніколи не покидають ваш пристрій. Передається лише математичний доказ.",
   },
-  "demo.zkStep1Title": {
+  "sandbox.zkStep1Title": {
     en: "Your ID document",
     uk: "Ваш документ",
   },
-  "demo.zkStep1Desc": {
+  "sandbox.zkStep1Desc": {
     en: "This data is private. Only you can see it.",
     uk: "Ці дані приватні. Бачите їх лише ви.",
   },
-  "demo.zkStep2Title": {
+  "sandbox.zkStep2Title": {
     en: "Each question is checked, then the data is destroyed",
     uk: "Кожне питання перевіряється, а потім дані знищуються",
   },
-  "demo.zkStep2Desc": {
+  "sandbox.zkStep2Desc": {
     en: "A program reads your real value, checks if the condition is true, and outputs only \u201Cyes\u201D or \u201Cno\u201D. The actual value is never stored or sent anywhere.",
     uk: "Програма зчитує ваше реальне значення, перевіряє чи умова істинна, і видає лише \u201Cтак\u201D або \u201Cні\u201D. Фактичне значення ніколи не зберігається і нікуди не відправляється.",
   },
-  "demo.zkRealValue": { en: "real value", uk: "реальне значення" },
-  "demo.zkOnlyAnswer": { en: "only yes/no leaves", uk: "виходить лише так/ні" },
-  "demo.zkStep2Note": {
+  "sandbox.zkRealValue": { en: "real value", uk: "реальне значення" },
+  "sandbox.zkOnlyAnswer": { en: "only yes/no leaves", uk: "виходить лише так/ні" },
+  "sandbox.zkStep2Note": {
     en: "The government\u2019s digital signature is checked inside the proof, so nobody can fake the answer.",
     uk: "Цифровий підпис уряду перевіряється всередині доказу, тому ніхто не може підробити відповідь.",
   },
-  "demo.zkStep3Title": {
+  "sandbox.zkStep3Title": {
     en: "What the verifier actually receives",
     uk: "Що насправді отримує верифікатор",
   },
-  "demo.zkStep3Desc": {
+  "sandbox.zkStep3Desc": {
     en: "Only the proven facts. Everything else is invisible.",
     uk: "Лише доведені факти. Все інше невидиме.",
   },
-  "demo.zkProfileToggle": {
+  "sandbox.zkProfileToggle": {
     en: "\u25B6 Show WASM execution profile",
     uk: "\u25B6 Показати профіль виконання WASM",
   },
-  "demo.zkProfileVk": { en: "VK decode", uk: "Декодування VK" },
-  "demo.zkProfileParse": { en: "Proof parse", uk: "Парсинг доказу" },
-  "demo.zkProfileInit": { en: "WASM engine", uk: "рушій WASM" },
-  "demo.zkProfileVerify": { en: "Pairing check", uk: "Перевірка пейрингу" },
-  "demo.zkProfileTotal": { en: "Total", uk: "Загалом" },
-  "demo.zkProfileProof": { en: "Proof", uk: "Доказ" },
-  "demo.zkProfileWasmInit": { en: "WASM initialization (once per page load)", uk: "Ініціалізація WASM (раз за завантаження сторінки)" },
-  "demo.zkProfileJsImport": { en: "JS module load", uk: "Завантаження JS" },
-  "demo.zkProfileWasmBoot": { en: "WASM + CRS init", uk: "WASM + CRS ініц." },
-  "demo.proofExport": { en: "Proof Export", uk: "Експорт доказу" },
-  "demo.cborTooltip": {
+  "sandbox.zkProfileVk": { en: "VK decode", uk: "Декодування VK" },
+  "sandbox.zkProfileParse": { en: "Proof parse", uk: "Парсинг доказу" },
+  "sandbox.zkProfileInit": { en: "WASM engine", uk: "рушій WASM" },
+  "sandbox.zkProfileVerify": { en: "Pairing check", uk: "Перевірка пейрингу" },
+  "sandbox.zkProfileTotal": { en: "Total", uk: "Загалом" },
+  "sandbox.zkProfileProof": { en: "Proof", uk: "Доказ" },
+  "sandbox.zkProfileWasmInit": { en: "WASM initialization (once per page load)", uk: "Ініціалізація WASM (раз за завантаження сторінки)" },
+  "sandbox.zkProfileJsImport": { en: "JS module load", uk: "Завантаження JS" },
+  "sandbox.zkProfileWasmBoot": { en: "WASM + CRS init", uk: "WASM + CRS ініц." },
+  "sandbox.proofExport": { en: "Proof Export", uk: "Експорт доказу" },
+  "sandbox.cborTooltip": {
     en: "Concise Binary Object Representation. A compact binary format for portable proof envelopes.",
     uk: "Concise Binary Object Representation. Компактний бінарний формат для портативних конвертів доказів.",
   },
-  "demo.cborBinaryTooltip": {
+  "sandbox.cborBinaryTooltip": {
     en: "Downloads the proof as a CBOR binary file — portable, offline-verifiable.",
     uk: "Завантажує доказ як бінарний CBOR файл — портативний, верифікується офлайн.",
   },
-  "demo.encoding": { en: "Encoding...", uk: "Кодування..." },
-  "demo.exportCbor": { en: "Export as CBOR", uk: "Експортувати як CBOR" },
-  "demo.exportCompoundCbor": { en: "Export Compound Proof as CBOR", uk: "Експортувати складений доказ у CBOR" },
-  "demo.cborDesc": {
+  "sandbox.encoding": { en: "Encoding...", uk: "Кодування..." },
+  "sandbox.exportCbor": { en: "Export as CBOR", uk: "Експортувати як CBOR" },
+  "sandbox.exportCompoundCbor": { en: "Export Compound Proof as CBOR", uk: "Експортувати складений доказ у CBOR" },
+  "sandbox.cborDesc": {
     en: "CBOR-encoded proof envelope. Portable binary format for offline verification.",
     uk: "Конверт доказу в форматі CBOR. Портативний бінарний формат для офлайн верифікації.",
   },
-  "demo.downloadCbor": { en: "Download .cbor", uk: "Завантажити .cbor" },
-  "demo.saveCbor": { en: "Save .cbor", uk: "Зберегти .cbor" },
-  "demo.printProof": { en: "Generate Certificate", uk: "Сформувати засвідчення" },
-  "demo.revocationTitle": {
+  "sandbox.downloadCbor": { en: "Download .cbor", uk: "Завантажити .cbor" },
+  "sandbox.saveCbor": { en: "Save .cbor", uk: "Зберегти .cbor" },
+  "sandbox.printProof": { en: "Generate Certificate", uk: "Сформувати засвідчення" },
+  "sandbox.revocationTitle": {
     en: "Credential Revocation",
     uk: "Відкликання посвідчення",
   },
-  "demo.revoked": { en: "Revoked", uk: "Відкликано" },
-  "demo.revokeDesc": {
+  "sandbox.revoked": { en: "Revoked", uk: "Відкликано" },
+  "sandbox.revokeDesc": {
     en: "Issuer can revoke credential using the Sparse Merkle Tree registry.",
     uk: "Видавець може відкликати посвідчення за допомогою реєстру розрідженого дерева Меркла.",
   },
-  "demo.revokeTooltip": {
+  "sandbox.revokeTooltip": {
     en: "Adds the credential ID to the Sparse Merkle Tree revocation registry. After revocation, proofs using this credential will fail the revocation check.",
     uk: "Додає ID посвідчення до реєстру відкликань на основі розрідженого дерева Меркла. Після відкликання докази з цим посвідченням не пройдуть перевірку.",
   },
-  "demo.revoking": { en: "Revoking...", uk: "Відкликання..." },
-  "demo.revokeBtn": {
+  "sandbox.revoking": { en: "Revoking...", uk: "Відкликання..." },
+  "sandbox.revokeBtn": {
     en: "Revoke This Credential",
     uk: "Відкликати це посвідчення",
   },
-  "demo.credentialRevoked": {
+  "sandbox.credentialRevoked": {
     en: "Credential revoked",
     uk: "Посвідчення відкликано",
   },
-  "demo.revocationRoot": {
+  "sandbox.revocationRoot": {
     en: "Revocation Root (SMT)",
     uk: "Корінь відкликання (SMT)",
   },
-  "demo.currentRevRoot": {
+  "sandbox.currentRevRoot": {
     en: "Current Revocation Root",
     uk: "Поточний корінь відкликання",
   },
-  "demo.fetchingRoot": {
+  "sandbox.fetchingRoot": {
     en: "Fetching...",
     uk: "Завантаження...",
   },
-  "demo.openid4vpTitle": {
+  "sandbox.openid4vpTitle": {
     en: "OpenID4VP Presentation Request",
     uk: "OpenID4VP запит презентації",
   },
-  "demo.openid4vpDesc": {
+  "sandbox.openid4vpDesc": {
     en: "Generate an OpenID4VP-compatible PresentationDefinition that wallets can consume.",
     uk: "Згенерувати PresentationDefinition, сумісний з OpenID4VP, який гаманці можуть обробити.",
   },
-  "demo.openid4vpGenerating": { en: "Generating...", uk: "Генерація..." },
-  "demo.openid4vpBtn": {
+  "sandbox.openid4vpGenerating": { en: "Generating...", uk: "Генерація..." },
+  "sandbox.openid4vpBtn": {
     en: "Generate Presentation Request",
     uk: "Згенерувати запит презентації",
   },
-  "demo.presReqAddReq": { en: "Add Requirement", uk: "Додати вимогу" },
-  "demo.presReqRemove": { en: "Remove", uk: "Видалити" },
-  "demo.presReqClaim": { en: "Claim", uk: "Поле" },
-  "demo.presReqOp": { en: "Operation", uk: "Операція" },
-  "demo.presReqValue": { en: "Value", uk: "Значення" },
-  "demo.presReqEmpty": { en: "Add at least one requirement", uk: "Додайте хоча б одну вимогу" },
-  "demo.startOver": { en: "Start Over", uk: "Почати спочатку" },
+  "sandbox.presReqAddReq": { en: "Add Requirement", uk: "Додати вимогу" },
+  "sandbox.presReqRemove": { en: "Remove", uk: "Видалити" },
+  "sandbox.presReqClaim": { en: "Claim", uk: "Поле" },
+  "sandbox.presReqOp": { en: "Operation", uk: "Операція" },
+  "sandbox.presReqValue": { en: "Value", uk: "Значення" },
+  "sandbox.presReqEmpty": { en: "Add at least one requirement", uk: "Додайте хоча б одну вимогу" },
+  "sandbox.startOver": { en: "Start Over", uk: "Почати спочатку" },
 
   // ── On-device proving progress ──────────────────────────────────────────
   "prove.cachingZkey": { en: "Caching zkey sections...", uk: "Кешування секцій zkey..." },

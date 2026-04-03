@@ -31,6 +31,50 @@ One proof covers the full chain: **issuer → credential → claim → predicate
 | `set_member` | Set membership (up to 16) | `nationality in {"DE", "FR"}` |
 | `nullifier` | Scoped replay prevention | One proof per service per credential |
 | `holder_binding` | Cross-credential linking | Same holder, different credentials |
+| `identity_escrow` | Encrypted identity recovery | Decrypt only by escrow authority |
+
+## Identity Escrow
+
+ZK proofs remove personal data from documents. But if parties are anonymous, how do you protect rights in court? Identity escrow solves this: credential data is encrypted inside the ZK proof, decryption is only possible by a chosen escrow authority per established procedure.
+
+```
+                    INSIDE ZK CIRCUIT                         OUTSIDE CIRCUIT
+               ┌─────────────────────────┐
+               │                         │
+credential[8] ─│  Commitment chain       │
+claim_value ──▶│  ECDSA P-256 binding    │──▶ credential_hash  (public)
+K ─────────────│  Poseidon-CTR encrypt   │──▶ ciphertext[8]    (public)
+               │  Poseidon(K)            │──▶ key_commitment    (public)
+               │                         │
+               └─────────────────────────┘
+                                                     │
+                                                     ▼
+                                            ML-KEM-768 encrypt(K, authority_key)
+                                                     │
+                                                     ▼
+                                               encrypted_key (1120 bytes)
+                                                     │
+                               ┌─────────────────────┼──────────────────────┐
+                               │                     │                      │
+                         ON-CHAIN PROOF        ESCROW ENVELOPE         AUTHORITY
+                         ──────────────       ────────────────        ─────────
+                         credential_hash       ciphertext[8]          seed (64B)
+                         key_commitment        encrypted_key               │
+                         Groth16 proof         field_names            court order
+                         (nothing to           (post-quantum              │
+                          decrypt)              safe: ML-KEM)             ▼
+                                                                    decrypt K
+                                                                    Poseidon-CTR decrypt
+                                                                    recover identity
+                                                                    verify hash
+```
+
+**Key properties:**
+
+- **Honest encryption** — Poseidon-CTR runs inside the same circuit that verifies the ECDSA signature. A party cannot encrypt garbage because the proof binds ciphertext to government-signed data.
+- **Pluggable authority** — the escrow authority is a contract parameter: notary, arbitrator, state registry, or smart contract. Both parties agree at signing.
+- **Quantum-safe envelope** — ML-KEM-768 (NIST FIPS 203) replaces ECIES. The escrow blob can be published without fear of future quantum decryption. The ZK proof itself contains no ciphertext — only Poseidon hashes.
+- **Minimal overhead** — encryption adds ~2,500 constraints (+0.13% over the ~2M base ECDSA circuit).
 
 ## Quick Start
 
@@ -66,7 +110,7 @@ The [verify page](https://zk-eidas.com/verify) is a PWA — install it once, ver
 | `zk-eidas-wasm` | WASM bindings for browser — credential parsing (SD-JWT + mdoc), proof inspection |
 | `cbor-print` | Chunked QR protocol for paper proof transport |
 
-9 Circom circuits. Groth16 proofs. Server proving via rapidsnark. On-device browser proving via chunked snarkjs fork (zkey sections loaded from IndexedDB on demand, ~1.5 GB peak memory instead of ~3 GB).
+10 Circom circuits (6 predicates + ecdsa_verify + nullifier + holder_binding + identity_escrow). Groth16 proofs. Server proving via rapidsnark. On-device browser proving via chunked snarkjs fork (zkey sections loaded from IndexedDB on demand, ~1.5 GB peak memory instead of ~3 GB).
 
 ## Building
 
@@ -124,7 +168,7 @@ source .env.production && node scripts/upload-artifacts.mjs
 | `ecdsa_verify.cvm` | 58 MB | UploadThing |
 | `pot21.ptau` | 2.4 GB | Hermez ceremony (Google Storage) |
 | `pot22.ptau` | 4.6 GB | Hermez ceremony (Google Storage) |
-| Predicate zkeys (8x) | ~2 MB | Git repo |
+| Predicate + special zkeys (10x) | ~2 MB | Git repo |
 
 ECDSA chunk files are split per-section (`ecdsa_verify.zkeyb` through `.zkeyk`) for on-device browser proving. The browser downloads them into IndexedDB and the chunked snarkjs fork reads sections on demand during proving.
 

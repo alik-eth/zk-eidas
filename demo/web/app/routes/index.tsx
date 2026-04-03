@@ -1096,6 +1096,11 @@ function PaperContractsSection() {
                 </p>
               ))}
             </div>
+            <div className="pt-2 mt-2 border-t border-emerald-900/30">
+              <p className="text-[10px] text-emerald-400/70 leading-relaxed">
+                {t("paperContracts.quantumSafe")}
+              </p>
+            </div>
           </div>
         </div>
       </div>

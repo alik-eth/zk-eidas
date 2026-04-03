@@ -14,6 +14,9 @@ thiserror = { workspace = true }
 serde = { workspace = true }
 sha2 = "0.10"
 serde_json = { workspace = true }
+num-bigint = "0.4"
+ml-kem = { version = "0.3.0-rc.1", features = ["getrandom"] }
+rand = "0.8"
 
 [dev-dependencies]
 serde_json = { workspace = true }

@@ -15,6 +15,7 @@ import { Route as SandboxRouteImport } from './routes/sandbox'
 import { Route as PrintRouteImport } from './routes/print'
 import { Route as LearnRouteImport } from './routes/learn'
 import { Route as DemoRouteImport } from './routes/demo'
+import { Route as ContractsRouteImport } from './routes/contracts'
 import { Route as IndexRouteImport } from './routes/index'
 
 const VerifyRoute = VerifyRouteImport.update({
@@ -47,6 +48,11 @@ const DemoRoute = DemoRouteImport.update({
   path: '/demo',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ContractsRoute = ContractsRouteImport.update({
+  id: '/contracts',
+  path: '/contracts',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
@@ -55,6 +61,7 @@ const IndexRoute = IndexRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/contracts': typeof ContractsRoute
   '/demo': typeof DemoRoute
   '/learn': typeof LearnRoute
   '/print': typeof PrintRoute
@@ -64,6 +71,7 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/contracts': typeof ContractsRoute
   '/demo': typeof DemoRoute
   '/learn': typeof LearnRoute
   '/print': typeof PrintRoute
@@ -74,6 +82,7 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/contracts': typeof ContractsRoute
   '/demo': typeof DemoRoute
   '/learn': typeof LearnRoute
   '/print': typeof PrintRoute
@@ -85,6 +94,7 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/contracts'
     | '/demo'
     | '/learn'
     | '/print'
@@ -92,10 +102,19 @@ export interface FileRouteTypes {
     | '/ukraine'
     | '/verify'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/demo' | '/learn' | '/print' | '/sandbox' | '/ukraine' | '/verify'
+  to:
+    | '/'
+    | '/contracts'
+    | '/demo'
+    | '/learn'
+    | '/print'
+    | '/sandbox'
+    | '/ukraine'
+    | '/verify'
   id:
     | '__root__'
     | '/'
+    | '/contracts'
     | '/demo'
     | '/learn'
     | '/print'
@@ -106,6 +125,7 @@ export interface FileRouteTypes {
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  ContractsRoute: typeof ContractsRoute
   DemoRoute: typeof DemoRoute
   LearnRoute: typeof LearnRoute
   PrintRoute: typeof PrintRoute
@@ -158,6 +178,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DemoRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/contracts': {
+      id: '/contracts'
+      path: '/contracts'
+      fullPath: '/contracts'
+      preLoaderRoute: typeof ContractsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/': {
       id: '/'
       path: '/'
@@ -170,6 +197,7 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  ContractsRoute: ContractsRoute,
   DemoRoute: DemoRoute,
   LearnRoute: LearnRoute,
   PrintRoute: PrintRoute,

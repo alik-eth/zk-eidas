@@ -3,7 +3,7 @@ use sha2::{Digest, Sha256};
 use zk_eidas_prover::SignedProofInput;
 use zk_eidas_types::commitment::EcdsaCommitment;
 use zk_eidas_types::credential::{bytes_to_u64, ClaimValue, Credential};
-use zk_eidas_types::proof::{CompoundProof, ContractNullifier, LogicalOp, ZkProof};
+use zk_eidas_types::proof::{CompoundProof, ContractNullifier, IdentityEscrowData, LogicalOp, ZkProof};
 
 /// High-level predicate for the builder API.
 pub enum Predicate {
@@ -65,11 +65,19 @@ impl Predicate {
 /// Uses a two-stage architecture:
 /// - Stage 1: ECDSA signature verification (one per claim — commitment binds to claim_value)
 /// - Stage 2: Predicate proofs (one per predicate, linked via commitment)
+/// Configuration for identity escrow proof generation.
+struct EscrowConfig {
+    field_names: Vec<String>,
+    ecdsa_claim: String,
+    authority_pubkey: Vec<u8>,
+}
+
 pub struct ZkCredential {
     credential: Credential,
     circuits_path: String,
     predicates: Vec<(String, Predicate)>,
     contract_nullifier_params: Option<(String, u64, u64)>,  // (credential_id_field, contract_hash, salt)
+    identity_escrow_params: Option<EscrowConfig>,
     /// Per-claim ECDSA proof cache. Each claim needs its own ECDSA proof because
     /// the commitment binds to the claim_value: Poseidon(claim_value, sd_array_hash, message_hash)
     ecdsa_cache: HashMap<String, (ZkProof, EcdsaCommitment, Vec<u8>, Vec<u8>)>,
@@ -88,6 +96,7 @@ impl ZkCredential {
             circuits_path: circuits_path.to_string(),
             predicates: Vec::new(),
             contract_nullifier_params: None,
+            identity_escrow_params: None,
             ecdsa_cache: HashMap::new(),
         }
     }
@@ -101,6 +110,7 @@ impl ZkCredential {
             circuits_path: circuits_path.to_string(),
             predicates: Vec::new(),
             contract_nullifier_params: None,
+            identity_escrow_params: None,
             ecdsa_cache: HashMap::new(),
         })
     }
@@ -123,6 +133,20 @@ impl ZkCredential {
     /// (e.g. "document_number", "vin", "license_number").
     pub fn contract_nullifier(mut self, credential_id_field: &str, contract_hash: u64, salt: u64) -> Self {
         self.contract_nullifier_params = Some((credential_id_field.to_string(), contract_hash, salt));
+        self
+    }
+
+    /// Enable identity escrow: encrypt credential fields inside the ZK proof.
+    ///
+    /// `field_names` are the credential claim names to pack into 8 escrow slots (max 8).
+    /// `ecdsa_claim` must be one of the field_names — it binds the escrow to the ECDSA commitment.
+    /// `authority_pubkey` is the escrow authority's secp256k1 public key (33 or 65 bytes).
+    pub fn identity_escrow(mut self, field_names: Vec<&str>, ecdsa_claim: &str, authority_pubkey: &[u8]) -> Self {
+        self.identity_escrow_params = Some(EscrowConfig {
+            field_names: field_names.into_iter().map(|s| s.to_string()).collect(),
+            ecdsa_claim: ecdsa_claim.to_string(),
+            authority_pubkey: authority_pubkey.to_vec(),
+        });
         self
     }
 
@@ -167,6 +191,86 @@ impl ZkCredential {
             salt: salt.to_be_bytes().to_vec(),
             proof: nullifier_proof,
         })
+    }
+
+    /// Generate identity escrow data for the configured escrow parameters.
+    fn generate_identity_escrow(&mut self, config: &EscrowConfig) -> Result<IdentityEscrowData, ZkError> {
+        use crate::escrow;
+
+        // Pack credential fields into 8 BN254 field elements
+        let (credential_data, claim_index) = escrow::pack_credential_fields(
+            &self.credential,
+            &config.field_names,
+            &config.ecdsa_claim,
+        )?;
+
+        // The claim_value for the escrow circuit must match the ECDSA-committed value.
+        // Use the same escrow encoding that pack_credential_fields uses.
+        let claim_value_cv = self.credential.claims().get(&config.ecdsa_claim)
+            .ok_or_else(|| ZkError::ClaimNotFound(config.ecdsa_claim.clone()))?
+            .clone();
+        let claim_value_decimal = escrow::claim_value_to_escrow_decimal(&claim_value_cv);
+
+        // Ensure ECDSA proof exists for the ecdsa_claim
+        let (commitment, sd_array_hash, message_hash) =
+            self.ensure_ecdsa(&config.ecdsa_claim)?;
+
+        // Derive deterministic symmetric key from credential data + authority pubkey
+        // (enables proof caching — same inputs always produce the same K)
+        let k = escrow::derive_escrow_key(&credential_data, &config.authority_pubkey);
+
+        // Generate proof
+        let prover = zk_eidas_prover::Prover::new(&self.circuits_path);
+        let escrow_proof = prover.prove_identity_escrow(
+            &claim_value_decimal,
+            &credential_data,
+            claim_index,
+            &k,
+            &commitment,
+            &sd_array_hash,
+            &message_hash,
+        )?;
+
+        // identity_escrow circuit public output layout:
+        //   [0]    credential_hash   — Poseidon hash of all 8 credential data fields
+        //   [1..9] ciphertext[0..7]  — 8 Poseidon-CTR encrypted field elements
+        //   [9]    key_commitment    — Poseidon(K)
+        //   [10]   commitment        — ECDSA commitment (shared with predicate proofs)
+        const PI_CREDENTIAL_HASH: usize = 0;
+        const PI_CIPHERTEXT_START: usize = 1;
+        const PI_CIPHERTEXT_END: usize = 9;
+        const PI_KEY_COMMITMENT: usize = 9;
+        const PI_MIN_LEN: usize = 10;
+
+        let pi = escrow_proof.public_inputs();
+        if pi.len() < PI_MIN_LEN {
+            return Err(ZkError::MissingProofOutput);
+        }
+        let credential_hash = pi[PI_CREDENTIAL_HASH].clone();
+        let ciphertext: Vec<Vec<u8>> = pi[PI_CIPHERTEXT_START..PI_CIPHERTEXT_END].to_vec();
+        let key_commitment = pi[PI_KEY_COMMITMENT].clone();
+
+        // Encrypt K to escrow authority
+        let encrypted_key = escrow::encrypt_key_to_authority(&k, &config.authority_pubkey)?;
+
+        Ok(IdentityEscrowData {
+            credential_hash,
+            ciphertext,
+            key_commitment,
+            encrypted_key,
+            authority_pubkey: config.authority_pubkey.clone(),
+            field_names: config.field_names.clone(),
+            claim_index,
+            proof: escrow_proof,
+        })
+    }
+
+    /// Generate only the identity escrow proof, without predicates or nullifiers.
+    /// Used when the predicate proof is cached but escrow must be fresh per credential.
+    pub fn generate_escrow_only(&mut self) -> Result<IdentityEscrowData, ZkError> {
+        let config = self.identity_escrow_params.take()
+            .ok_or_else(|| ZkError::InvalidInput("no escrow config set".into()))?;
+        self.generate_identity_escrow(&config)
     }
 
     /// Add a predicate to prove about the given claim.
@@ -335,8 +439,16 @@ impl ZkCredential {
             None
         };
 
+        // Identity escrow: encrypt credential fields inside a ZK proof
+        // Done before ecdsa_cache drain because it may need ensure_ecdsa()
+        let identity_escrow = if let Some(config) = self.identity_escrow_params.take() {
+            Some(self.generate_identity_escrow(&config)?)
+        } else {
+            None
+        };
+
         // Collect ECDSA proofs from cache (one per unique claim)
-        // Done after contract_nullifier to include document_number ECDSA proof if generated
+        // Done after contract_nullifier and escrow to include all ECDSA proofs generated
         let ecdsa_proofs: HashMap<String, ZkProof> = self
             .ecdsa_cache
             .into_iter()
@@ -351,6 +463,10 @@ impl ZkCredential {
         if let Some(cn) = contract_nullifier {
             compound = compound.with_contract_nullifier(cn);
         }
+        if let Some(escrow) = identity_escrow {
+            compound = compound.with_identity_escrow(escrow);
+        }
+
         Ok(compound)
     }
 
@@ -622,7 +738,15 @@ impl ZkVerifier {
             }
         }
 
-        // Step 4: Check commitment chain
+        // Step 4: Verify identity escrow proof if present
+        if let Some(escrow) = compound.identity_escrow() {
+            let valid = verifier.verify(&escrow.proof).map_err(ZkError::from)?;
+            if !valid {
+                return Ok(false);
+            }
+        }
+
+        // Step 5: Check commitment chain
         if !check_commitment_chain(compound) {
             return Ok(false);
         }
@@ -796,6 +920,9 @@ pub enum ZkError {
     /// The system clock returned a time before the Unix epoch.
     #[error("system clock before Unix epoch")]
     SystemClockError,
+    /// Invalid input for identity escrow or other operations.
+    #[error("invalid input: {0}")]
+    InvalidInput(String),
 }
 
 #[cfg(test)]

@@ -6,6 +6,7 @@ import { ProveMethodToggle, type ProveMethod } from '../components/ProveMethodTo
 import { useT, useLocale } from '../i18n'
 import { CREDENTIAL_TYPES, resolveVariant, type FieldDisplay } from '../lib/credential-types'
 import { proveCompoundInBrowser, getCacheStats, type BrowserProofResult } from '../lib/snarkjs-prover'
+import { EscrowPanel, type EscrowConfig } from '../components/EscrowPanel'
 
 // Types
 
@@ -43,6 +44,8 @@ interface WizardState {
   compoundOp: string | null
   credentialId: string | null
   selectedPredicateIds: string[]
+  escrowConfig: EscrowConfig | null
+  escrowPrivkey: string | null
   // Print data (populated when entering step 4)
   printProofs: PrintProofItem[]
   printPredicates: PrintPredicate[]
@@ -74,6 +77,8 @@ function Demo() {
     compoundOp: null,
     credentialId: null,
     selectedPredicateIds: [],
+    escrowConfig: null,
+    escrowPrivkey: null,
     printProofs: [],
     printPredicates: [],
     printLogicalOp: 'single',
@@ -82,26 +87,26 @@ function Demo() {
 
   const steps = [
     {
-      label: t('demo.step1Label'),
-      description: t('demo.step1Desc'),
+      label: t('sandbox.step1Label'),
+      description: t('sandbox.step1Desc'),
       icon: (<svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg>),
       content: <IssuerStep state={state} setState={setState} t={t} />,
     },
     {
-      label: t('demo.step2Label'),
-      description: t('demo.step2Desc'),
+      label: t('sandbox.step2Label'),
+      description: t('sandbox.step2Desc'),
       icon: (<svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>),
       content: <HolderStep state={state} setState={setState} t={t} />,
     },
     {
-      label: t('demo.step3Label'),
-      description: t('demo.step3Desc'),
+      label: t('sandbox.step3Label'),
+      description: t('sandbox.step3Desc'),
       icon: (<svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>),
       content: <VerifierStep state={state} setState={setState} t={t} />,
     },
     {
-      label: t('demo.step4Label'),
-      description: t('demo.step4Desc'),
+      label: t('sandbox.step4Label'),
+      description: t('sandbox.step4Desc'),
       icon: (<svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>),
       content: <PrintStep state={state} t={t} />,
     },
@@ -122,7 +127,7 @@ function Demo() {
                 <span className="text-slate-600 mx-0.5">-</span>
                 <span style={{ color: '#FFD500' }}>eidas</span>
               </h1>
-              <p className="text-xs text-slate-500 truncate">{t('demo.subtitle')}</p>
+              <p className="text-xs text-slate-500 truncate">{t('sandbox.subtitle')}</p>
             </div>
           </a>
           <div className="flex items-center gap-2 sm:gap-4 shrink-0">
@@ -230,7 +235,7 @@ function IssuerStep({ setState, t }: { state: WizardState; setState: React.Dispa
         className="flex items-center justify-center gap-2 w-full bg-blue-600 hover:bg-blue-700 disabled:bg-slate-600 disabled:cursor-not-allowed text-white font-semibold py-3 rounded-lg transition-colors"
       >
         <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/></svg>
-        {loading ? t('demo.issuing') : t('demo.issueBtn')}
+        {loading ? t('sandbox.issuing') : t('sandbox.issueBtn')}
       </button>
     </div>
   )
@@ -258,6 +263,8 @@ function HolderStep({ state, setState, t }: { state: WizardState; setState: Reac
   const [elapsed, setElapsed] = useState(0)
   const [proved, setProved] = useState(false)
   const [compoundMode, setCompoundMode] = useState<'individual' | 'and' | 'or'>('and')
+  const [escrowConfig, setEscrowConfig] = useState<EscrowConfig | null>(null)
+  const escrowPrivkeyRef = useRef<string | null>(null)
   const [proveTimeMs, setProveTimeMs] = useState<number | null>(null)
   const [presReqLoading, setPresReqLoading] = useState(false)
   const [presReqResult, setPresReqResult] = useState<{ id: string; input_descriptors: { id: string; constraints: { path: string; predicate_op: string; value: string }[] }[] } | null>(null)
@@ -431,7 +438,13 @@ function HolderStep({ state, setState, t }: { state: WizardState; setState: Reac
         const res = await fetch(`${API_URL}/holder/prove-compound`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ credential: state.credential, format: state.format, predicates, op: compoundMode }),
+          body: JSON.stringify({
+            credential: state.credential,
+            format: state.format,
+            predicates,
+            op: compoundMode,
+            ...(escrowConfig ? { identity_escrow: escrowConfig } : {}),
+          }),
         })
         if (!res.ok) throw new Error(await res.text())
         const data = await res.json()
@@ -450,6 +463,8 @@ function HolderStep({ state, setState, t }: { state: WizardState; setState: Reac
             compoundProofJson: data.compound_proof_json,
             compoundOp: data.op,
             selectedPredicateIds: Object.entries(selected).filter(([, v]) => v).map(([k]) => k),
+            escrowConfig: escrowConfig,
+            escrowPrivkey: escrowPrivkeyRef.current,
           }))
         }, 800)
       }
@@ -466,11 +481,11 @@ function HolderStep({ state, setState, t }: { state: WizardState; setState: Reac
       <div className="bg-slate-800 rounded-lg border border-slate-700 overflow-hidden">
           <div className="bg-slate-700 px-6 py-3">
             <h2 className="text-lg font-semibold">
-              <Tooltip text={t('demo.predicateTooltip')}>
-                <span>{t('demo.selectClaims')}</span>
+              <Tooltip text={t('sandbox.predicateTooltip')}>
+                <span>{t('sandbox.selectClaims')}</span>
               </Tooltip>
             </h2>
-            <p className="text-sm text-slate-400">{t('demo.selectClaimsSub')}</p>
+            <p className="text-sm text-slate-400">{t('sandbox.selectClaimsSub')}</p>
           </div>
           <div className="p-6 space-y-4">
             {resolvedPredicates.map(opt => (
@@ -493,15 +508,15 @@ function HolderStep({ state, setState, t }: { state: WizardState; setState: Reac
             {selectedCount >= 2 && (
               <div className="mt-4 pt-4 border-t border-slate-600">
                 <label className="block text-sm font-medium text-slate-300 mb-2">
-                  <Tooltip text={t('demo.proofModeTooltip')}>
-                    <span>{t('demo.proofMode')}</span>
+                  <Tooltip text={t('sandbox.proofModeTooltip')}>
+                    <span>{t('sandbox.proofMode')}</span>
                   </Tooltip>
                 </label>
                 <div className="flex gap-2">
                   {[
-                    { value: 'individual' as const, label: t('demo.modeIndividual'), desc: t('demo.modeIndividualDesc') },
-                    { value: 'and' as const, label: 'AND', desc: t('demo.modeAndDesc') },
-                    { value: 'or' as const, label: 'OR', desc: t('demo.modeOrDesc') },
+                    { value: 'individual' as const, label: t('sandbox.modeIndividual'), desc: t('sandbox.modeIndividualDesc') },
+                    { value: 'and' as const, label: 'AND', desc: t('sandbox.modeAndDesc') },
+                    { value: 'or' as const, label: 'OR', desc: t('sandbox.modeOrDesc') },
                   ].map(mode => (
                     <button
                       key={mode.value}
@@ -518,10 +533,21 @@ function HolderStep({ state, setState, t }: { state: WizardState; setState: Reac
                   ))}
                 </div>
                 <p className="text-xs text-slate-500 mt-1">
-                  {compoundMode === 'individual' && t('demo.modeExplainIndividual')}
-                  {compoundMode === 'and' && t('demo.modeExplainAnd')}
-                  {compoundMode === 'or' && t('demo.modeExplainOr')}
+                  {compoundMode === 'individual' && t('sandbox.modeExplainIndividual')}
+                  {compoundMode === 'and' && t('sandbox.modeExplainAnd')}
+                  {compoundMode === 'or' && t('sandbox.modeExplainOr')}
                 </p>
+
+              {/* Identity Escrow */}
+              {(compoundMode === 'and' || compoundMode === 'or') && (
+                <EscrowPanel
+                  availableFields={resolvedPredicates.map(p => p.predicate.claim)}
+                  predicateFields={resolvedPredicates.filter(p => selected[p.id]).map(p => p.predicate.claim)}
+                  onConfigChange={setEscrowConfig}
+                  onPrivkeyGenerated={(pk) => { escrowPrivkeyRef.current = pk }}
+                  showKeypairGenerator
+                />
+              )}
               </div>
             )}
 
@@ -536,14 +562,14 @@ function HolderStep({ state, setState, t }: { state: WizardState; setState: Reac
             OpenID4VP
           </summary>
           <div className="px-6 pb-4 space-y-3">
-            <p className="text-xs text-slate-500">{t('demo.openid4vpDesc')}</p>
+            <p className="text-xs text-slate-500">{t('sandbox.openid4vpDesc')}</p>
             {!presReqResult ? (
               <button
                 onClick={handlePresentationRequest}
                 disabled={presReqLoading}
                 className="px-4 py-2 bg-slate-700 hover:bg-slate-600 disabled:opacity-50 text-white text-sm font-medium rounded-lg transition-colors"
               >
-                {presReqLoading ? t('demo.openid4vpGenerating') : t('demo.openid4vpBtn')}
+                {presReqLoading ? t('sandbox.openid4vpGenerating') : t('sandbox.openid4vpBtn')}
               </button>
             ) : (
               <div className="bg-slate-900 rounded border border-slate-600 p-3 space-y-2">
@@ -575,16 +601,16 @@ function HolderStep({ state, setState, t }: { state: WizardState; setState: Reac
               <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
               <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
             </svg>
-            <span className="text-blue-300 font-semibold">{t('demo.generating')}{elapsed}s</span>
+            <span className="text-blue-300 font-semibold">{t('sandbox.generating')}{elapsed}s</span>
           </div>
-          <p className="text-sm text-slate-400">{t('demo.generatingDesc')}</p>
+          <p className="text-sm text-slate-400">{t('sandbox.generatingDesc')}</p>
         </div>
       )}
 
       {/* Success state */}
       {proved && !loading && (
         <div className="bg-slate-800 rounded-lg border border-green-500/50 p-6 text-center flex items-center justify-center gap-3">
-          <span className="text-green-400 font-semibold">{t('demo.proofGenerated')}</span>
+          <span className="text-green-400 font-semibold">{t('sandbox.proofGenerated')}</span>
           {proveTimeMs !== null && (
             <span className="text-xs text-slate-400 bg-slate-700 px-2 py-1 rounded">
               {(proveTimeMs / 1000).toFixed(1)}s
@@ -617,11 +643,11 @@ function HolderStep({ state, setState, t }: { state: WizardState; setState: Reac
         <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
         {loading
           ? proveOnDevice
-            ? `${t('demo.generatingShort')} (${elapsed}s)`
-            : t('demo.generatingShort')
+            ? `${t('sandbox.generatingShort')} (${elapsed}s)`
+            : t('sandbox.generatingShort')
           : proveOnDevice
-            ? t('demo.generateBrowserBtn')
-            : t('demo.generateBtn')}
+            ? t('sandbox.generateBrowserBtn')
+            : t('sandbox.generateBtn')}
       </button>
     </div>
   )
@@ -646,6 +672,38 @@ function VerifierStep({ state, setState, t }: { state: WizardState; setState: Re
 
   const [chainValid, setChainValid] = useState<boolean | null>(null)
   const [initProfile, setInitProfile] = useState<{ jsImport: number; wasmCompile: number; total: number } | null>(null)
+
+  const escrowData = (() => {
+    if (!state.compoundProofJson || !state.escrowConfig) return null
+    try {
+      const compound = JSON.parse(state.compoundProofJson)
+      return compound.identity_escrow ?? null
+    } catch { return null }
+  })()
+
+  const [decryptedFields, setDecryptedFields] = useState<Record<string, string> | null>(null)
+  const [decrypting, setDecrypting] = useState(false)
+
+  const bytesToHex = (bytes: number[]) => bytes.map((b: number) => b.toString(16).padStart(2, '0')).join('')
+
+  const handleDecrypt = async () => {
+    if (!escrowData || !state.escrowPrivkey) return
+    setDecrypting(true)
+    try {
+      const { decryptEscrow } = await import('../lib/escrow-decrypt')
+      const fields = await decryptEscrow(
+        escrowData.encrypted_key,
+        state.escrowPrivkey,
+        escrowData.ciphertext,
+        escrowData.field_names,
+      )
+      setDecryptedFields(fields)
+    } catch (e: any) {
+      alert(`Decrypt failed: ${e.message}`)
+    } finally {
+      setDecrypting(false)
+    }
+  }
 
   useEffect(() => {
     let cancelled = false
@@ -936,7 +994,7 @@ function VerifierStep({ state, setState, t }: { state: WizardState; setState: Re
                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                 <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
               </svg>
-              <p className="text-sm text-slate-400">{t('demo.autoVerifying')}</p>
+              <p className="text-sm text-slate-400">{t('sandbox.autoVerifying')}</p>
             </>
           )}
         </div>
@@ -999,8 +1057,8 @@ function VerifierStep({ state, setState, t }: { state: WizardState; setState: Re
             return (
               <div className="bg-slate-800 rounded-lg border border-slate-700 overflow-hidden">
                 <div className="px-6 py-4 border-b border-slate-700">
-                  <h3 className="text-sm font-semibold text-slate-200 tracking-wide">{t('demo.zkTitle')}</h3>
-                  <p className="text-xs text-slate-500 mt-1">{t('demo.zkSubtitle')}</p>
+                  <h3 className="text-sm font-semibold text-slate-200 tracking-wide">{t('sandbox.zkTitle')}</h3>
+                  <p className="text-xs text-slate-500 mt-1">{t('sandbox.zkSubtitle')}</p>
                 </div>
                 <div className="p-5 space-y-0">
 
@@ -1011,8 +1069,8 @@ function VerifierStep({ state, setState, t }: { state: WizardState; setState: Re
                         <span className="text-blue-400 text-xs font-bold">1</span>
                       </div>
                       <div>
-                        <p className="text-sm font-semibold text-slate-200">{t('demo.zkStep1Title')}</p>
-                        <p className="text-xs text-slate-500">{t('demo.zkStep1Desc')}</p>
+                        <p className="text-sm font-semibold text-slate-200">{t('sandbox.zkStep1Title')}</p>
+                        <p className="text-xs text-slate-500">{t('sandbox.zkStep1Desc')}</p>
                       </div>
                     </div>
                     <div className="ml-3.5 border-l-2 border-blue-500/20 pl-6 pb-6">
@@ -1034,8 +1092,8 @@ function VerifierStep({ state, setState, t }: { state: WizardState; setState: Re
                         <span className="text-amber-400 text-xs font-bold">2</span>
                       </div>
                       <div>
-                        <p className="text-sm font-semibold text-slate-200">{t('demo.zkStep2Title')}</p>
-                        <p className="text-xs text-slate-500">{t('demo.zkStep2Desc')}</p>
+                        <p className="text-sm font-semibold text-slate-200">{t('sandbox.zkStep2Title')}</p>
+                        <p className="text-xs text-slate-500">{t('sandbox.zkStep2Desc')}</p>
                       </div>
                     </div>
                     <div className="ml-3.5 border-l-2 border-amber-500/20 pl-6 pb-6 space-y-2">
@@ -1046,13 +1104,13 @@ function VerifierStep({ state, setState, t }: { state: WizardState; setState: Re
                             <span className="text-amber-500/60 text-xs font-mono">{(pred.proofSize / 1024).toFixed(1)} KB</span>
                           </div>
                           <div className="flex items-center gap-2 text-xs">
-                            <span className="text-slate-500">{t('demo.zkRealValue')}</span>
+                            <span className="text-slate-500">{t('sandbox.zkRealValue')}</span>
                             <span className="bg-slate-700/60 text-slate-600 font-mono px-1.5 py-0.5 rounded text-xs tracking-widest select-none" aria-hidden="true">{'\u2588'.repeat(8)}</span>
-                            <span className="text-amber-300 font-medium">{t('demo.zkOnlyAnswer')}</span>
+                            <span className="text-amber-300 font-medium">{t('sandbox.zkOnlyAnswer')}</span>
                           </div>
                         </div>
                       ))}
-                      <p className="text-xs text-slate-600 italic">{t('demo.zkStep2Note')}</p>
+                      <p className="text-xs text-slate-600 italic">{t('sandbox.zkStep2Note')}</p>
                     </div>
                   </div>
 
@@ -1063,8 +1121,8 @@ function VerifierStep({ state, setState, t }: { state: WizardState; setState: Re
                         <span className="text-green-400 text-xs font-bold">3</span>
                       </div>
                       <div className="flex-1">
-                        <p className="text-sm font-semibold text-slate-200">{t('demo.zkStep3Title')}</p>
-                        <p className="text-xs text-slate-500">{t('demo.zkStep3Desc')}</p>
+                        <p className="text-sm font-semibold text-slate-200">{t('sandbox.zkStep3Title')}</p>
+                        <p className="text-xs text-slate-500">{t('sandbox.zkStep3Desc')}</p>
                       </div>
                       {verificationPath === 'wasm' && verifyTimeMs !== null && (
                         <span className="text-xs text-purple-400 bg-purple-900/30 border border-purple-700/30 px-2 py-0.5 rounded-full font-mono shrink-0">WASM {Math.round(verifyTimeMs)}ms</span>
@@ -1102,16 +1160,16 @@ function VerifierStep({ state, setState, t }: { state: WizardState; setState: Re
                   <div className="px-5 pb-4">
                     <details className="group">
                       <summary className="text-xs text-slate-500 cursor-pointer hover:text-slate-400 transition-colors select-none list-none [&::-webkit-details-marker]:hidden">
-                        {t('demo.zkProfileToggle')}
+                        {t('sandbox.zkProfileToggle')}
                       </summary>
                       <div className="mt-3 space-y-3">
                         {initProfile && (
                           <div>
-                            <p className="text-xs text-slate-500 mb-1.5">{t('demo.zkProfileWasmInit')}</p>
+                            <p className="text-xs text-slate-500 mb-1.5">{t('sandbox.zkProfileWasmInit')}</p>
                             <div className="space-y-1">
                               {[
-                                { label: t('demo.zkProfileJsImport'), ms: initProfile.jsImport, color: 'bg-indigo-500' },
-                                { label: t('demo.zkProfileWasmBoot'), ms: initProfile.wasmCompile, color: 'bg-cyan-500' },
+                                { label: t('sandbox.zkProfileJsImport'), ms: initProfile.jsImport, color: 'bg-indigo-500' },
+                                { label: t('sandbox.zkProfileWasmBoot'), ms: initProfile.wasmCompile, color: 'bg-cyan-500' },
                               ].map((step) => {
                                 const maxMs = Math.max(initProfile.jsImport, initProfile.wasmCompile, 1)
                                 return (
@@ -1126,23 +1184,23 @@ function VerifierStep({ state, setState, t }: { state: WizardState; setState: Re
                               })}
                             </div>
                             <div className="flex justify-end mt-1 mb-3">
-                              <span className="text-xs font-mono text-slate-300">{t('demo.zkProfileTotal')}: {Math.round(initProfile.total)}ms</span>
+                              <span className="text-xs font-mono text-slate-300">{t('sandbox.zkProfileTotal')}: {Math.round(initProfile.total)}ms</span>
                             </div>
                             <div className="border-t border-slate-700/50 mb-3" />
                           </div>
                         )}
                         {wasmProfile.map((p, i) => {
                           const steps = [
-                            { label: t('demo.zkProfileVk'), ms: p.vkDecode, color: 'bg-blue-500' },
-                            { label: t('demo.zkProfileParse'), ms: p.proofParse, color: 'bg-amber-500' },
-                            { label: t('demo.zkProfileInit'), ms: p.snarkjsInit, color: 'bg-slate-500' },
-                            { label: t('demo.zkProfileVerify'), ms: p.snarkjsVerify, color: 'bg-green-500' },
+                            { label: t('sandbox.zkProfileVk'), ms: p.vkDecode, color: 'bg-blue-500' },
+                            { label: t('sandbox.zkProfileParse'), ms: p.proofParse, color: 'bg-amber-500' },
+                            { label: t('sandbox.zkProfileInit'), ms: p.snarkjsInit, color: 'bg-slate-500' },
+                            { label: t('sandbox.zkProfileVerify'), ms: p.snarkjsVerify, color: 'bg-green-500' },
                           ]
                           const maxMs = Math.max(...steps.map(s => s.ms), 1)
                           return (
                             <div key={i}>
                               {wasmProfile.length > 1 && (
-                                <p className="text-xs text-slate-500 mb-1.5">{t('demo.zkProfileProof')} {i + 1}</p>
+                                <p className="text-xs text-slate-500 mb-1.5">{t('sandbox.zkProfileProof')} {i + 1}</p>
                               )}
                               <div className="space-y-1">
                                 {steps.map((step) => (
@@ -1156,7 +1214,7 @@ function VerifierStep({ state, setState, t }: { state: WizardState; setState: Re
                                 ))}
                               </div>
                               <div className="flex justify-end mt-1">
-                                <span className="text-xs font-mono text-slate-300">{t('demo.zkProfileTotal')}: {Math.round(p.total)}ms</span>
+                                <span className="text-xs font-mono text-slate-300">{t('sandbox.zkProfileTotal')}: {Math.round(p.total)}ms</span>
                               </div>
                             </div>
                           )
@@ -1168,7 +1226,7 @@ function VerifierStep({ state, setState, t }: { state: WizardState; setState: Re
 
                 {/* Bottom banner */}
                 <div className="px-6 py-4 bg-green-950/20 border-t border-green-800/20">
-                  <p className="text-sm text-green-300 font-medium text-center">{t('demo.privacyBanner')}</p>
+                  <p className="text-sm text-green-300 font-medium text-center">{t('sandbox.privacyBanner')}</p>
                 </div>
               </div>
             )
@@ -1180,7 +1238,7 @@ function VerifierStep({ state, setState, t }: { state: WizardState; setState: Re
               <a href={exportData ? `data:application/cbor;base64,${exportData.cbor_base64}` : '#'} download="zk-eidas-proof.cbor"
                 className={`flex items-center justify-center gap-2 w-full py-3 text-white font-semibold rounded-lg transition-colors ${exportData ? 'bg-blue-600 hover:bg-blue-700' : 'bg-slate-700 opacity-50 pointer-events-none'}`}>
                 <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-                {exportLoading ? t('demo.encoding') : t('demo.saveProof')}
+                {exportLoading ? t('sandbox.encoding') : t('sandbox.saveProof')}
               </a>
               <button
                 disabled={exportLoading || (state.compoundOp === 'Or') || (!state.compoundProofJson && state.proofs.length > 1)}
@@ -1188,11 +1246,64 @@ function VerifierStep({ state, setState, t }: { state: WizardState; setState: Re
                 className="flex items-center justify-center gap-2 w-full py-3 bg-slate-700 hover:bg-slate-600 disabled:bg-slate-800 disabled:text-slate-500 disabled:cursor-not-allowed text-white font-semibold rounded-lg transition-colors"
               >
                 <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
-                {t('demo.printProof')}
+                {t('sandbox.printProof')}
               </button>
               {(state.compoundOp === 'Or' || (!state.compoundProofJson && state.proofs.length > 1)) && (
-                <p className="text-xs text-amber-400/70">{t('demo.printRequiresAnd')}</p>
+                <p className="text-xs text-amber-400/70">{t('sandbox.printRequiresAnd')}</p>
               )}
+            </div>
+          )}
+
+          {/* Escrow Envelope */}
+          {escrowData && (
+            <div className="bg-slate-800 rounded-lg border border-amber-500/30 overflow-hidden">
+              <div className="px-6 py-3 border-b border-amber-500/20 bg-amber-500/5">
+                <h3 className="text-sm font-semibold text-amber-400">{t('escrow.envelopeTitle')}</h3>
+              </div>
+              <div className="p-5 space-y-3">
+                <div className="grid grid-cols-1 gap-2 text-xs">
+                  <div>
+                    <span className="text-slate-500">{t('escrow.credentialHash')}:</span>
+                    <span className="font-mono text-slate-300 ml-2 break-all">{bytesToHex(escrowData.credential_hash).slice(0, 32)}...</span>
+                  </div>
+                  <div>
+                    <span className="text-slate-500">{t('escrow.keyCommitment')}:</span>
+                    <span className="font-mono text-slate-300 ml-2 break-all">{bytesToHex(escrowData.key_commitment).slice(0, 32)}...</span>
+                  </div>
+                  <div>
+                    <span className="text-slate-500">{t('escrow.ciphertext')}:</span>
+                    <span className="font-mono text-slate-300 ml-2">{escrowData.ciphertext.length} fields</span>
+                  </div>
+                  <div>
+                    <span className="text-slate-500">{t('escrow.authorityPubkey')}:</span>
+                    <span className="font-mono text-slate-300 ml-2 break-all">{bytesToHex(escrowData.authority_pubkey).slice(0, 20)}...</span>
+                  </div>
+                </div>
+
+                {state.escrowPrivkey && !decryptedFields && (
+                  <button
+                    onClick={handleDecrypt}
+                    disabled={decrypting}
+                    className="w-full bg-amber-600 hover:bg-amber-700 disabled:bg-slate-600 text-white text-sm font-semibold py-2 rounded-lg transition-colors"
+                  >
+                    {decrypting ? t('escrow.decrypting') : t('escrow.decryptBtn')}
+                  </button>
+                )}
+
+                {decryptedFields && (
+                  <div className="bg-amber-500/5 border border-amber-500/20 rounded-lg p-4">
+                    <p className="text-xs text-amber-400 font-semibold mb-2">{t('escrow.decryptedTitle')}</p>
+                    <div className="space-y-1">
+                      {Object.entries(decryptedFields).map(([name, value]) => (
+                        <div key={name} className="flex justify-between text-xs">
+                          <span className="text-slate-400">{name}</span>
+                          <span className="font-mono text-amber-300">{String(value)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
           )}
         </div>

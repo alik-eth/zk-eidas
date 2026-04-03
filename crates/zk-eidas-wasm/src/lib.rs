@@ -23,6 +23,8 @@ pub fn parse_proof(proof_json: &str) -> Result<String, JsError> {
 
     let nullifier_hex = proof.nullifier().map(hex::encode);
 
+    let is_escrow = proof.predicate_op() == zk_eidas_types::predicate::PredicateOp::IdentityEscrow;
+
     let result = serde_json::json!({
         "predicateOp": format!("{:?}", proof.predicate_op()),
         "hasNullifier": proof.nullifier().is_some(),
@@ -30,6 +32,7 @@ pub fn parse_proof(proof_json: &str) -> Result<String, JsError> {
         "proofSize": proof.proof_bytes().len(),
         "version": proof.version(),
         "hasEcdsaCommitment": proof.ecdsa_commitment().is_some(),
+        "isIdentityEscrow": is_escrow,
     });
 
     Ok(result.to_string())

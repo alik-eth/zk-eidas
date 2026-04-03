@@ -22,6 +22,7 @@
 //! ```
 
 mod builder;
+pub mod escrow;
 pub mod openid4vp;
 pub mod templates;
 pub use builder::{age_cutoff_epoch_days_from, Predicate, ZkCredential, ZkError, ZkVerifier};

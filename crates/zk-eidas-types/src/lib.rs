@@ -10,4 +10,4 @@ pub mod witness;
 
 pub use commitment::EcdsaCommitment;
 pub use credential::{bytes_to_u64, bytes_to_u64_from_slice, to_43bit_limbs};
-pub use proof::{CompoundProof, LogicalOp};
+pub use proof::{CompoundProof, IdentityEscrowData, LogicalOp};

@@ -6,6 +6,7 @@ import { proveCompoundInBrowser, proveInBrowser } from '../lib/snarkjs-prover'
 import { useT, useLocale, tLang } from '../i18n'
 import { CREDENTIAL_TYPES, resolveVariant, type FieldDisplay } from '../lib/credential-types'
 import { CONTRACT_TEMPLATES } from '../lib/contract-templates'
+import { EscrowPanel, type EscrowConfig, DEMO_AUTHORITY_PUBKEY, DEMO_AUTHORITY_PRIVKEY } from '../components/EscrowPanel'
 
 // Types
 
@@ -21,6 +22,7 @@ interface CredentialData {
   hiddenFields: string[]
   predicateDescriptions: string[]
   qrDataUrls: string[]
+  escrowData: any | null
 }
 
 interface BindingResult {
@@ -53,6 +55,8 @@ interface ContractWizardState {
   termsQrUrl: string | null
   metadataQrUrl: string | null
   bundleCborUrl: string | null
+  escrowEnabled: boolean
+  escrowQrUrls: { role: string; roleLabelKey: string; urls: string[] }[]
 }
 
 const API_URL = typeof window !== 'undefined' && window.location.hostname === 'localhost' ? 'http://localhost:3001' : ''
@@ -72,6 +76,8 @@ const INITIAL_STATE: ContractWizardState = {
   termsQrUrl: null,
   metadataQrUrl: null,
   bundleCborUrl: null,
+  escrowEnabled: true,
+  escrowQrUrls: [],
 }
 
 export const Route = createFileRoute('/demo')({
@@ -381,6 +387,7 @@ function CredentialStep({ state, setState, t }: { state: ContractWizardState; se
         hiddenFields: [],
         predicateDescriptions: [],
         qrDataUrls: [],
+        escrowData: null,
       }
 
       const nextIndex = state.credentialIndex + 1
@@ -502,7 +509,7 @@ function CredentialStep({ state, setState, t }: { state: ContractWizardState; se
         <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/>
         </svg>
-        {loading ? t('demo.issuing') : t('demo.issueBtn')}
+        {loading ? t('sandbox.issuing') : t('sandbox.issueBtn')}
       </button>
     </div>
   )
@@ -523,6 +530,7 @@ function ProveStep({ state, setState, t }: { state: ContractWizardState; setStat
   const [proveMethod, setProveMethod] = useState<ProveMethod>('server')
   const [browserProgress, setBrowserProgress] = useState('')
   const proveOnDevice = proveMethod === 'device'
+  const [escrowEnabled, setEscrowEnabled] = useState(true)
 
   // Reset local state when credentials change
   useEffect(() => {
@@ -588,17 +596,42 @@ function ProveStep({ state, setState, t }: { state: ContractWizardState; setStat
             nullifier_field: req.nullifierField,
             role: req.role,
             ...(forceSkipCache ? { skip_cache: true } : {}),
+            ...(escrowEnabled && req.credentialType === 'pid' ? {
+              identity_escrow: {
+                field_names: ['given_name', 'family_name', 'document_number', 'birth_date', 'resident_city'],
+                ecdsa_claim: templatePredicates[0]?.predicate.claim ?? 'given_name',
+                authority_pubkey: DEMO_AUTHORITY_PUBKEY,
+              }
+            } : {}),
           }),
         })
         if (!proveRes.ok) throw new Error(await proveRes.text())
         const proveData = await proveRes.json()
         if (proveData.cached) anyCached = true
 
+        let credEscrowData = null
+        if (escrowEnabled && proveData.compound_proof_json) {
+          try {
+            const compound = JSON.parse(proveData.compound_proof_json)
+            credEscrowData = compound.identity_escrow ?? null
+          } catch {}
+        }
+
+        // Strip escrow data from proof before QR generation (separate storage domain)
+        let proofJsonForQr = proveData.compound_proof_json
+        if (credEscrowData) {
+          try {
+            const compound = JSON.parse(proveData.compound_proof_json)
+            delete compound.identity_escrow
+            proofJsonForQr = JSON.stringify(compound)
+          } catch {}
+        }
+
         // Export compound with compression
         const exportRes = await fetch(`${API_URL}/holder/proof-export-compound?compress=true`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ compound_proof_json: proveData.compound_proof_json }),
+          body: JSON.stringify({ compound_proof_json: proofJsonForQr }),
         })
         if (!exportRes.ok) throw new Error(await exportRes.text())
         const exportData = await exportRes.json()
@@ -631,6 +664,7 @@ function ProveStep({ state, setState, t }: { state: ContractWizardState; setStat
           hiddenFields: proveData.hidden_fields,
           predicateDescriptions,
           qrDataUrls: qrUrlsForThisCredential,
+          escrowData: credEscrowData,
         }
 
         // Store per-party nullifier data
@@ -671,6 +705,38 @@ function ProveStep({ state, setState, t }: { state: ContractWizardState; setStat
         margin: 1,
         width: 280,
       })
+
+      // Generate escrow QRs per party — ML-KEM encrypted, grouped by role
+      const escrowQrUrls: { role: string; roleLabelKey: string; urls: string[] }[] = []
+      for (let ci = 0; ci < updatedCredentials.length; ci++) {
+        const cred = updatedCredentials[ci]
+        const req = template.credentials[ci]
+        if (cred.escrowData && req) {
+          try {
+            const escrowJson = JSON.stringify(cred.escrowData)
+            const pako = await import('pako')
+            const compressed = pako.deflate(new TextEncoder().encode(escrowJson))
+            let binary = ''
+            for (let bi = 0; bi < compressed.length; bi++) binary += String.fromCharCode(compressed[bi])
+            const b64 = btoa(binary)
+            const chunkSize = 2000
+            const totalChunks = Math.ceil(b64.length / chunkSize)
+            const urls: string[] = []
+            for (let chi = 0; chi < totalChunks; chi++) {
+              const chunk = `E${chi + 1}/${totalChunks}:${b64.slice(chi * chunkSize, (chi + 1) * chunkSize)}`
+              const url = await QRCode.toDataURL(chunk, {
+                errorCorrectionLevel: 'L',
+                margin: 1,
+                width: 280,
+              })
+              urls.push(url)
+            }
+            escrowQrUrls.push({ role: req.role, roleLabelKey: req.roleLabelKey, urls })
+          } catch (e) {
+            console.error('Escrow QR generation failed:', e)
+          }
+        }
+      }
 
       // Build CBOR bundle for download
       const { decode, encode } = await import('cbor-x')
@@ -751,6 +817,7 @@ function ProveStep({ state, setState, t }: { state: ContractWizardState; setStat
           termsQrUrl,
           metadataQrUrl,
           bundleCborUrl,
+          escrowQrUrls,
         }))
       }, 600)
     } catch (e: unknown) {
@@ -1128,6 +1195,23 @@ function ProveStep({ state, setState, t }: { state: ContractWizardState; setStat
               ))}
             </div>
           )}
+
+          {/* Identity Escrow — inside proofs section */}
+          <EscrowPanel
+            availableFields={[]}
+            lockedFields={['given_name', 'family_name', 'document_number', 'birth_date', 'resident_city']}
+            predicateFields={(() => {
+              const pidReq = template.credentials.find(c => c.credentialType === 'pid')
+              if (!pidReq) return []
+              const config = CREDENTIAL_TYPES.find(ct => ct.id === 'pid')
+              return pidReq.predicateIds
+                .map(pid => config?.predicates.find(p => p.id === pid)?.predicate.claim)
+                .filter((c): c is string => !!c)
+            })()}
+            onConfigChange={(cfg) => setEscrowEnabled(cfg !== null)}
+            defaultEnabled
+            hardcodedPubkey={DEMO_AUTHORITY_PUBKEY}
+          />
         </div>
       </div>
 
@@ -1141,7 +1225,8 @@ function ProveStep({ state, setState, t }: { state: ContractWizardState; setStat
             </svg>
             <span className="text-blue-300 font-semibold">
               {t('contracts.generating')}{elapsed > 0 ? ` ${elapsed}s` : ''}
-              {currentProvingIndex >= 0 && ` (${currentProvingIndex + 1}/${template.credentials.length})`}
+              {currentProvingIndex >= 0 && ` (${currentProvingIndex + 1}/${template.credentials.length + (template.bindings?.length || 0)})`}
+              {currentProvingIndex === -2 && ` (${template.credentials.length + 1}/${template.credentials.length + (template.bindings?.length || 0)})`}
             </span>
           </div>
         </div>
@@ -1153,7 +1238,7 @@ function ProveStep({ state, setState, t }: { state: ContractWizardState; setStat
           <svg className="w-5 h-5 text-green-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>
           </svg>
-          <span className="text-green-400 font-semibold">{t('demo.proofGenerated')}</span>
+          <span className="text-green-400 font-semibold">{t('sandbox.proofGenerated')}</span>
         </div>
       )}
 
@@ -1193,7 +1278,7 @@ function ProveStep({ state, setState, t }: { state: ContractWizardState; setStat
             ? `${t('contracts.generating')} (${elapsed}s)`
             : t('contracts.generating')
           : proveOnDevice
-            ? t('demo.generateBrowserBtn')
+            ? t('sandbox.generateBrowserBtn')
             : t('contracts.generateProof')}
       </button>
 
@@ -1384,6 +1469,32 @@ function DocumentStep({ state, setState, t }: { state: ContractWizardState; setS
               )}
             </div>
 
+            {/* Escrow Envelopes — per party, inside the document for print */}
+            {state.escrowQrUrls.length > 0 && (
+              <div className="mt-5 pt-5 border-t border-gray-300 print:border-black/20">
+                <div className="flex items-center gap-2 mb-2">
+                  <svg className="w-4 h-4 text-gray-500 print:text-black" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <rect width="18" height="11" x="3" y="11" rx="2" ry="2" />
+                    <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                  </svg>
+                  <h4 className="text-sm font-semibold text-gray-700 print:text-black">{t('escrow.qrLabel')}</h4>
+                </div>
+                <p className="text-[10px] text-gray-400 mb-3">{t('escrow.qrSubtitle')}</p>
+                {state.escrowQrUrls.map((party) => (
+                  <div key={party.role} className="mb-4">
+                    <p className="text-xs font-semibold text-gray-600 print:text-black mb-2">{t(party.roleLabelKey)}</p>
+                    <div className="flex flex-wrap gap-2">
+                      {party.urls.map((url, i) => (
+                        <div key={i} className="border border-gray-300 rounded p-1 print:border-black/30">
+                          <img src={url} alt={`${party.role} Escrow QR ${i + 1}`} className="w-28 h-28 print:w-[40mm] print:h-[40mm]" />
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
             {/* Footer */}
             <div className="text-center text-[9px] text-gray-400 mt-4">
               <span>zk-eidas.com/verify</span>
@@ -1444,6 +1555,31 @@ function VerifyStep({ state, t }: { state: ContractWizardState; t: (key: string)
   const [verificationMethod, setVerificationMethod] = useState<'wasm' | 'server' | null>(null)
   const [verifyTimeMs, setVerifyTimeMs] = useState<number | null>(null)
   const autoVerifyRan = useRef(false)
+  // Per-party escrow decrypt state: role → decrypted fields
+  const [decryptedByRole, setDecryptedByRole] = useState<Record<string, Record<string, string>>>({})
+  const [decryptingRole, setDecryptingRole] = useState<string | null>(null)
+
+  const escrowCredentials = state.credentials
+    .map((c, i) => ({ cred: c, req: template?.credentials[i] }))
+    .filter(({ cred }) => cred.escrowData)
+
+  const handleDecrypt = async (role: string, escrowData: any) => {
+    setDecryptingRole(role)
+    try {
+      const { decryptEscrow } = await import('../lib/escrow-decrypt')
+      const fields = await decryptEscrow(
+        escrowData.encrypted_key,
+        DEMO_AUTHORITY_PRIVKEY,
+        escrowData.ciphertext,
+        escrowData.field_names,
+      )
+      setDecryptedByRole(prev => ({ ...prev, [role]: fields }))
+    } catch (e: any) {
+      alert(`Decrypt failed: ${e.message}`)
+    } finally {
+      setDecryptingRole(null)
+    }
+  }
 
   const allProofs = state.credentials.map(c => c.compoundProofJson).filter(Boolean)
 
@@ -1653,6 +1789,37 @@ function VerifyStep({ state, t }: { state: ContractWizardState; t: (key: string)
               </div>
             </div>
           )}
+
+          {/* Escrow Decrypt — per party */}
+          {escrowCredentials.map(({ cred, req }) => (
+            <div key={req!.role} className="bg-slate-800 rounded-lg border border-amber-500/30 p-5 mt-4">
+              <h4 className="text-sm font-semibold text-amber-400 mb-3">
+                {t('escrow.envelopeTitle')} — {t(req!.roleLabelKey)}
+              </h4>
+
+              {!decryptedByRole[req!.role] ? (
+                <button
+                  onClick={() => handleDecrypt(req!.role, cred.escrowData)}
+                  disabled={decryptingRole === req!.role}
+                  className="w-full bg-amber-600 hover:bg-amber-700 disabled:bg-slate-600 text-white text-sm font-semibold py-2 rounded-lg transition-colors"
+                >
+                  {decryptingRole === req!.role ? t('escrow.decrypting') : t('escrow.decryptBtn')}
+                </button>
+              ) : (
+                <div className="bg-amber-500/5 border border-amber-500/20 rounded-lg p-4">
+                  <p className="text-xs text-amber-400 font-semibold mb-2">{t('escrow.decryptedTitle')}</p>
+                  <div className="space-y-1">
+                    {Object.entries(decryptedByRole[req!.role]).map(([name, value]) => (
+                      <div key={name} className="flex justify-between text-xs">
+                        <span className="text-slate-400">{name}</span>
+                        <span className="font-mono text-amber-300">{String(value)}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          ))}
         </div>
       )}
     </div>

@@ -73,6 +73,7 @@ impl CircuitLoader {
             PredicateOp::SetMember => "set_member",
             PredicateOp::Nullifier => "nullifier",
             PredicateOp::HolderBinding => "holder_binding",
+            PredicateOp::IdentityEscrow => "identity_escrow",
         };
 
         let dir = self.base_path.join(name);
@@ -136,6 +137,7 @@ mod tests {
             (PredicateOp::SetMember, "set_member"),
             (PredicateOp::Nullifier, "nullifier"),
             (PredicateOp::HolderBinding, "holder_binding"),
+            (PredicateOp::IdentityEscrow, "identity_escrow"),
         ];
 
         for (op, expected_name) in ops_and_names {

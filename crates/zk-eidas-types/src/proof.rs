@@ -136,6 +136,31 @@ fn default_role() -> String {
     "holder".to_string()
 }
 
+/// Identity escrow data: encrypted credential fields with a pluggable escrow authority.
+///
+/// The ZK proof guarantees that `ciphertext` contains the same credential data that was
+/// verified by the ECDSA signature (honest encryption). The symmetric key K is encrypted
+/// to the escrow authority's public key — only released on court order or arbitration ruling.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct IdentityEscrowData {
+    /// Poseidon hash of all 8 credential data fields (proof public output).
+    pub credential_hash: Vec<u8>,
+    /// 8 Poseidon-CTR encrypted field elements (each as decimal string bytes).
+    pub ciphertext: Vec<Vec<u8>>,
+    /// Poseidon(K) — binds the proof to the symmetric key (proof public output).
+    pub key_commitment: Vec<u8>,
+    /// K encrypted to the escrow authority via ECIES.
+    pub encrypted_key: Vec<u8>,
+    /// Escrow authority's public key (secp256k1, 33 or 65 bytes).
+    pub authority_pubkey: Vec<u8>,
+    /// Names of the credential fields packed into the 8 slots.
+    pub field_names: Vec<String>,
+    /// Which slot (0–7) contains the ECDSA-committed claim value.
+    pub claim_index: u8,
+    /// Groth16 proof for the identity_escrow circuit.
+    pub proof: ZkProof,
+}
+
 /// A compound proof wrapping multiple sub-proofs with a logical operator.
 #[derive(Debug, Clone, PartialEq)]
 pub struct CompoundProof {
@@ -143,6 +168,7 @@ pub struct CompoundProof {
     op: LogicalOp,
     ecdsa_proofs: HashMap<String, ZkProof>,
     contract_nullifiers: Vec<ContractNullifier>,
+    identity_escrow: Option<IdentityEscrowData>,
 }
 
 impl Serialize for CompoundProof {
@@ -150,7 +176,8 @@ impl Serialize for CompoundProof {
         use serde::ser::SerializeStruct;
         let field_count = 2
             + (!self.ecdsa_proofs.is_empty() as usize)
-            + (!self.contract_nullifiers.is_empty() as usize);
+            + (!self.contract_nullifiers.is_empty() as usize)
+            + (self.identity_escrow.is_some() as usize);
         let mut s = serializer.serialize_struct("CompoundProof", field_count)?;
         s.serialize_field("proofs", &self.proofs)?;
         s.serialize_field("op", &self.op)?;
@@ -159,6 +186,9 @@ impl Serialize for CompoundProof {
         }
         if !self.contract_nullifiers.is_empty() {
             s.serialize_field("contract_nullifiers", &self.contract_nullifiers)?;
+        }
+        if let Some(ref escrow) = self.identity_escrow {
+            s.serialize_field("identity_escrow", escrow)?;
         }
         s.end()
     }
@@ -176,6 +206,8 @@ impl<'de> Deserialize<'de> for CompoundProof {
             contract_nullifiers: Option<Vec<ContractNullifier>>,
             #[serde(default)]
             contract_nullifier: Option<ContractNullifier>,
+            #[serde(default)]
+            identity_escrow: Option<IdentityEscrowData>,
         }
         let h = Helper::deserialize(deserializer)?;
         let contract_nullifiers = if let Some(vec) = h.contract_nullifiers {
@@ -190,6 +222,7 @@ impl<'de> Deserialize<'de> for CompoundProof {
             op: h.op,
             ecdsa_proofs: h.ecdsa_proofs,
             contract_nullifiers,
+            identity_escrow: h.identity_escrow,
         })
     }
 }
@@ -197,7 +230,7 @@ impl<'de> Deserialize<'de> for CompoundProof {
 impl CompoundProof {
     /// Create a compound proof from sub-proofs joined by a logical operator.
     pub fn new(proofs: Vec<ZkProof>, op: LogicalOp) -> Self {
-        Self { proofs, op, ecdsa_proofs: HashMap::new(), contract_nullifiers: Vec::new() }
+        Self { proofs, op, ecdsa_proofs: HashMap::new(), contract_nullifiers: Vec::new(), identity_escrow: None }
     }
 
     /// Create a compound proof with associated ECDSA proofs keyed by claim name.
@@ -206,7 +239,7 @@ impl CompoundProof {
         op: LogicalOp,
         ecdsa_proofs: HashMap<String, ZkProof>,
     ) -> Self {
-        Self { proofs, op, ecdsa_proofs, contract_nullifiers: Vec::new() }
+        Self { proofs, op, ecdsa_proofs, contract_nullifiers: Vec::new(), identity_escrow: None }
     }
 
     /// Add a contract nullifier to this compound proof.
@@ -235,6 +268,17 @@ impl CompoundProof {
     /// Returns the first contract nullifier, if any (backward compat).
     pub fn contract_nullifier(&self) -> Option<&ContractNullifier> {
         self.contract_nullifiers.first()
+    }
+
+    /// Attach identity escrow data to this compound proof.
+    pub fn with_identity_escrow(mut self, data: IdentityEscrowData) -> Self {
+        self.identity_escrow = Some(data);
+        self
+    }
+
+    /// Returns the identity escrow data, if present.
+    pub fn identity_escrow(&self) -> Option<&IdentityEscrowData> {
+        self.identity_escrow.as_ref()
     }
 
     /// Returns the sub-proofs.
@@ -423,5 +467,55 @@ mod tests {
         let json = r#"{"proofs":[],"op":"And"}"#;
         let decoded: CompoundProof = serde_json::from_str(json).unwrap();
         assert!(decoded.contract_nullifiers().is_empty());
+    }
+
+    #[test]
+    fn identity_escrow_data_serde_roundtrip() {
+        let escrow = IdentityEscrowData {
+            credential_hash: vec![1, 2, 3],
+            ciphertext: vec![vec![10], vec![20], vec![30]],
+            key_commitment: vec![4, 5, 6],
+            encrypted_key: vec![7, 8, 9],
+            authority_pubkey: vec![0x02; 33],
+            field_names: vec!["name".into(), "address".into()],
+            claim_index: 0,
+            proof: ZkProof::new(vec![], vec![], vec![], PredicateOp::IdentityEscrow),
+        };
+        let json = serde_json::to_string(&escrow).unwrap();
+        let decoded: IdentityEscrowData = serde_json::from_str(&json).unwrap();
+        assert_eq!(decoded.credential_hash, vec![1, 2, 3]);
+        assert_eq!(decoded.ciphertext.len(), 3);
+        assert_eq!(decoded.claim_index, 0);
+        assert_eq!(decoded.field_names, vec!["name", "address"]);
+    }
+
+    #[test]
+    fn compound_proof_with_identity_escrow_serde() {
+        let escrow = IdentityEscrowData {
+            credential_hash: vec![1],
+            ciphertext: vec![vec![2]],
+            key_commitment: vec![3],
+            encrypted_key: vec![4],
+            authority_pubkey: vec![5],
+            field_names: vec!["name".into()],
+            claim_index: 0,
+            proof: ZkProof::new(vec![], vec![], vec![], PredicateOp::IdentityEscrow),
+        };
+        let compound = CompoundProof::new(vec![], LogicalOp::And)
+            .with_identity_escrow(escrow);
+        assert!(compound.identity_escrow().is_some());
+
+        let json = serde_json::to_string(&compound).unwrap();
+        assert!(json.contains("identity_escrow"));
+        let decoded: CompoundProof = serde_json::from_str(&json).unwrap();
+        assert!(decoded.identity_escrow().is_some());
+        assert_eq!(decoded.identity_escrow().unwrap().credential_hash, vec![1]);
+    }
+
+    #[test]
+    fn compound_proof_without_identity_escrow_backward_compat() {
+        let json = r#"{"proofs":[],"op":"And"}"#;
+        let decoded: CompoundProof = serde_json::from_str(json).unwrap();
+        assert!(decoded.identity_escrow().is_none());
     }
 }

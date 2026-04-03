@@ -287,6 +287,40 @@ impl Prover {
         Ok(ZkProof::new(proof, public_inputs, vk_bytes, PredicateOp::HolderBinding)
             .with_binding_hash(hash_bytes))
     }
+
+    /// Stage 2: Prove identity escrow with Poseidon-CTR encryption.
+    ///
+    /// Encrypts `credential_data[8]` using symmetric key K inside the circuit.
+    /// The commitment chain ensures `credential_data[claim_index]` matches the
+    /// ECDSA-verified claim_value. Returns a proof with public outputs:
+    /// credential_hash, ciphertext[8], and key_commitment.
+    pub fn prove_identity_escrow(
+        &self,
+        claim_value: &str,
+        credential_data: &[String; 8],
+        claim_index: u8,
+        k: &str,
+        commitment: &EcdsaCommitment,
+        sd_array_hash: &[u8],
+        message_hash: &[u8],
+    ) -> Result<ZkProof, ProverError> {
+        let artifacts = self.loader.load(PredicateOp::IdentityEscrow)?;
+
+        let input = serde_json::json!({
+            "claim_value": claim_value,
+            "sd_array_hash": bytes_to_decimal_string(sd_array_hash),
+            "message_hash": bytes_to_decimal_string(message_hash),
+            "commitment": bytes_to_decimal_string(commitment.value()),
+            "credential_data": credential_data,
+            "claim_index": claim_index.to_string(),
+            "K": k,
+        });
+
+        let wtns_bytes = generate_cpp_witness(&artifacts.cpp_witness_bin, &input)?;
+        let (proof, public_inputs, vk_bytes) = prove_with_wtns(&artifacts, wtns_bytes)?;
+
+        Ok(ZkProof::new(proof, public_inputs, vk_bytes, PredicateOp::IdentityEscrow))
+    }
 }
 
 // ---------------------------------------------------------------

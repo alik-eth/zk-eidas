@@ -682,6 +682,88 @@ function Learn() {
             </div>
           </div>
 
+          {/* Architecture diagram */}
+          <div className="mb-8">
+            <h4 className="text-sm font-semibold mb-4" style={{ color: "#FFD500" }}>
+              {t("learn.escrowArchTitle")}
+            </h4>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Inside circuit */}
+              <div className="bg-slate-900 rounded-xl border border-blue-500/20 p-4">
+                <p className="text-xs text-blue-400 font-semibold mb-3 uppercase tracking-wider">{t("learn.escrowArchCircuit")}</p>
+                <div className="space-y-2">
+                  {t("learn.escrowArchCircuitItems").split("|").map((item, i) => (
+                    <div key={i} className="flex items-center gap-2">
+                      <div className="w-1.5 h-1.5 rounded-full bg-blue-500 shrink-0" />
+                      <span className="text-xs text-slate-300">{item}</span>
+                    </div>
+                  ))}
+                </div>
+                <div className="mt-3 pt-3 border-t border-blue-500/10">
+                  <p className="text-[10px] text-slate-500 mb-1.5">Public outputs:</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {t("learn.escrowArchOutputs").split("|").map((out, i) => (
+                      <span key={i} className="text-[10px] font-mono bg-blue-500/10 text-blue-400 rounded px-1.5 py-0.5">{out}</span>
+                    ))}
+                  </div>
+                </div>
+              </div>
+              {/* Outside circuit */}
+              <div className="bg-slate-900 rounded-xl border border-amber-500/20 p-4">
+                <p className="text-xs text-amber-400 font-semibold mb-3 uppercase tracking-wider">{t("learn.escrowArchOutside")}</p>
+                <div className="flex items-center gap-2 mb-3">
+                  <div className="w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0" />
+                  <span className="text-xs text-slate-300">{t("learn.escrowArchMlkem")}</span>
+                </div>
+                <div className="text-[10px] text-slate-500 space-y-1.5">
+                  <p>K → ML-KEM-768 encapsulate → encrypted_key (1120 bytes)</p>
+                  <p>Post-quantum safe: NIST FIPS 203</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Offline vs On-Chain */}
+          <div className="mb-8">
+            <h4 className="text-sm font-semibold mb-4" style={{ color: "#FFD500" }}>
+              {t("learn.escrowModesTitle")}
+            </h4>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Offline */}
+              <div className="bg-slate-800/50 rounded-xl border border-slate-700/50 p-5">
+                <h5 className="text-sm font-semibold text-slate-200 mb-3">{t("learn.escrowOfflineTitle")}</h5>
+                <div className="space-y-2">
+                  {[t("learn.escrowOffline1"), t("learn.escrowOffline2"), t("learn.escrowOffline3"), t("learn.escrowOffline4")].map((item, i) => (
+                    <div key={i} className="flex items-start gap-2">
+                      <span className="text-blue-400 text-xs mt-0.5 shrink-0">{i + 1}.</span>
+                      <p className="text-xs text-slate-400 leading-relaxed">{item}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              {/* On-Chain */}
+              <div className="bg-slate-800/50 rounded-xl border border-amber-500/20 p-5">
+                <h5 className="text-sm font-semibold text-amber-400 mb-3">{t("learn.escrowOnchainTitle")}</h5>
+                <div className="space-y-2">
+                  {[t("learn.escrowOnchain1"), t("learn.escrowOnchain2"), t("learn.escrowOnchain3"), t("learn.escrowOnchain4")].map((item, i) => (
+                    <div key={i} className="flex items-start gap-2">
+                      <span className="text-amber-400 text-xs mt-0.5 shrink-0">{i + 1}.</span>
+                      <p className="text-xs text-slate-400 leading-relaxed">{item}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Quantum Safety */}
+          <div className="bg-emerald-950/20 border border-emerald-500/20 rounded-xl p-5 mb-8">
+            <h4 className="text-sm font-semibold text-emerald-400 mb-2">{t("learn.escrowQuantumTitle")}</h4>
+            <p className="text-sm text-slate-400 leading-relaxed">
+              {t("learn.escrowQuantumDesc")}
+            </p>
+          </div>
+
           {/* Overhead note */}
           <p className="text-sm text-slate-500">{t("learn.escrowOverhead")}</p>
         </section>

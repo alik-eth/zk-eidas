@@ -24,11 +24,18 @@ async function issueDefaultPid(page: Page) {
 }
 
 async function selectOnlyPredicates(page: Page, labels: string[]) {
+  // First, uncheck all predicate checkboxes by targeting only visible ones with short timeout
   const checkboxes = page.getByRole('checkbox')
   const count = await checkboxes.count()
   for (let i = 0; i < count; i++) {
     const cb = checkboxes.nth(i)
-    if (await cb.isChecked()) await cb.click()
+    const visible = await cb.isVisible().catch(() => false)
+    if (!visible) continue
+    try {
+      if (await cb.isChecked({ timeout: 1000 })) await cb.click()
+    } catch {
+      continue
+    }
   }
   for (const label of labels) {
     await page.getByRole('checkbox', { name: new RegExp(label) }).check()
@@ -51,13 +58,14 @@ test.describe('Landing Page', () => {
   test('renders hero and key sections', async ({ page }) => {
     await page.goto('/')
     await expect(page.getByRole('heading', { name: 'zk-eidas', level: 2 })).toBeVisible()
-    await expect(page.getByText(/Приватна верифікація|Privacy-Preserving/).first()).toBeVisible()
-    // Capability triptych
-    await expect(page.getByText(/Перевірка на стороні клієнта|Client-side/).first()).toBeVisible()
+    // Subtitle
+    await expect(page.getByText(/незв'язуваності|unlinkability/i).first()).toBeVisible()
+    // Unlinkability gap section
+    await expect(page.getByText(/Прогалина незв'язуваності|Unlinkability Gap/i).first()).toBeVisible()
     // Live proof section
-    await expect(page.getByText(/Спробуйте самі|Try it yourself/).first()).toBeVisible()
+    await expect(page.getByText(/eIDAS 2.0 в дії|in action/i).first()).toBeVisible()
     // Paper contracts section
-    await expect(page.getByText(/паперових контрактів|paper contracts/i).first()).toBeVisible()
+    await expect(page.getByText(/контракти без персональних даних|contracts/i).first()).toBeVisible()
     // Footer
     await expect(page.getByText(/Apache 2.0/).first()).toBeVisible()
   })
@@ -91,9 +99,9 @@ test.describe('Learn Page', () => {
 // Demo — Form + Issuance
 // ---------------------------------------------------------------------------
 
-test.describe('Demo — Page Load', () => {
+test.describe('Sandbox — Page Load', () => {
   test('PID form loads with 5 credential types', async ({ page }) => {
-    await page.goto('/demo')
+    await page.goto('/sandbox')
     await expect(page.getByText(/Персональні ідентифікаційні|Personal Identification/).first()).toBeVisible()
     await expect(page.locator('input').first()).toBeVisible()
     await expect(page.getByRole('button', { name: /Видати посвідчення|Issue/ })).toBeVisible()
@@ -101,7 +109,7 @@ test.describe('Demo — Page Load', () => {
   })
 
   test('issuing PID shows predicate checkboxes', async ({ page }) => {
-    await page.goto('/demo')
+    await page.goto('/sandbox')
     await issueDefaultPid(page)
     await expect(page.getByRole('checkbox', { name: /щонайменше 18|at least 18/ })).toBeVisible()
     await expect(page.getByRole('checkbox', { name: /громадянство|nationality/i })).toBeVisible()
@@ -112,9 +120,9 @@ test.describe('Demo — Page Load', () => {
 // Demo — E2E Proof (PID age >= 18)
 // ---------------------------------------------------------------------------
 
-test.describe('Demo — E2E Proof', () => {
+test.describe('Sandbox — E2E Proof', () => {
   test('PID: issue → prove age >= 18 → verified + hidden fields', async ({ page }) => {
-    await page.goto('/demo')
+    await page.goto('/sandbox')
     await issueDefaultPid(page)
     await selectOnlyPredicates(page, ['щонайменше 18|at least 18'])
     await generateProofAndWait(page)
@@ -128,7 +136,7 @@ test.describe('Demo — E2E Proof', () => {
 // Demo — On-Device Proof (browser-side proving via snarkjs)
 // ---------------------------------------------------------------------------
 
-test.describe('Demo — On-Device Proof', () => {
+test.describe('Sandbox — On-Device Proof', () => {
   // Skip by default: ECDSA proving takes ~3 min in the browser.
   // Run manually: E2E_ON_DEVICE=1 npx playwright test --grep "On-Device"
   test.skip(() => !process.env.E2E_ON_DEVICE, 'slow: set E2E_ON_DEVICE=1 to run')
@@ -136,7 +144,7 @@ test.describe('Demo — On-Device Proof', () => {
   test('PID: issue → on-device prove age >= 18 → verified', async ({ page }) => {
     test.setTimeout(600_000) // 10 min — ECDSA circuit is heavy in browser
     enableConsoleLogs(page)
-    await page.goto('/demo')
+    await page.goto('/sandbox')
     await issueDefaultPid(page)
 
     // Toggle to "On Device" proving
@@ -154,9 +162,9 @@ test.describe('Demo — On-Device Proof', () => {
 // Demo — Print (QR codes)
 // ---------------------------------------------------------------------------
 
-test.describe('Demo — Print', () => {
+test.describe('Sandbox — Print', () => {
   test('proof generates QR codes', async ({ page }) => {
-    await page.goto('/demo')
+    await page.goto('/sandbox')
     await issueDefaultPid(page)
     await selectOnlyPredicates(page, ['щонайменше 18|at least 18'])
     await generateProofAndWait(page)
@@ -185,15 +193,21 @@ test.describe('Verify Page', () => {
 
 test.describe('Contracts', () => {
   test('shows all 4 templates', async ({ page }) => {
-    await page.goto('/contracts')
+    await page.goto('/demo')
     await expect(page.getByText(/Перевірка віку|Age Verification/).first()).toBeVisible()
     await expect(page.getByText(/Студентський проїзний|Student Transit/).first()).toBeVisible()
     await expect(page.getByText(/найму водія|Driver Employment/).first()).toBeVisible()
     await expect(page.getByText(/купівлі-продажу|Vehicle Sale/).first()).toBeVisible()
   })
 
-  test('clicking template advances wizard', async ({ page }) => {
+  test('/contracts redirects to /demo', async ({ page }) => {
     await page.goto('/contracts')
+    await page.waitForURL('/demo')
+    await expect(page.getByText(/Перевірка віку|Age Verification/).first()).toBeVisible()
+  })
+
+  test('clicking template advances wizard', async ({ page }) => {
+    await page.goto('/demo')
     await page.waitForTimeout(2000)
     await page.locator('button', { hasText: /Перевірка віку/ }).first().click()
     await expect(page.getByRole('button', { name: /Почати спочатку|Start over/ })).toBeVisible({ timeout: 15_000 })
@@ -241,7 +255,7 @@ for (const tpl of CONTRACT_TEMPLATES) {
       })
 
       // 1. Select template
-      await page.goto('/contracts')
+      await page.goto('/demo')
       await page.waitForTimeout(2000)
       await page.locator('button', { hasText: tpl.pattern }).first().click()
       await expect(page.getByRole('button', { name: /Почати спочатку|Start over/ })).toBeVisible({ timeout: 15_000 })
@@ -292,8 +306,8 @@ test.describe('i18n', () => {
   test('EN/UA toggle works', async ({ page }) => {
     await page.goto('/')
     await page.waitForTimeout(2000)
-    await expect(page.getByText(/Доведіть, хто ви є/).first()).toBeVisible()
+    await expect(page.getByText(/незв'язуваності|eIDAS 2.0/).first()).toBeVisible()
     await page.getByRole('button', { name: 'EN' }).click()
-    await expect(page.getByText(/Prove who you are/).first()).toBeVisible()
+    await expect(page.getByText(/unlinkability|eIDAS 2.0/i).first()).toBeVisible()
   })
 })

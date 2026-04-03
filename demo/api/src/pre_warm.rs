@@ -54,7 +54,6 @@ fn binding_cache_key(binding_claim: &str, binding_claim_b: &str) -> String {
 
 /// Compute a cache key — MUST match compute_cache_key in main.rs
 fn cache_key(format: &str, predicates: &serde_json::Value) -> String {
-    // For gte/lte ops, omit value (epoch_days drifts after build)
     let preds: Vec<serde_json::Value> = predicates.as_array().unwrap().iter().map(|p| {
         if matches!(p["op"].as_str(), Some("gte" | "lte")) {
             serde_json::json!({"claim": p["claim"], "op": p["op"]})
@@ -97,6 +96,7 @@ async fn main() {
     std::fs::create_dir_all(cache_dir.join("predicate")).unwrap();
     std::fs::create_dir_all(cache_dir.join("binding")).unwrap();
     std::fs::create_dir_all(cache_dir.join("ecdsa")).unwrap();
+    std::fs::create_dir_all(cache_dir.join("escrow")).unwrap();
 
     let presets: Vec<(&str, serde_json::Value, serde_json::Value, &str)> = vec![
         // PID — age >= 18 + document_number eq (matches contract templates: age_verification, vehicle_sale seller/buyer)
@@ -366,6 +366,106 @@ async fn main() {
         let entry_json = serde_json::to_string_pretty(&entry).unwrap();
         std::fs::write(&pred_path, &entry_json).unwrap();
         println!("  Written to {}", pred_path.display());
+    }
+
+    // Pre-warm escrow proofs for demo PID credentials (seller + buyer)
+    // Escrow proofs are deterministic for the same credential data + authority key.
+    let demo_authority_seed = "4517acb4dc2fdbedddd75851b056cd05bc775731ed1e905af4ce43e31169fce06fa6a62e52a2603e9d733f62f4265d8ce919d218dd265dd2739e9d8e57c3f5f3";
+    let escrow_fields = vec!["given_name", "family_name", "document_number", "birth_date", "resident_city"];
+    let escrow_presets: Vec<(&str, serde_json::Value, &str)> = vec![
+        // Seller PID
+        ("seller_pid", serde_json::json!({
+            "given_name": "Олександр", "family_name": "Петренко",
+            "birth_date": "1998-05-14", "age_over_18": "true",
+            "nationality": "UA", "issuing_country": "UA",
+            "resident_country": "UA", "resident_city": "Київ",
+            "gender": "M", "document_number": "UA-1234567890",
+            "expiry_date": "2035-05-14",
+            "issuing_authority": "Міністерство цифрової трансформації"
+        }), "https://diia.gov.ua"),
+        // Buyer PID
+        ("buyer_pid", serde_json::json!({
+            "given_name": "Марія", "family_name": "Коваленко",
+            "birth_date": "1995-11-03", "age_over_18": "true",
+            "nationality": "UA", "issuing_country": "UA",
+            "resident_country": "UA", "resident_city": "Львів",
+            "gender": "F", "document_number": "UA-9876543210",
+            "expiry_date": "2034-11-03",
+            "issuing_authority": "Міністерство цифрової трансформації"
+        }), "https://diia.gov.ua"),
+    ];
+
+    for (label, claims, issuer) in &escrow_presets {
+        println!("\n[escrow] Pre-warming escrow proof for {label}");
+
+        // Compute escrow cache key — MUST match compute_escrow_cache_key in main.rs
+        // Uses only the escrow field values (sorted), not all claims
+        let mut sorted_fields = escrow_fields.clone();
+        sorted_fields.sort();
+        let field_values: Vec<String> = sorted_fields.iter()
+            .map(|f| claims.get(f).and_then(|v| v.as_str()).unwrap_or("").to_string())
+            .collect();
+        let key_material = format!("escrow|{}|{}|{}",
+            field_values.join("|"),
+            "birth_date",
+            demo_authority_seed,
+        );
+        let escrow_key = format!("{:016x}", fnv_hash(key_material.as_bytes()));
+
+        let escrow_path = cache_dir.join("escrow").join(format!("{escrow_key}.json"));
+        if escrow_path.exists() && !force {
+            println!("  Skipping escrow {escrow_key} (cached)");
+            continue;
+        }
+
+        // Issue credential
+        let issue_res: serde_json::Value = client
+            .post(format!("{base_url}/issuer/issue"))
+            .json(&serde_json::json!({
+                "credential_type": "pid",
+                "claims": claims,
+                "issuer": issuer,
+            }))
+            .send().await.expect("issue failed").json().await.expect("parse failed");
+
+        let credential = issue_res["credential"].as_str().unwrap();
+
+        // Prove with escrow
+        let t0 = std::time::Instant::now();
+        let prove_res = client
+            .post(format!("{base_url}/holder/contract-prove"))
+            .json(&serde_json::json!({
+                "credential": credential,
+                "format": "sdjwt",
+                "predicates": [{ "claim": "birth_date", "op": "gte", "value": 18 }],
+                "contract_terms": "escrow-prewarm",
+                "timestamp": "2026-01-01T00:00:00Z",
+                "identity_escrow": {
+                    "field_names": escrow_fields,
+                    "ecdsa_claim": "birth_date",
+                    "authority_pubkey": demo_authority_seed,
+                },
+            }))
+            .send().await.expect("prove failed");
+
+        if !prove_res.status().is_success() {
+            let err = prove_res.text().await.unwrap_or_default();
+            eprintln!("  FAILED escrow prove {label}: {err}");
+            continue;
+        }
+        let prove_data: serde_json::Value = prove_res.json().await.unwrap();
+        println!("  Proved in {:.1}s", t0.elapsed().as_secs_f64());
+
+        // Extract escrow data from compound proof
+        let compound_json = prove_data["compound_proof_json"].as_str().unwrap();
+        let compound: serde_json::Value = serde_json::from_str(compound_json).unwrap();
+        if let Some(escrow_data) = compound.get("identity_escrow") {
+            let escrow_json = serde_json::to_string_pretty(escrow_data).unwrap();
+            std::fs::write(&escrow_path, &escrow_json).unwrap();
+            println!("  Written to {}", escrow_path.display());
+        } else {
+            eprintln!("  WARNING: no identity_escrow in compound proof for {label}");
+        }
     }
 
     // Pre-warm holder binding (vehicle_sale: seller PID ↔ vehicle registration)

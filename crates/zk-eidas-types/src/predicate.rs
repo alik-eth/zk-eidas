@@ -16,6 +16,7 @@ pub enum PredicateOp {
     /// Special circuits
     Nullifier,
     HolderBinding,
+    IdentityEscrow,
 }
 
 /// A fully-specified predicate binding a claim name, operation, and threshold.
@@ -85,6 +86,7 @@ mod tests {
             PredicateOp::SetMember,
             PredicateOp::Nullifier,
             PredicateOp::HolderBinding,
+            PredicateOp::IdentityEscrow,
         ];
         for op in &ops {
             let json = serde_json::to_string(op).unwrap();

@@ -40,6 +40,7 @@ fn test_circuit_loader_all_ops_have_correct_names() {
         (PredicateOp::SetMember, "set_member"),
         (PredicateOp::Nullifier, "nullifier"),
         (PredicateOp::HolderBinding, "holder_binding"),
+        (PredicateOp::IdentityEscrow, "identity_escrow"),
     ];
 
     for (op, expected_name) in ops {
@@ -92,4 +93,6 @@ fn test_prover_all_predicates_fail_with_missing_circuits() {
     assert!(prover.prove_set_member(1, &[0u64; 16], 1, &commitment, &hash, &hash).is_err());
     assert!(prover.prove_nullifier(1, 2, 3, &commitment, &hash, &hash).is_err());
     assert!(prover.prove_holder_binding(1, &commitment, &hash, &hash).is_err());
+    let data: [String; 8] = std::array::from_fn(|_| "0".to_string());
+    assert!(prover.prove_identity_escrow("1", &data, 0, "42", &commitment, &hash, &hash).is_err());
 }

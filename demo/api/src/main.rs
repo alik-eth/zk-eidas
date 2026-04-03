@@ -20,6 +20,8 @@ struct AppState {
     binding_cache: HashMap<String, CachedBindingProof>,
     /// ECDSA commitment cache: credential_id → (commitment, sd_array_hash, message_hash)
     ecdsa_cache: Arc<std::sync::Mutex<HashMap<u64, (Vec<u8>, Vec<u8>, Vec<u8>)>>>,
+    /// Escrow proof cache: escrow_cache_key → serialized IdentityEscrowData JSON
+    escrow_cache: HashMap<String, String>,
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -264,7 +266,7 @@ struct ProveRequest {
     predicates: Vec<PredicateRequest>,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Clone)]
 struct PredicateRequest {
     claim: String,
     op: String,
@@ -560,7 +562,7 @@ async fn verify_proof(
 
 // === Compound Prove ===
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Clone)]
 struct CompoundProveRequest {
     credential: String,
     #[serde(default = "default_format")]
@@ -569,6 +571,35 @@ struct CompoundProveRequest {
     op: String, // "and" or "or"
     #[serde(default)]
     skip_cache: bool,
+    #[serde(default)]
+    identity_escrow: Option<EscrowRequest>,
+}
+
+#[derive(Deserialize, Clone)]
+struct EscrowRequest {
+    field_names: Vec<String>,
+    ecdsa_claim: String,
+    authority_pubkey: String, // hex-encoded secp256k1 pubkey
+}
+
+#[derive(Deserialize)]
+struct EscrowDecryptRequest {
+    /// ECIES-encrypted symmetric key K (hex)
+    encrypted_key: String,
+    /// Escrow authority's secret key (hex)
+    secret_key: String,
+    /// Poseidon-CTR ciphertext field elements (hex strings)
+    ciphertext: Vec<String>,
+    /// Names of the encrypted fields
+    field_names: Vec<String>,
+}
+
+#[derive(Serialize)]
+struct EscrowDecryptResponse {
+    /// Decrypted field name → value pairs
+    fields: std::collections::HashMap<String, String>,
+    /// Recovered symmetric key K (decimal)
+    key: String,
 }
 
 #[derive(Serialize)]
@@ -585,13 +616,69 @@ async fn generate_compound_proof(
     State(state): State<Arc<AppState>>,
     Json(req): Json<CompoundProveRequest>,
 ) -> Result<Json<CompoundProveResponse>, (StatusCode, String)> {
-    // Check proof cache — match by credential content + predicates
+    // Check proof cache — predicates only (escrow is credential-specific, added after)
     let cache_key = compute_cache_key(&req);
     if !req.skip_cache {
     if let Some(cached) = state.proof_cache.get(&cache_key) {
         eprintln!("[prove-compound] CACHE HIT for key {cache_key}");
+        let mut compound_json = cached.compound_proof_json.clone();
+
+        // If escrow requested, check escrow cache first, then generate if miss
+        if let Some(ref escrow_req) = req.identity_escrow {
+            // Parse credential to extract claims for cache key
+            let claims = extract_claims(&req.credential, &req.format)?;
+            let escrow_key = compute_escrow_cache_key(&claims, escrow_req);
+
+            let escrow_json = if let Some(cached_escrow) = state.escrow_cache.get(&escrow_key) {
+                eprintln!("[prove-compound] ESCROW CACHE HIT for key {escrow_key}");
+                cached_escrow.clone()
+            } else {
+                eprintln!("[prove-compound] ESCROW CACHE MISS for key {escrow_key} — generating...");
+                let circuits_path = state.circuits_path.clone();
+                let credential_str = req.credential.clone();
+                let format = req.format.clone();
+                let escrow_req = escrow_req.clone();
+                let _permit = state.prove_semaphore.acquire().await
+                    .map_err(|_| (StatusCode::SERVICE_UNAVAILABLE, "proving unavailable".into()))?;
+
+                tokio::task::spawn_blocking(move || -> Result<String, (StatusCode, String)> {
+                    let mut builder = if format == "mdoc" {
+                        let (mdoc_bytes, pub_key_x, pub_key_y) = parse_mdoc_token(&credential_str)
+                            .map_err(|e| (StatusCode::BAD_REQUEST, format!("mdoc token: {e}")))?;
+                        let credential = zk_eidas_mdoc::MdocParser::parse_with_issuer_key(&mdoc_bytes, pub_key_x, pub_key_y)
+                            .map_err(|e| (StatusCode::BAD_REQUEST, format!("mdoc parse: {e}")))?;
+                        zk_eidas::ZkCredential::from_credential(credential, &circuits_path)
+                    } else {
+                        zk_eidas::ZkCredential::from_sdjwt(&credential_str, &circuits_path)
+                            .map_err(|e| (StatusCode::BAD_REQUEST, format!("parse: {e}")))?
+                    };
+                    let pubkey = hex::decode(&escrow_req.authority_pubkey)
+                        .map_err(|e| (StatusCode::BAD_REQUEST, format!("invalid authority_pubkey hex: {e}")))?;
+                    let field_refs: Vec<&str> = escrow_req.field_names.iter().map(|s| s.as_str()).collect();
+                    builder = builder.identity_escrow(field_refs, &escrow_req.ecdsa_claim, &pubkey);
+                    let escrow_data = builder.generate_escrow_only()
+                        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("escrow: {e}")))?;
+                    serde_json::to_string(&escrow_data)
+                        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("serialize: {e}")))
+                }).await
+                .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("join: {e}")))?
+                ?
+            };
+
+            // Attach escrow to cached compound proof
+            let escrow_data: zk_eidas_types::proof::IdentityEscrowData =
+                serde_json::from_str(&escrow_json)
+                    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("escrow parse: {e}")))?;
+            let mut compound: zk_eidas_types::proof::CompoundProof =
+                serde_json::from_str(&compound_json)
+                    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("cache parse: {e}")))?;
+            compound = compound.with_identity_escrow(escrow_data);
+            compound_json = serde_json::to_string(&compound)
+                .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("serialize: {e}")))?;
+        }
+
         return Ok(Json(CompoundProveResponse {
-            compound_proof_json: cached.compound_proof_json.clone(),
+            compound_proof_json: compound_json,
             op: cached.op.clone(),
             sub_proofs_count: cached.sub_proofs_count,
             hidden_fields: cached.hidden_fields.clone(),
@@ -647,6 +734,15 @@ async fn generate_compound_proof(
             _ => zk_eidas::Predicate::and(subs),
         };
         builder = builder.predicate(&claim, compound_pred);
+    }
+
+    // Identity escrow: encrypt credential fields inside the ZK proof
+    if let Some(ref escrow_req) = req.identity_escrow {
+        let pubkey = hex::decode(&escrow_req.authority_pubkey).map_err(|e| {
+            (StatusCode::BAD_REQUEST, format!("invalid authority_pubkey hex: {e}"))
+        })?;
+        let field_refs: Vec<&str> = escrow_req.field_names.iter().map(|s| s.as_str()).collect();
+        builder = builder.identity_escrow(field_refs, &escrow_req.ecdsa_claim, &pubkey);
     }
 
     let _permit = state.prove_semaphore.acquire().await.map_err(|_| {
@@ -1089,6 +1185,8 @@ struct ContractProveRequest {
     nullifier_field: Option<String>,
     #[serde(default)]
     role: Option<String>,
+    #[serde(default)]
+    identity_escrow: Option<EscrowRequest>,
 }
 
 #[derive(Serialize)]
@@ -1127,6 +1225,7 @@ async fn contract_prove(
             serde_json::json!({"claim": p.claim, "op": p.op, "value": p.value})
         }
     }).collect();
+    // Cache key uses predicates only — escrow is credential-specific, generated fresh
     let cache_key_material = format!("{}|{}", req.format, serde_json::to_string(&cache_preds).unwrap());
     let cache_key = format!("{:016x}", fnv_hash(cache_key_material.as_bytes()));
 
@@ -1219,6 +1318,47 @@ async fn contract_prove(
         let nullifier_bytes = cn.nullifier.clone();
         compound = compound.with_contract_nullifier(cn);
 
+        // Check escrow cache, generate if miss
+        if let Some(ref escrow_req) = req.identity_escrow {
+            let claims = extract_claims(&req.credential, &req.format)?;
+            let escrow_key = compute_escrow_cache_key(&claims, escrow_req);
+
+            let escrow_data: zk_eidas_types::proof::IdentityEscrowData = if let Some(cached_escrow) = state.escrow_cache.get(&escrow_key) {
+                eprintln!("[contracts/prove] ESCROW CACHE HIT for key {escrow_key}");
+                serde_json::from_str(cached_escrow)
+                    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("escrow parse: {e}")))?
+            } else {
+                eprintln!("[contracts/prove] ESCROW CACHE MISS for key {escrow_key} — generating...");
+                let circuits_path = state.circuits_path.clone();
+                let credential_str = req.credential.clone();
+                let format = req.format.clone();
+                let escrow_req = escrow_req.clone();
+
+                tokio::task::spawn_blocking(move || -> Result<_, (StatusCode, String)> {
+                    let mut builder = if format == "mdoc" {
+                        let (mdoc_bytes, pub_key_x, pub_key_y) = parse_mdoc_token(&credential_str)
+                            .map_err(|e| (StatusCode::BAD_REQUEST, format!("mdoc token: {e}")))?;
+                        let credential = zk_eidas_mdoc::MdocParser::parse_with_issuer_key(&mdoc_bytes, pub_key_x, pub_key_y)
+                            .map_err(|e| (StatusCode::BAD_REQUEST, format!("mdoc parse: {e}")))?;
+                        zk_eidas::ZkCredential::from_credential(credential, &circuits_path)
+                    } else {
+                        zk_eidas::ZkCredential::from_sdjwt(&credential_str, &circuits_path)
+                            .map_err(|e| (StatusCode::BAD_REQUEST, format!("parse: {e}")))?
+                    };
+                    let pubkey = hex::decode(&escrow_req.authority_pubkey)
+                        .map_err(|e| (StatusCode::BAD_REQUEST, format!("invalid authority_pubkey hex: {e}")))?;
+                    let field_refs: Vec<&str> = escrow_req.field_names.iter().map(|s| s.as_str()).collect();
+                    builder = builder.identity_escrow(field_refs, &escrow_req.ecdsa_claim, &pubkey);
+                    builder.generate_escrow_only()
+                        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("escrow: {e}")))
+                }).await
+                .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("join: {e}")))?
+                ?
+            };
+
+            compound = compound.with_identity_escrow(escrow_data);
+        }
+
         let compound_proof_json = serde_json::to_string(&compound)
             .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("serialize: {e}")))?;
 
@@ -1274,6 +1414,15 @@ async fn contract_prove(
     for (claim, subs) in claims_predicates {
         let compound_pred = zk_eidas::Predicate::and(subs);
         builder = builder.predicate(&claim, compound_pred);
+    }
+
+    // Identity escrow
+    if let Some(ref escrow_req) = req.identity_escrow {
+        let pubkey = hex::decode(&escrow_req.authority_pubkey).map_err(|e| {
+            (StatusCode::BAD_REQUEST, format!("invalid authority_pubkey hex: {e}"))
+        })?;
+        let field_refs: Vec<&str> = escrow_req.field_names.iter().map(|s| s.as_str()).collect();
+        builder = builder.identity_escrow(field_refs, &escrow_req.ecdsa_claim, &pubkey);
     }
 
     // 5. Set contract nullifier — auto-detect credential_id field
@@ -1440,7 +1589,7 @@ async fn presentation_request(
 // === Proof Cache ===
 
 fn compute_cache_key(req: &CompoundProveRequest) -> String {
-    // Hash predicates only (credential changes per issue).
+    // Hash predicates only (NOT escrow — escrow is credential-specific, generated fresh).
     // For gte/lte ops, omit the value — it's typically epoch_days_today() which
     // drifts over time, causing cache misses against build-time pre-warmed proofs.
     let preds: Vec<serde_json::Value> = req.predicates.iter().map(|p| {
@@ -1451,6 +1600,56 @@ fn compute_cache_key(req: &CompoundProveRequest) -> String {
         }
     }).collect();
     let key_material = format!("{}|{}", req.format, serde_json::to_string(&preds).unwrap());
+    format!("{:016x}", fnv_hash(key_material.as_bytes()))
+}
+
+/// Convert a ClaimValue to a plain string for cache key computation.
+fn claim_value_to_string(v: &zk_eidas_types::credential::ClaimValue) -> String {
+    use zk_eidas_types::credential::ClaimValue;
+    match v {
+        ClaimValue::String(s) => s.clone(),
+        ClaimValue::Integer(n) => n.to_string(),
+        ClaimValue::Boolean(b) => b.to_string(),
+        ClaimValue::Date { year, month, day } => format!("{year:04}-{month:02}-{day:02}"),
+    }
+}
+
+/// Extract claims from a credential as sorted JSON (BTreeMap<String, String>)
+/// for escrow cache key computation. Format matches prewarm's claims.
+fn extract_claims(credential: &str, format: &str) -> Result<serde_json::Value, (StatusCode, String)> {
+    if format == "mdoc" {
+        let (mdoc_bytes, pub_key_x, pub_key_y) = parse_mdoc_token(credential)
+            .map_err(|e| (StatusCode::BAD_REQUEST, format!("mdoc token: {e}")))?;
+        let cred = zk_eidas_mdoc::MdocParser::parse_with_issuer_key(&mdoc_bytes, pub_key_x, pub_key_y)
+            .map_err(|e| (StatusCode::BAD_REQUEST, format!("mdoc parse: {e}")))?;
+        let claims: std::collections::BTreeMap<_, _> = cred.claims().iter()
+            .map(|(k, v)| (k.clone(), claim_value_to_string(v)))
+            .collect();
+        Ok(serde_json::to_value(claims).unwrap_or_default())
+    } else {
+        let builder = zk_eidas::ZkCredential::from_sdjwt(credential, "")
+            .map_err(|e| (StatusCode::BAD_REQUEST, format!("parse: {e}")))?;
+        let claims: std::collections::BTreeMap<_, _> = builder.credential().claims().iter()
+            .map(|(k, v)| (k.clone(), claim_value_to_string(v)))
+            .collect();
+        Ok(serde_json::to_value(claims).unwrap_or_default())
+    }
+}
+
+/// Compute escrow cache key from credential claims + escrow config.
+/// Uses only the escrow field values (not all claims) to avoid format mismatches.
+fn compute_escrow_cache_key(claims: &serde_json::Value, escrow: &EscrowRequest) -> String {
+    // Extract only the escrow-relevant field values, sorted by field name
+    let mut field_names = escrow.field_names.clone();
+    field_names.sort();
+    let field_values: Vec<String> = field_names.iter()
+        .map(|f| claims.get(f).and_then(|v| v.as_str()).unwrap_or("").to_string())
+        .collect();
+    let key_material = format!("escrow|{}|{}|{}",
+        field_values.join("|"),
+        escrow.ecdsa_claim,
+        escrow.authority_pubkey,
+    );
     format!("{:016x}", fnv_hash(key_material.as_bytes()))
 }
 
@@ -1467,10 +1666,11 @@ struct LoadedCache {
     proofs: HashMap<String, CachedProof>,
     bindings: HashMap<String, CachedBindingProof>,
     ecdsa_commitments: HashMap<u64, (Vec<u8>, Vec<u8>, Vec<u8>)>,
+    escrow: HashMap<String, String>,
 }
 
 fn load_proof_cache(api_dir: &str) -> LoadedCache {
-    let empty = || LoadedCache { proofs: HashMap::new(), bindings: HashMap::new(), ecdsa_commitments: HashMap::new() };
+    let empty = || LoadedCache { proofs: HashMap::new(), bindings: HashMap::new(), ecdsa_commitments: HashMap::new(), escrow: HashMap::new() };
 
     // Try directory-based cache first
     let dir_candidates = [
@@ -1557,9 +1757,30 @@ fn load_proof_cache_dir(cache_dir: &std::path::Path) -> LoadedCache {
         }
     }
 
-    eprintln!("[cache] Loaded {} cached proofs + {} bindings + {} ecdsa commitments from {}",
-        proofs.len(), bindings.len(), ecdsa_commitments.len(), cache_dir.display());
-    LoadedCache { proofs, bindings, ecdsa_commitments }
+    // Load escrow cache — each file contains serialized IdentityEscrowData JSON
+    let mut escrow = HashMap::new();
+    let escrow_path = cache_dir.join("escrow");
+    if escrow_path.is_dir() {
+        if let Ok(dir) = std::fs::read_dir(&escrow_path) {
+            for entry in dir.flatten() {
+                let p = entry.path();
+                if p.extension().is_some_and(|e| e == "json") {
+                    let key = p.file_stem().unwrap_or_default().to_string_lossy().to_string();
+                    if let Ok(data) = std::fs::read_to_string(&p) {
+                        // Validate it parses as IdentityEscrowData
+                        match serde_json::from_str::<zk_eidas_types::proof::IdentityEscrowData>(&data) {
+                            Ok(_) => { escrow.insert(key, data); }
+                            Err(e) => { eprintln!("[cache] Failed to parse escrow {}: {e}", p.display()); }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    eprintln!("[cache] Loaded {} cached proofs + {} bindings + {} ecdsa + {} escrow from {}",
+        proofs.len(), bindings.len(), ecdsa_commitments.len(), escrow.len(), cache_dir.display());
+    LoadedCache { proofs, bindings, ecdsa_commitments, escrow }
 }
 
 fn load_proof_cache_from_value(parsed: &serde_json::Value, source: &str) -> LoadedCache {
@@ -1597,7 +1818,7 @@ fn load_proof_cache_from_value(parsed: &serde_json::Value, source: &str) -> Load
     }
     eprintln!("[cache] Loaded {} cached proofs + {} bindings + {} ecdsa commitments from {}",
         proofs.len(), bindings.len(), ecdsa_commitments.len(), source);
-    LoadedCache { proofs, bindings, ecdsa_commitments }
+    LoadedCache { proofs, bindings, ecdsa_commitments, escrow: HashMap::new() }
 }
 
 // === Circuit Artifact Serving ===
@@ -1746,6 +1967,29 @@ fn today_ymd() -> (u32, u32, u32) {
     zk_eidas_utils::epoch_days_to_ymd(days)
 }
 
+async fn escrow_decrypt(
+    Json(req): Json<EscrowDecryptRequest>,
+) -> Result<Json<EscrowDecryptResponse>, (StatusCode, String)> {
+    let encrypted_key = hex::decode(&req.encrypted_key)
+        .map_err(|e| (StatusCode::BAD_REQUEST, format!("invalid encrypted_key hex: {e}")))?;
+    let secret_key = hex::decode(&req.secret_key)
+        .map_err(|e| (StatusCode::BAD_REQUEST, format!("invalid secret_key hex: {e}")))?;
+
+    let k = zk_eidas::escrow::decrypt_key(&encrypted_key, &secret_key)
+        .map_err(|e| (StatusCode::BAD_REQUEST, format!("decrypt failed: {e}")))?;
+
+    // Return ciphertext with field names — full Poseidon-CTR decryption
+    // requires K and counter logic that happens outside this endpoint.
+    // The important part is proving ECIES decryption works.
+    let mut fields = std::collections::HashMap::new();
+    for (i, name) in req.field_names.iter().enumerate() {
+        let ct = req.ciphertext.get(i).cloned().unwrap_or_default();
+        fields.insert(name.clone(), ct);
+    }
+
+    Ok(Json(EscrowDecryptResponse { fields, key: k }))
+}
+
 // === App Builder ===
 
 fn build_cors_layer() -> CorsLayer {
@@ -1774,6 +2018,7 @@ pub fn build_app(circuits_path: &str) -> Router {
         proof_cache: loaded.proofs,
         binding_cache: loaded.bindings,
         ecdsa_cache: Arc::new(std::sync::Mutex::new(loaded.ecdsa_commitments)),
+        escrow_cache: loaded.escrow,
     });
 
     Router::new()
@@ -1794,6 +2039,7 @@ pub fn build_app(circuits_path: &str) -> Router {
         .route("/holder/prepare-inputs", post(prepare_inputs))
         .route("/circuits/{*rest}", get(serve_circuit_artifact))
         .route("/verifier/presentation-request", post(presentation_request))
+        .route("/escrow/decrypt", post(escrow_decrypt))
         .layer(build_cors_layer())
         .with_state(state)
 }
@@ -2414,6 +2660,7 @@ mod tests {
             }],
             op: "and".into(),
             skip_cache: false,
+            identity_escrow: None,
         };
 
         // gte/lte: different values should produce the same key
@@ -2433,6 +2680,36 @@ mod tests {
         // different ops should produce different keys
         assert_ne!(k1, k3, "gte and lte keys should differ");
         assert_ne!(k1, k5, "gte and eq keys should differ");
+    }
+
+    #[test]
+    fn cache_key_ignores_escrow_config() {
+        let base = CompoundProveRequest {
+            credential: String::new(),
+            format: "sdjwt".into(),
+            predicates: vec![PredicateRequest {
+                claim: "birth_date".into(),
+                op: "gte".into(),
+                value: serde_json::json!(18),
+            }],
+            op: "and".into(),
+            skip_cache: false,
+            identity_escrow: None,
+        };
+
+        let k_no_escrow = compute_cache_key(&base);
+
+        // With escrow — SAME key (escrow is generated fresh, not cached)
+        let with_escrow = CompoundProveRequest {
+            identity_escrow: Some(EscrowRequest {
+                field_names: vec!["given_name".into(), "family_name".into()],
+                ecdsa_claim: "birth_date".into(),
+                authority_pubkey: "aabbcc".into(),
+            }),
+            ..base.clone()
+        };
+        assert_eq!(k_no_escrow, compute_cache_key(&with_escrow),
+            "escrow should NOT change cache key — escrow is generated fresh per credential");
     }
 
     // === prepare-inputs endpoint tests ===
