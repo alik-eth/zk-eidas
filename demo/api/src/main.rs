@@ -723,173 +723,153 @@ async fn generate_compound_proof(
     State(state): State<Arc<AppState>>,
     Json(req): Json<CompoundProveRequest>,
 ) -> Result<Json<CompoundProveResponse>, (StatusCode, String)> {
-    // Check proof cache — predicates only (escrow is credential-specific, added after)
+    // Longfellow only supports mdoc credentials
+    if req.format != "mdoc" {
+        return Err((
+            StatusCode::NOT_IMPLEMENTED,
+            "SD-JWT proving not implemented — only mdoc is supported".into(),
+        ));
+    }
+
+    // Parse the mdoc token for Longfellow (hex public key strings)
+    let (mdoc_bytes, pkx_hex, pky_hex) = parse_mdoc_for_longfellow(&req.credential)?;
+
+    // Also parse the mdoc to extract claim values (needed for eq/disclosure CBOR encoding)
+    let (mdoc_bytes_parse, pk_x, pk_y) = parse_mdoc_token(&req.credential)
+        .map_err(|e| (StatusCode::BAD_REQUEST, format!("mdoc token: {e}")))?;
+    let credential =
+        zk_eidas_mdoc::MdocParser::parse_with_issuer_key(&mdoc_bytes_parse, pk_x, pk_y)
+            .map_err(|e| (StatusCode::BAD_REQUEST, format!("mdoc parse: {e}")))?;
+    let claims = credential.claims().clone();
+    let all_field_names: Vec<String> = claims.keys().cloned().collect();
+
+    // Build AttributeRequest list from predicates
+    let mut attrs: Vec<longfellow_sys::mdoc::AttributeRequest> = Vec::new();
+    let mut proven_claims: Vec<String> = Vec::new();
+    for p in &req.predicates {
+        if !proven_claims.contains(&p.claim) {
+            proven_claims.push(p.claim.clone());
+        }
+        let cbor_value = match p.op.as_str() {
+            "eq" | "disclosure" => {
+                let cv = claims.get(&p.claim).ok_or_else(|| {
+                    (StatusCode::BAD_REQUEST, format!("claim '{}' not found in credential", p.claim))
+                })?;
+                claim_to_cbor(cv)
+            }
+            _ => {
+                let value_str = p.value.as_str()
+                    .map(|s| s.to_string())
+                    .unwrap_or_else(|| p.value.to_string());
+                let cv = parse_threshold_value(&p.claim, &value_str);
+                claim_to_cbor(&cv)
+            }
+        };
+        attrs.push(predicate_to_attribute(&p.claim, &p.op, &cbor_value));
+    }
+
+    // Check proof cache (after building attrs so we know the request is valid)
     let cache_key = compute_cache_key(&req);
     if !req.skip_cache {
-    if let Some(cached) = state.proof_cache.get(&cache_key) {
-        eprintln!("[prove-compound] CACHE HIT for key {cache_key}");
-        let mut compound_json = cached.compound_proof_json.clone();
-
-        // If escrow requested, check escrow cache first, then generate if miss
-        if let Some(ref escrow_req) = req.identity_escrow {
-            // Parse credential to extract claims for cache key
-            let claims = extract_claims(&req.credential, &req.format)?;
-            let escrow_key = compute_escrow_cache_key(&claims, escrow_req);
-
-            let escrow_json = if let Some(cached_escrow) = state.escrow_cache.get(&escrow_key) {
-                eprintln!("[prove-compound] ESCROW CACHE HIT for key {escrow_key}");
-                cached_escrow.clone()
-            } else {
-                eprintln!("[prove-compound] ESCROW CACHE MISS for key {escrow_key} — generating...");
-                let circuits_path = state.circuits_path.clone();
-                let credential_str = req.credential.clone();
-                let format = req.format.clone();
-                let escrow_req = escrow_req.clone();
-                let _permit = state.prove_semaphore.acquire().await
-                    .map_err(|_| (StatusCode::SERVICE_UNAVAILABLE, "proving unavailable".into()))?;
-
-                tokio::task::spawn_blocking(move || -> Result<String, (StatusCode, String)> {
-                    let mut builder = if format == "mdoc" {
-                        let (mdoc_bytes, pub_key_x, pub_key_y) = parse_mdoc_token(&credential_str)
-                            .map_err(|e| (StatusCode::BAD_REQUEST, format!("mdoc token: {e}")))?;
-                        let credential = zk_eidas_mdoc::MdocParser::parse_with_issuer_key(&mdoc_bytes, pub_key_x, pub_key_y)
-                            .map_err(|e| (StatusCode::BAD_REQUEST, format!("mdoc parse: {e}")))?;
-                        zk_eidas::ZkCredential::from_credential(credential, &circuits_path)
-                    } else {
-                        zk_eidas::ZkCredential::from_sdjwt(&credential_str, &circuits_path)
-                            .map_err(|e| (StatusCode::BAD_REQUEST, format!("parse: {e}")))?
-                    };
-                    let pubkey = hex::decode(&escrow_req.authority_pubkey)
-                        .map_err(|e| (StatusCode::BAD_REQUEST, format!("invalid authority_pubkey hex: {e}")))?;
-                    let field_refs: Vec<&str> = escrow_req.field_names.iter().map(|s| s.as_str()).collect();
-                    builder = builder.identity_escrow(field_refs, &escrow_req.ecdsa_claim, &pubkey);
-                    let escrow_data = builder.generate_escrow_only()
-                        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("escrow: {e}")))?;
-                    serde_json::to_string(&escrow_data)
-                        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("serialize: {e}")))
-                }).await
-                .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("join: {e}")))?
-                ?
-            };
-
-            // Attach escrow to cached compound proof
-            let escrow_data: zk_eidas_types::proof::IdentityEscrowData =
-                serde_json::from_str(&escrow_json)
-                    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("escrow parse: {e}")))?;
-            let mut compound: zk_eidas_types::proof::CompoundProof =
-                serde_json::from_str(&compound_json)
-                    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("cache parse: {e}")))?;
-            compound = compound.with_identity_escrow(escrow_data);
-            compound_json = serde_json::to_string(&compound)
-                .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("serialize: {e}")))?;
+        if let Some(cached) = state.proof_cache.get(&cache_key) {
+            eprintln!("[prove-compound] CACHE HIT for key {cache_key}");
+            // TODO(task-8): escrow handling deferred to Task 8
+            if req.identity_escrow.is_some() {
+                eprintln!("[prove-compound] WARNING: identity_escrow requested but not yet supported on Longfellow branch");
+            }
+            return Ok(Json(CompoundProveResponse {
+                compound_proof_json: cached.compound_proof_json.clone(),
+                op: cached.op.clone(),
+                sub_proofs_count: cached.sub_proofs_count,
+                hidden_fields: cached.hidden_fields.clone(),
+                cached: true,
+            }));
         }
-
-        return Ok(Json(CompoundProveResponse {
-            compound_proof_json: compound_json,
-            op: cached.op.clone(),
-            sub_proofs_count: cached.sub_proofs_count,
-            hidden_fields: cached.hidden_fields.clone(),
-            cached: true,
-        }));
-    }
     }
     eprintln!("[prove-compound] {} for key {cache_key}", if req.skip_cache { "CACHE SKIPPED" } else { "CACHE MISS" });
-
-
-    let (mut builder, all_field_names) = if req.format == "mdoc" {
-        let (mdoc_bytes, pub_key_x, pub_key_y) = parse_mdoc_token(&req.credential)
-            .map_err(|e| (StatusCode::BAD_REQUEST, format!("mdoc token: {e}")))?;
-        let credential =
-            zk_eidas_mdoc::MdocParser::parse_with_issuer_key(&mdoc_bytes, pub_key_x, pub_key_y)
-                .map_err(|e| (StatusCode::BAD_REQUEST, format!("mdoc parse: {e}")))?;
-        let names: Vec<String> = credential.claims().keys().cloned().collect();
-        (
-            zk_eidas::ZkCredential::from_credential(credential, &state.circuits_path),
-            names,
-        )
-    } else {
-        let builder = zk_eidas::ZkCredential::from_sdjwt(&req.credential, &state.circuits_path)
-            .map_err(|e| (StatusCode::BAD_REQUEST, format!("parse error: {e}")))?;
-        let names: Vec<String> = builder.credential().claims().keys().cloned().collect();
-        (builder, names)
-    };
-
-    // Group predicates by claim name
-    let mut claims_predicates: std::collections::BTreeMap<String, Vec<zk_eidas::Predicate>> =
-        std::collections::BTreeMap::new();
-    let mut proven_claims: Vec<String> = Vec::new();
-
-    for pred in &req.predicates {
-        let predicate = parse_predicate(pred)?;
-        if !proven_claims.contains(&pred.claim) {
-            proven_claims.push(pred.claim.clone());
-        }
-        claims_predicates
-            .entry(pred.claim.clone())
-            .or_default()
-            .push(predicate);
-    }
 
     // Log what we're about to prove
     eprintln!("[prove-compound] format={} predicates:", req.format);
     for pred in &req.predicates {
         eprintln!("  claim={} op={} value={}", pred.claim, pred.op, pred.value);
     }
-    for (claim, subs) in claims_predicates {
-        let compound_pred = match req.op.as_str() {
-            "or" => zk_eidas::Predicate::or(subs),
-            _ => zk_eidas::Predicate::and(subs),
-        };
-        builder = builder.predicate(&claim, compound_pred);
-    }
 
-    // Identity escrow: encrypt credential fields inside the ZK proof
-    if let Some(ref escrow_req) = req.identity_escrow {
-        let pubkey = hex::decode(&escrow_req.authority_pubkey).map_err(|e| {
-            (StatusCode::BAD_REQUEST, format!("invalid authority_pubkey hex: {e}"))
-        })?;
-        let field_refs: Vec<&str> = escrow_req.field_names.iter().map(|s| s.as_str()).collect();
-        builder = builder.identity_escrow(field_refs, &escrow_req.ecdsa_claim, &pubkey);
-    }
+    // Get or generate the cached circuit for this attribute count
+    let _circuit_ref = get_circuit(&state, attrs.len()).await?;
 
+    // Default `now` to current UTC time in ISO 8601 format
+    let now = {
+        let d = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default();
+        let secs = d.as_secs();
+        let days = secs / 86400;
+        let time_of_day = secs % 86400;
+        let hours = time_of_day / 3600;
+        let minutes = (time_of_day % 3600) / 60;
+        let seconds = time_of_day % 60;
+        let (year, month, day) = epoch_days_to_date(days as i64);
+        format!("{year:04}-{month:02}-{day:02}T{hours:02}:{minutes:02}:{seconds:02}Z")
+    };
+
+    // Acquire proving semaphore (only one proof at a time)
     let _permit = state.prove_semaphore.acquire().await.map_err(|_| {
         (StatusCode::SERVICE_UNAVAILABLE, "proving unavailable".to_string())
     })?;
-    let (compound_proof, proven_claims, all_field_names) =
-        tokio::task::spawn_blocking(move || -> Result<_, (StatusCode, String)> {
-            // SAFETY: nice() only adjusts scheduling priority; safe to call from any thread, cannot cause UB.
-            unsafe { libc::nice(10) };
-            let compound_proof = builder.prove_compound().map_err(|e| {
-                (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    format!("compound proving failed: {e}"),
-                )
+
+    // Clone for the spawn_blocking closure
+    let state_clone = Arc::clone(&state);
+    let num_attrs = attrs.len();
+    let attrs_clone = attrs.clone();
+    let mdoc_bytes_clone = mdoc_bytes.clone();
+    let pkx_clone = pkx_hex.clone();
+    let pky_clone = pky_hex.clone();
+    let now_clone = now.clone();
+
+    let proof = tokio::task::spawn_blocking(move || {
+        // SAFETY: nice() only adjusts scheduling priority; safe to call from any thread.
+        unsafe { libc::nice(10) };
+        let circuit = state_clone.longfellow_circuits[num_attrs - 1]
+            .get()
+            .ok_or_else(|| {
+                (StatusCode::INTERNAL_SERVER_ERROR, "circuit not initialized".to_string())
             })?;
-            Ok((compound_proof, proven_claims, all_field_names))
-        })
-        .await
-        .map_err(|e| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                format!("task join error: {e}"),
-            )
-        })??;
-
-    let op_label = format!("{:?}", compound_proof.op());
-    let sub_proofs_count = compound_proof.proofs().len();
-
-    let compound_proof_json = serde_json::to_string(&compound_proof).map_err(|e| {
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            format!("serialization failed: {e}"),
+        longfellow_sys::mdoc::prove(
+            circuit,
+            &mdoc_bytes_clone,
+            &pkx_clone,
+            &pky_clone,
+            b"zk-eidas-demo",
+            &attrs_clone,
+            &now_clone,
+            &[0u8; 8],
         )
-    })?;
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("prove: {e}")))
+    })
+    .await
+    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("join: {e}")))??;
+
+    // Serialize MdocProof as the compound proof JSON
+    let compound_proof_json = serde_json::json!({
+        "proof_bytes": proof.proof_bytes,
+        "nullifier_hash": hex::encode(proof.nullifier_hash),
+        "binding_hash": hex::encode(proof.binding_hash),
+    })
+    .to_string();
+
+    let op_label = req.op.clone();
+    let sub_proofs_count = req.predicates.len();
 
     let hidden_fields: Vec<String> = all_field_names
         .iter()
         .filter(|f| !proven_claims.contains(f))
         .cloned()
         .collect();
+
+    // TODO(task-8): escrow handling deferred to Task 8
+    if req.identity_escrow.is_some() {
+        eprintln!("[prove-compound] WARNING: identity_escrow requested but not yet supported on Longfellow branch");
+    }
 
     Ok(Json(CompoundProveResponse {
         compound_proof_json,
