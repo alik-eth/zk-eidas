@@ -60,6 +60,8 @@ mod tests {
             let mut proof: *mut u8 = ptr::null_mut();
             let mut proof_len: std::os::raw::c_ulong = 0;
 
+            let contract_hash = [0u8; 8];
+            let mut nullifier_hash = [0u8; 32];
             let ret = run_mdoc_prover(
                 circuit,
                 circuit_len,
@@ -72,8 +74,10 @@ mod tests {
                 ptr::null(),
                 0, // no attrs
                 ptr::null(), // null time
+                contract_hash.as_ptr(),
                 &mut proof,
                 &mut proof_len,
+                nullifier_hash.as_mut_ptr(),
                 spec,
             );
 

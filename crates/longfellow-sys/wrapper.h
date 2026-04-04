@@ -68,7 +68,9 @@ extern MdocProverErrorCode run_mdoc_prover(
     const uint8_t* transcript, unsigned long tr_len,
     const RequestedAttribute* attrs, unsigned long attrs_len,
     const char* now,
+    const uint8_t* contract_hash,  /* 8 bytes */
     uint8_t** prf, unsigned long* proof_len,
+    uint8_t nullifier_hash_out[32],
     const ZkSpecStruct* zk_spec_version
 );
 
@@ -78,6 +80,8 @@ extern MdocVerifierErrorCode run_mdoc_verifier(
     const uint8_t* transcript, unsigned long tr_len,
     const RequestedAttribute* attrs, unsigned long attrs_len,
     const char* now,
+    const uint8_t* contract_hash,  /* 8 bytes */
+    const uint8_t nullifier_hash[32],
     const uint8_t* zkproof, unsigned long proof_len,
     const char* docType,
     const ZkSpecStruct* zk_spec_version

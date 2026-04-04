@@ -30,6 +30,7 @@ pub struct AttributeRequest {
 #[derive(Debug, Clone)]
 pub struct MdocProof {
     pub proof_bytes: Vec<u8>,
+    pub nullifier_hash: [u8; 32],
     pub circuit_spec_index: usize,
 }
 
@@ -65,6 +66,8 @@ impl MdocCircuit {
 }
 
 /// Prove selective disclosure + predicates on an mdoc credential.
+/// `contract_hash` is an 8-byte domain separator for the nullifier.
+/// The returned proof includes `nullifier_hash = SHA-256(e || contract_hash)`.
 pub fn prove(
     circuit: &MdocCircuit,
     mdoc_bytes: &[u8],
@@ -73,6 +76,7 @@ pub fn prove(
     session_transcript: &[u8],
     attributes: &[AttributeRequest],
     now: &str,
+    contract_hash: &[u8; 8],
 ) -> Result<MdocProof, MdocError> {
     if attributes.len() != circuit.num_attributes {
         return Err(MdocError::InvalidInput(format!(
@@ -99,6 +103,7 @@ pub fn prove(
         let spec = kZkSpecs.as_ptr().add(circuit.spec_index);
         let mut proof_ptr: *mut u8 = std::ptr::null_mut();
         let mut proof_len: std::os::raw::c_ulong = 0;
+        let mut nullifier_hash = [0u8; 32];
 
         let ret = run_mdoc_prover(
             circuit.bytes.as_ptr(),
@@ -112,8 +117,10 @@ pub fn prove(
             c_attrs.as_ptr(),
             c_attrs.len() as std::os::raw::c_ulong,
             now_c.as_ptr(),
+            contract_hash.as_ptr(),
             &mut proof_ptr,
             &mut proof_len,
+            nullifier_hash.as_mut_ptr(),
             spec,
         );
 
@@ -126,12 +133,13 @@ pub fn prove(
 
         Ok(MdocProof {
             proof_bytes,
+            nullifier_hash,
             circuit_spec_index: circuit.spec_index,
         })
     }
 }
 
-/// Verify an mdoc proof.
+/// Verify an mdoc proof (including nullifier).
 pub fn verify(
     circuit: &MdocCircuit,
     proof: &MdocProof,
@@ -141,6 +149,7 @@ pub fn verify(
     attributes: &[AttributeRequest],
     now: &str,
     doc_type: &str,
+    contract_hash: &[u8; 8],
 ) -> Result<(), MdocError> {
     let c_attrs: Vec<RequestedAttribute> = attributes
         .iter()
@@ -169,6 +178,8 @@ pub fn verify(
             c_attrs.as_ptr(),
             c_attrs.len() as std::os::raw::c_ulong,
             now_c.as_ptr(),
+            contract_hash.as_ptr(),
+            proof.nullifier_hash.as_ptr(),
             proof.proof_bytes.as_ptr(),
             proof.proof_bytes.len() as std::os::raw::c_ulong,
             doc_type_c.as_ptr(),
@@ -218,6 +229,7 @@ mod tests {
             &[],
             &attrs,
             "2026-01-01T00:00:00Z",
+            &[0u8; 8],
         );
 
         assert!(result.is_err());
