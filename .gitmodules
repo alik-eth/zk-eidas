@@ -1,3 +1,3 @@
 [submodule "vendor/longfellow-zk"]
 	path = vendor/longfellow-zk
-	url = https://github.com/google/longfellow-zk.git
+	url = https://github.com/alik-eth/longfellow-zk.git
