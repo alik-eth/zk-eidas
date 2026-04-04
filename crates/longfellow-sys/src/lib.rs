@@ -10,6 +10,8 @@
 
 include!(concat!(env!("OUT_DIR"), "/bindings.rs"));
 
+pub mod safe;
+
 #[cfg(test)]
 mod tests {
     use super::*;
