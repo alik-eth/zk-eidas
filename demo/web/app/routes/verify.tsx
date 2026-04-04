@@ -48,6 +48,16 @@ function VerifyPage() {
   const collectorRef = useRef(new ChunkCollector())
   const cborRef = useRef<{ decode: (data: Uint8Array) => any; encode: (value: any) => Uint8Array } | null>(null)
 
+  // Debug log collector
+  const logsRef = useRef<string[]>([])
+  const [showLogs, setShowLogs] = useState(false)
+  const [logCount, setLogCount] = useState(0)
+  const log = useCallback((msg: string) => {
+    const ts = new Date().toISOString().slice(11, 23)
+    logsRef.current.push(`[${ts}] ${msg}`)
+    setLogCount(c => c + 1)
+  }, [])
+
   // Pre-initialize snarkjs verification backend + cbor-x
   useEffect(() => {
     let cancelled = false
@@ -76,9 +86,13 @@ function VerifyPage() {
     setVerifying(true)
     setError(null)
     try {
+      log(`verify: ${proofsToVerify.length} proofs, ops=[${proofsToVerify.map(p => p.op).join(',')}]`)
+
       // Stage 1: Proof verification
       const { verifyCompoundProof, loadTrustedVks } = await import('@zk-eidas/verifier-sdk')
       const vks = await loadTrustedVks('/trusted-vks.json')
+      log(`trusted VKs loaded: [${Object.keys(vks).join(',')}]`)
+
       const envelope = {
         proofs: proofsToVerify.map(p => ({
           proof_bytes: Array.from(p.proofBytes),
@@ -88,7 +102,21 @@ function VerifyPage() {
         })),
         op: proofsToVerify.length > 1 ? 'and' : 'single',
       }
+      log(`envelope: ${envelope.proofs.length} proofs, op=${envelope.op}`)
+      for (let i = 0; i < envelope.proofs.length; i++) {
+        const p = envelope.proofs[i]
+        log(`  [${i}] op=${p.predicate_op} proof=${p.proof_bytes.length}B pi=${p.public_inputs.length} pi_sizes=[${p.public_inputs.map(pi => pi.length)}]`)
+      }
+
       const chainResult = await verifyCompoundProof(envelope, vks)
+      log(`chain result: valid=${chainResult.valid} chain=${chainResult.chainValid} escrow=${chainResult.escrowValid}`)
+      for (const pr of chainResult.predicateResults) {
+        log(`  predicate: ${pr.predicate} op=${pr.op} valid=${pr.valid}`)
+      }
+      for (const [k, v] of Object.entries(chainResult.ecdsaResults)) {
+        log(`  ecdsa: ${k} valid=${v.valid} commitment=${v.commitment.slice(0, 20)}...`)
+      }
+
       const results = proofsToVerify.map((p, i) => ({
         ...p,
         valid: chainResult.predicateResults[i]?.valid ?? false,
@@ -100,11 +128,15 @@ function VerifyPage() {
         const { computeContractHash } = await import('../lib/nullifier-check')
         const computed = await computeContractHash(terms.terms, terms.timestamp)
         setComputedHash(computed)
-        setHashCheckResult(computed === meta.contract_hash ? 'match' : 'mismatch')
+        const match = computed === meta.contract_hash
+        log(`contract hash: ${match ? 'MATCH' : 'MISMATCH'} computed=${computed.slice(0, 16)}... expected=${meta.contract_hash.slice(0, 16)}...`)
+        setHashCheckResult(match ? 'match' : 'mismatch')
       }
 
       setVerified(true)
+      log('verification complete')
     } catch (e: any) {
+      log(`VERIFY ERROR: ${e.message}\n${e.stack ?? ''}`)
       setError(`Verification failed: ${e.message}`)
     } finally {
       setVerifying(false)
@@ -210,28 +242,45 @@ function VerifyPage() {
     const isNew = collector.add(data)
     if (!isNew) return
 
+    const header = (await import('../lib/qr-chunking')).parseHeader(data)
+    log(`chunk: proofId=0x${header?.proofId.toString(16) ?? '?'} seq=${header?.seq}/${header?.total} idx=${header?.proofIndex} cnt=${header?.proofCount} (${data.length}B)`)
+
     // Update overall progress
     const [proofScanned, proofTotal] = collector.proofProgress()
     const [escrowScanned, escrowTotal] = collector.escrowProgress()
     const scanned = proofScanned + escrowScanned
     const total = proofTotal + escrowTotal
+    log(`progress: P ${proofScanned}/${proofTotal} E ${escrowScanned}/${escrowTotal} | ids: [${collector.proofIds().map(id => '0x' + id.toString(16)).join(',')}]`)
     setScanProgress({ scanned, total, proofScanned, proofTotal, escrowScanned, escrowTotal, items: collector.scannedItems() })
 
     // Check if all complete
     if (collector.isAllComplete()) {
+      log('all chunks complete — reassembling')
       try {
         // Separate proof data from terms/metadata
         const allProofs: DecodedProof[] = []
         for (const proofId of collector.proofIds()) {
-          if (proofId === TERMS_PROOF_ID || proofId === METADATA_PROOF_ID) continue
-          if (isEscrowProofId(proofId)) continue
+          if (proofId === TERMS_PROOF_ID || proofId === METADATA_PROOF_ID) {
+            log(`skip proofId=0x${proofId.toString(16)} (terms/metadata)`)
+            continue
+          }
+          if (isEscrowProofId(proofId)) {
+            log(`skip proofId=0x${proofId.toString(16)} (escrow)`)
+            continue
+          }
           const compressed = collector.reassemble(proofId)!
+          log(`reassembled proofId=0x${proofId.toString(16)}: ${compressed.length}B compressed`)
           const decompressed = await decompressDeflate(compressed)
+          log(`decompressed: ${decompressed.length}B`)
           const cborMod = cborRef.current ?? await import('cbor-x')
           const envelope = cborMod.decode(decompressed)
 
           if (envelope && Array.isArray(envelope.proofs)) {
+            log(`proofId=0x${proofId.toString(16)}: ${envelope.proofs.length} sub-proofs, op=${envelope.op}, keys: [${Object.keys(envelope).join(',')}]`)
             for (const p of envelope.proofs) {
+              const proofBytesLen = p.proof_bytes?.length ?? 0
+              const piCount = p.public_inputs?.length ?? 0
+              log(`  sub-proof: op=${p.op} predicate=${p.predicate} claim=${p.claim_name} proof=${proofBytesLen}B pi=${piCount}`)
               allProofs.push({
                 predicate: p.predicate || 'unknown',
                 proofBytes: p.proof_bytes instanceof Uint8Array
@@ -244,8 +293,11 @@ function VerifyPage() {
                 valid: null,
               })
             }
+          } else {
+            log(`proofId=0x${proofId.toString(16)}: no proofs array! keys: [${envelope ? Object.keys(envelope).join(',') : 'null'}]`)
           }
         }
+        log(`total decoded proofs: ${allProofs.length}`)
 
         // Extract escrow envelopes if present
         const escrowMap = new Map<number, any>()
@@ -253,7 +305,10 @@ function VerifyPage() {
           for (const eid of collector.escrowProofIds()) {
             const ci = escrowCredentialIndex(eid)
             const envelope = await collector.getEscrowEnvelope(ci)
-            if (envelope) escrowMap.set(ci, envelope)
+            if (envelope) {
+              escrowMap.set(ci, envelope)
+              log(`escrow ci=${ci}: authority=${envelope.authority_name} fields=[${envelope.field_names?.join(',')}]`)
+            }
           }
         }
 
@@ -264,6 +319,7 @@ function VerifyPage() {
         if (isContract) {
           termsData = await collector.getTermsData()
           metaData = await collector.getMetadataData()
+          log(`contract: hash=${metaData?.contract_hash?.slice(0, 16)}... parties=${metaData?.parties?.length}`)
         }
 
         setScanMode(false)
@@ -276,9 +332,11 @@ function VerifyPage() {
 
         // Auto-verify for contract documents
         if (isContract && allProofs.length > 0) {
+          log(`starting verification pipeline: ${allProofs.length} proofs`)
           runVerificationPipeline(allProofs, termsData, metaData)
         }
       } catch (e: unknown) {
+        log(`ERROR: ${e instanceof Error ? e.message : String(e)}`)
         setError(e instanceof Error ? e.message : 'Proof data corrupted, try re-scanning.')
       } finally {
         collectorRef.current.clear()
@@ -720,6 +778,40 @@ function VerifyPage() {
             >
               {t('verify.verifyAnother')}
             </button>
+          </div>
+        )}
+        {/* Debug log panel */}
+        {logCount > 0 && (
+          <div className="mt-8 border-t border-slate-700 pt-4">
+            <div className="flex items-center gap-2 mb-2">
+              <button
+                onClick={() => setShowLogs(prev => !prev)}
+                className="text-xs text-slate-500 hover:text-slate-300 transition-colors"
+              >
+                {showLogs ? '▾' : '▸'} Logs ({logCount})
+              </button>
+              <button
+                onClick={() => {
+                  navigator.clipboard.writeText(logsRef.current.join('\n'))
+                    .then(() => alert('Logs copied'))
+                    .catch(() => {})
+                }}
+                className="text-xs text-slate-600 hover:text-slate-400 transition-colors"
+              >
+                Copy
+              </button>
+              <button
+                onClick={() => { logsRef.current = []; setLogCount(0) }}
+                className="text-xs text-slate-600 hover:text-slate-400 transition-colors"
+              >
+                Clear
+              </button>
+            </div>
+            {showLogs && (
+              <pre className="bg-slate-950 border border-slate-800 rounded-lg p-3 text-[10px] text-slate-400 font-mono max-h-80 overflow-auto whitespace-pre-wrap">
+                {logsRef.current.join('\n')}
+              </pre>
+            )}
           </div>
         )}
       </main>
