@@ -2008,6 +2008,46 @@ fn build_cors_layer() -> CorsLayer {
     }
 }
 
+// === Longfellow Demo ===
+
+async fn longfellow_demo(
+    State(_state): State<Arc<AppState>>,
+) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
+    // Run Longfellow prove+verify on built-in test mdoc (age_over_18)
+    // This calls the C++ smoke test function via FFI
+    let start = std::time::Instant::now();
+
+    let result = tokio::task::spawn_blocking(|| unsafe {
+        longfellow_sys::longfellow_smoke_test()
+    })
+    .await
+    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("join error: {e}")))?;
+
+    let elapsed_ms = start.elapsed().as_millis();
+
+    if result == 0 {
+        Ok(Json(serde_json::json!({
+            "status": "success",
+            "backend": "longfellow",
+            "proving_system": "sumcheck+ligero",
+            "quantum_safe": true,
+            "trusted_setup": false,
+            "test": "age_over_18 on built-in mdoc",
+            "elapsed_ms": elapsed_ms,
+            "details": {
+                "circuit_generation": "included in timing",
+                "proving": "ECDSA P-256 + SHA-256 hash + attribute disclosure",
+                "verification": "pass"
+            }
+        })))
+    } else {
+        Err((
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("Longfellow smoke test failed with code {result}"),
+        ))
+    }
+}
+
 pub fn build_app(circuits_path: &str) -> Router {
     let api_dir = env!("CARGO_MANIFEST_DIR");
     let loaded = load_proof_cache(api_dir);
@@ -2040,6 +2080,7 @@ pub fn build_app(circuits_path: &str) -> Router {
         .route("/circuits/{*rest}", get(serve_circuit_artifact))
         .route("/verifier/presentation-request", post(presentation_request))
         .route("/escrow/decrypt", post(escrow_decrypt))
+        .route("/longfellow/demo", get(longfellow_demo))
         .layer(build_cors_layer())
         .with_state(state)
 }
