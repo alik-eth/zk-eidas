@@ -6,7 +6,8 @@ import { proveCompoundInBrowser, proveInBrowser } from '../lib/snarkjs-prover'
 import { useT, useLocale, tLang } from '../i18n'
 import { CREDENTIAL_TYPES, resolveVariant, type FieldDisplay } from '../lib/credential-types'
 import { CONTRACT_TEMPLATES } from '../lib/contract-templates'
-import { EscrowPanel, type EscrowConfig, DEMO_AUTHORITY_PUBKEY, DEMO_AUTHORITY_PRIVKEY } from '../components/EscrowPanel'
+import { EscrowPanel, type EscrowConfig, DEMO_AUTHORITY_PUBKEY, DEMO_AUTHORITY_PRIVKEY, deriveEncapsulationKey, DEMO_AUTHORITY_NAME } from '../components/EscrowPanel'
+import type { EscrowEnvelopeQr } from '../lib/qr-chunking'
 
 // Types
 
@@ -56,7 +57,7 @@ interface ContractWizardState {
   metadataQrUrl: string | null
   bundleCborUrl: string | null
   escrowEnabled: boolean
-  escrowQrUrls: { role: string; roleLabelKey: string; urls: string[] }[]
+  escrowQrUrls: { role: string; roleLabelKey: string; urls: string[]; escrowIndex: number; escrowCount: number }[]
 }
 
 const API_URL = typeof window !== 'undefined' && window.location.hostname === 'localhost' ? 'http://localhost:3001' : ''
@@ -563,7 +564,7 @@ function ProveStep({ state, setState, t }: { state: ContractWizardState; setStat
       let sharedContractHash: string | null = null
       const timestamp = new Date().toISOString()
 
-      const { encodeProofChunks, LogicalOpFlag, encodeTermsQr, encodeMetadataQr } = await import('../lib/qr-chunking')
+      const { encodeProofChunks, LogicalOpFlag, encodeTermsQr, encodeMetadataQr, encodeEscrowChunks } = await import('../lib/qr-chunking')
       const QRCode = (await import('qrcode')).default
       const proofCount = template.credentials.length + 2 // proofs + terms + metadata
 
@@ -711,32 +712,47 @@ function ProveStep({ state, setState, t }: { state: ContractWizardState; setStat
         width: 280,
       })
 
-      // Generate escrow QRs per party — ML-KEM encrypted, grouped by role
-      const escrowQrUrls: { role: string; roleLabelKey: string; urls: string[] }[] = []
+      // Generate escrow QRs per party — binary-chunked protocol (0xFFF0+ range)
+      const escrowQrUrls: { role: string; roleLabelKey: string; urls: string[]; escrowIndex: number; escrowCount: number }[] = []
+
+      // Count credentials with escrow
+      const escrowCredentialIndices: number[] = []
       for (let ci = 0; ci < updatedCredentials.length; ci++) {
-        const cred = updatedCredentials[ci]
-        const req = template.credentials[ci]
-        if (cred.escrowData && req) {
+        if (updatedCredentials[ci].escrowData) escrowCredentialIndices.push(ci)
+      }
+      const escrowCount = escrowCredentialIndices.length
+
+      if (escrowCount > 0) {
+        const ek = await deriveEncapsulationKey(DEMO_AUTHORITY_PUBKEY)
+
+        for (let ei = 0; ei < escrowCredentialIndices.length; ei++) {
+          const ci = escrowCredentialIndices[ei]
+          const cred = updatedCredentials[ci]
+          const req = template.credentials[ci]
+          if (!cred.escrowData || !req) continue
+
           try {
-            const escrowJson = JSON.stringify(cred.escrowData)
-            const pako = await import('pako')
-            const compressed = pako.deflate(new TextEncoder().encode(escrowJson))
-            let binary = ''
-            for (let bi = 0; bi < compressed.length; bi++) binary += String.fromCharCode(compressed[bi])
-            const b64 = btoa(binary)
-            const chunkSize = 2000
-            const totalChunks = Math.ceil(b64.length / chunkSize)
+            const envelope: EscrowEnvelopeQr = {
+              encrypted_key: cred.escrowData.encrypted_key,
+              credential_hash: cred.escrowData.credential_hash,
+              key_commitment: cred.escrowData.key_commitment,
+              ciphertext: cred.escrowData.ciphertext,
+              field_names: cred.escrowData.field_names,
+              authority_pubkey: Array.from(ek),
+              authority_name: DEMO_AUTHORITY_NAME,
+            }
+
+            const chunks = await encodeEscrowChunks(envelope, ci, escrowCount)
             const urls: string[] = []
-            for (let chi = 0; chi < totalChunks; chi++) {
-              const chunk = `E${chi + 1}/${totalChunks}:${b64.slice(chi * chunkSize, (chi + 1) * chunkSize)}`
-              const url = await QRCode.toDataURL(chunk, {
+            for (const chunk of chunks) {
+              const url = await QRCode.toDataURL([{ data: chunk, mode: 'byte' as const }], {
                 errorCorrectionLevel: 'L',
                 margin: 1,
                 width: 280,
               })
               urls.push(url)
             }
-            escrowQrUrls.push({ role: req.role, roleLabelKey: req.roleLabelKey, urls })
+            escrowQrUrls.push({ role: req.role, roleLabelKey: req.roleLabelKey, urls, escrowIndex: ei, escrowCount })
           } catch (e) {
             console.error('Escrow QR generation failed:', e)
           }
