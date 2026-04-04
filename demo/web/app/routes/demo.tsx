@@ -1851,27 +1851,35 @@ function VerifyStep({ state, t }: { state: ContractWizardState; t: (key: string)
             </div>
           )}
 
-          {/* Escrow Proof Verification */}
+          {/* Escrow Proof Verification + Integrity */}
           {chainDetails && chainDetails.escrowValid !== null && (
-            <div className={`flex items-center gap-3 rounded-lg px-5 py-3 border ${
+            <div className={`rounded-lg border overflow-hidden ${
               chainDetails.escrowValid
-                ? 'bg-amber-950/20 border-amber-700/30 text-amber-300'
-                : 'bg-red-950/30 border-red-700/40 text-red-300'
+                ? 'bg-amber-950/20 border-amber-700/30'
+                : 'bg-red-950/30 border-red-700/40'
             }`}>
-              <svg className="w-5 h-5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <rect width="18" height="11" x="3" y="11" rx="2" ry="2" />
-                <path d="M7 11V7a5 5 0 0 1 10 0v4" />
-              </svg>
-              <div className="flex-1">
-                <p className="text-sm font-semibold">
-                  {chainDetails.escrowValid ? t('contracts.escrowProofValid') : t('contracts.escrowProofFail')}
-                </p>
-                <p className="text-xs opacity-70">{t('contracts.escrowProofDesc')}</p>
+              <div className={`flex items-center gap-3 px-5 py-3 ${chainDetails.escrowValid ? 'text-amber-300' : 'text-red-300'}`}>
+                <svg className="w-5 h-5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <rect width="18" height="11" x="3" y="11" rx="2" ry="2" />
+                  <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                </svg>
+                <div className="flex-1">
+                  <p className="text-sm font-semibold">
+                    {chainDetails.escrowValid ? t('contracts.escrowProofValid') : t('contracts.escrowProofFail')}
+                  </p>
+                  <p className="text-xs opacity-70">{t('contracts.escrowProofDesc')}</p>
+                </div>
+                {chainDetails.escrowValid ? (
+                  <svg className="w-5 h-5 text-amber-400 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                ) : (
+                  <svg className="w-5 h-5 text-red-400 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                )}
               </div>
-              {chainDetails.escrowValid ? (
-                <svg className="w-5 h-5 text-amber-400 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-              ) : (
-                <svg className="w-5 h-5 text-red-400 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+              {chainDetails.escrowValid && (
+                <div className="flex items-center gap-2 px-5 py-2 border-t border-amber-700/20 text-xs text-green-400">
+                  <svg className="w-3.5 h-3.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                  <span className="font-semibold">{t('contracts.integrityValid')}</span>
+                </div>
               )}
             </div>
           )}
@@ -1931,18 +1939,6 @@ function VerifyStep({ state, t }: { state: ContractWizardState; t: (key: string)
                         <span className="font-mono text-amber-300">{String(value)}</span>
                       </div>
                     ))}
-                  </div>
-                  <div className={`mt-3 pt-3 border-t border-amber-500/20 flex items-center gap-2 text-xs ${
-                    decryptedByRole[req!.role].integrityValid ? 'text-green-400' : 'text-red-400'
-                  }`}>
-                    {decryptedByRole[req!.role].integrityValid ? (
-                      <svg className="w-3.5 h-3.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-                    ) : (
-                      <svg className="w-3.5 h-3.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-                    )}
-                    <span className="font-semibold">
-                      {decryptedByRole[req!.role].integrityValid ? t('contracts.integrityValid') : t('contracts.integrityFail')}
-                    </span>
                   </div>
                 </div>
               )}
