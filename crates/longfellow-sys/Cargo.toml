@@ -12,3 +12,4 @@ bindgen = "0.71"
 
 [dependencies]
 libc = "0.2"
+thiserror = "2"

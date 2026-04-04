@@ -11,6 +11,7 @@
 include!(concat!(env!("OUT_DIR"), "/bindings.rs"));
 
 pub mod safe;
+pub mod mdoc;
 
 #[cfg(test)]
 mod tests {
