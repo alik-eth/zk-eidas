@@ -225,10 +225,11 @@ test.describe('Contracts', () => {
 const ON_DEVICE = !!process.env.E2E_ON_DEVICE
 const CONTRACT_TEMPLATES = [
   // ecdsaProofs = unique predicate claims + nullifier field (if different from predicate claims)
-  { name: 'Age Verification', pattern: /Перевірка віку/, creds: 1, ecdsaProofs: 2 },
-  { name: 'Student Transit', pattern: /Студентський проїзний|Student Transit/, creds: 1, ecdsaProofs: 2 },
-  { name: 'Driver Employment', pattern: /найму водія|Driver Employment/, creds: 1, ecdsaProofs: 4 },
-  { name: 'Vehicle Sale', pattern: /купівлі-продажу|Vehicle Sale/, creds: 3, ecdsaProofs: 6 },
+  // escrowCreds = number of PID credentials (only PIDs get identity escrow)
+  { name: 'Age Verification', pattern: /Перевірка віку/, creds: 1, ecdsaProofs: 2, escrowCreds: 1 },
+  { name: 'Student Transit', pattern: /Студентський проїзний|Student Transit/, creds: 1, ecdsaProofs: 2, escrowCreds: 0 },
+  { name: 'Driver Employment', pattern: /найму водія|Driver Employment/, creds: 1, ecdsaProofs: 4, escrowCreds: 0 },
+  { name: 'Vehicle Sale', pattern: /купівлі-продажу|Vehicle Sale/, creds: 3, ecdsaProofs: 6, escrowCreds: 2 },
 ]
 
 for (const tpl of CONTRACT_TEMPLATES) {
@@ -239,7 +240,7 @@ for (const tpl of CONTRACT_TEMPLATES) {
       test.skip(() => !process.env.E2E_ON_DEVICE, 'slow: set E2E_ON_DEVICE=1 to run')
     }
 
-    test(`${tpl.name}: issue ${tpl.creds} cred(s) → prove → document`, async ({ page }) => {
+    test(`${tpl.name}: issue ${tpl.creds} cred(s) → prove → document → verify${tpl.escrowCreds > 0 ? ' + escrow decrypt' : ''}`, async ({ page }) => {
       // Each ECDSA proof takes ~5 min in browser; scale timeout accordingly
       const timeoutMs = ON_DEVICE ? tpl.ecdsaProofs * 5 * 60_000 : 300_000
       test.setTimeout(timeoutMs)
@@ -284,7 +285,39 @@ for (const tpl of CONTRACT_TEMPLATES) {
       // 5. Verify document generated
       await expect(page.getByRole('button', { name: /Друкувати|Print/i })).toBeVisible({ timeout: 600_000 })
 
-      // 6. Print benchmarks
+      // 6. Navigate to Step 5 (Verify) and check chain-of-trust
+      // The "Verify" button in the document actions bar — use locator to avoid matching template cards
+      await page.locator('button.bg-blue-600', { hasText: /Перевірити|Verify/ }).click()
+
+      // 6a. Identity escrow verification (only for contracts with PID credentials)
+      if (tpl.escrowCreds > 0) {
+        await expect(
+          page.getByText(/Доказ ескроу-шифрування перевірено|Escrow encryption proof verified/).first()
+        ).toBeVisible({ timeout: 30_000 })
+        await expect(
+          page.getByText(/Integrity verified|Цілісність перевірена/).first()
+        ).toBeVisible({ timeout: 10_000 })
+
+        // 6b. Decrypt escrow for each PID credential
+        const decryptButtons = page.getByRole('button', { name: /Розшифрувати як орган|Decrypt as Authority/ })
+        const decryptCount = await decryptButtons.count()
+        expect(decryptCount).toBe(tpl.escrowCreds)
+
+        for (let i = 0; i < decryptCount; i++) {
+          await decryptButtons.nth(0).click() // always click first visible (previous ones become decrypted)
+          await expect(
+            page.getByText(/Розшифрована особа|Decrypted Identity/).nth(i)
+          ).toBeVisible({ timeout: 30_000 })
+        }
+
+        // 6c. Verify decrypted fields contain expected PID data
+        await expect(page.getByText('given_name').first()).toBeVisible()
+        await expect(page.getByText('family_name').first()).toBeVisible()
+        await expect(page.getByText('document_number').first()).toBeVisible()
+        await expect(page.getByText('birth_date').first()).toBeVisible()
+      }
+
+      // 7. Print benchmarks
       const totalMs = issueMs + proveMs
       console.log(`\n  ⏱  ${tpl.name} (${mode}) benchmarks:`)
       console.log(`     Issuance:  ${(issueMs / 1000).toFixed(1)}s`)
