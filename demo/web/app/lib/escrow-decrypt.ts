@@ -69,7 +69,9 @@ export async function decryptEscrow(
 
   const result: Record<string, string> = {}
   const plaintexts: bigint[] = []
-  for (let i = 0; i < ciphertextFields.length && i < fieldNames.length; i++) {
+  // Decrypt ALL 8 ciphertext slots (circuit always uses 8).
+  // Named fields get human-readable output; unnamed slots are only used for hash.
+  for (let i = 0; i < ciphertextFields.length; i++) {
     // Convert ciphertext bytes to BigInt (decimal string encoded as UTF-8 bytes)
     const ctStr = new TextDecoder().decode(new Uint8Array(ciphertextFields[i]))
     const ct = BigInt(ctStr)
@@ -80,7 +82,9 @@ export async function decryptEscrow(
     // plaintext = ciphertext - keystream (mod BN254 order)
     const plaintext = ((ct - keystream) % BN254_ORDER + BN254_ORDER) % BN254_ORDER
 
-    result[fieldNames[i]] = fieldElementToValue(plaintext)
+    if (i < fieldNames.length) {
+      result[fieldNames[i]] = fieldElementToValue(plaintext)
+    }
     plaintexts.push(plaintext)
   }
 
