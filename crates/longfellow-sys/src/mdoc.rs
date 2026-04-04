@@ -31,6 +31,7 @@ pub struct AttributeRequest {
 pub struct MdocProof {
     pub proof_bytes: Vec<u8>,
     pub nullifier_hash: [u8; 32],
+    pub binding_hash: [u8; 32],
     pub circuit_spec_index: usize,
 }
 
@@ -104,6 +105,7 @@ pub fn prove(
         let mut proof_ptr: *mut u8 = std::ptr::null_mut();
         let mut proof_len: std::os::raw::c_ulong = 0;
         let mut nullifier_hash = [0u8; 32];
+        let mut binding_hash = [0u8; 32];
 
         let ret = run_mdoc_prover(
             circuit.bytes.as_ptr(),
@@ -121,6 +123,7 @@ pub fn prove(
             &mut proof_ptr,
             &mut proof_len,
             nullifier_hash.as_mut_ptr(),
+            binding_hash.as_mut_ptr(),
             spec,
         );
 
@@ -134,6 +137,7 @@ pub fn prove(
         Ok(MdocProof {
             proof_bytes,
             nullifier_hash,
+            binding_hash,
             circuit_spec_index: circuit.spec_index,
         })
     }
@@ -180,6 +184,7 @@ pub fn verify(
             now_c.as_ptr(),
             contract_hash.as_ptr(),
             proof.nullifier_hash.as_ptr(),
+            proof.binding_hash.as_ptr(),
             proof.proof_bytes.as_ptr(),
             proof.proof_bytes.len() as std::os::raw::c_ulong,
             doc_type_c.as_ptr(),

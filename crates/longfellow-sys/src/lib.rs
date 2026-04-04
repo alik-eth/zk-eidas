@@ -62,6 +62,7 @@ mod tests {
 
             let contract_hash = [0u8; 8];
             let mut nullifier_hash = [0u8; 32];
+            let mut binding_hash = [0u8; 32];
             let ret = run_mdoc_prover(
                 circuit,
                 circuit_len,
@@ -78,6 +79,7 @@ mod tests {
                 &mut proof,
                 &mut proof_len,
                 nullifier_hash.as_mut_ptr(),
+                binding_hash.as_mut_ptr(),
                 spec,
             );
 
