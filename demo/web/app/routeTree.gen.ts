@@ -13,6 +13,7 @@ import { Route as VerifyRouteImport } from './routes/verify'
 import { Route as UkraineRouteImport } from './routes/ukraine'
 import { Route as SandboxRouteImport } from './routes/sandbox'
 import { Route as PrintRouteImport } from './routes/print'
+import { Route as LongfellowRouteImport } from './routes/longfellow'
 import { Route as LearnRouteImport } from './routes/learn'
 import { Route as DemoRouteImport } from './routes/demo'
 import { Route as ContractsRouteImport } from './routes/contracts'
@@ -36,6 +37,11 @@ const SandboxRoute = SandboxRouteImport.update({
 const PrintRoute = PrintRouteImport.update({
   id: '/print',
   path: '/print',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LongfellowRoute = LongfellowRouteImport.update({
+  id: '/longfellow',
+  path: '/longfellow',
   getParentRoute: () => rootRouteImport,
 } as any)
 const LearnRoute = LearnRouteImport.update({
@@ -64,6 +70,7 @@ export interface FileRoutesByFullPath {
   '/contracts': typeof ContractsRoute
   '/demo': typeof DemoRoute
   '/learn': typeof LearnRoute
+  '/longfellow': typeof LongfellowRoute
   '/print': typeof PrintRoute
   '/sandbox': typeof SandboxRoute
   '/ukraine': typeof UkraineRoute
@@ -74,6 +81,7 @@ export interface FileRoutesByTo {
   '/contracts': typeof ContractsRoute
   '/demo': typeof DemoRoute
   '/learn': typeof LearnRoute
+  '/longfellow': typeof LongfellowRoute
   '/print': typeof PrintRoute
   '/sandbox': typeof SandboxRoute
   '/ukraine': typeof UkraineRoute
@@ -85,6 +93,7 @@ export interface FileRoutesById {
   '/contracts': typeof ContractsRoute
   '/demo': typeof DemoRoute
   '/learn': typeof LearnRoute
+  '/longfellow': typeof LongfellowRoute
   '/print': typeof PrintRoute
   '/sandbox': typeof SandboxRoute
   '/ukraine': typeof UkraineRoute
@@ -97,6 +106,7 @@ export interface FileRouteTypes {
     | '/contracts'
     | '/demo'
     | '/learn'
+    | '/longfellow'
     | '/print'
     | '/sandbox'
     | '/ukraine'
@@ -107,6 +117,7 @@ export interface FileRouteTypes {
     | '/contracts'
     | '/demo'
     | '/learn'
+    | '/longfellow'
     | '/print'
     | '/sandbox'
     | '/ukraine'
@@ -117,6 +128,7 @@ export interface FileRouteTypes {
     | '/contracts'
     | '/demo'
     | '/learn'
+    | '/longfellow'
     | '/print'
     | '/sandbox'
     | '/ukraine'
@@ -128,6 +140,7 @@ export interface RootRouteChildren {
   ContractsRoute: typeof ContractsRoute
   DemoRoute: typeof DemoRoute
   LearnRoute: typeof LearnRoute
+  LongfellowRoute: typeof LongfellowRoute
   PrintRoute: typeof PrintRoute
   SandboxRoute: typeof SandboxRoute
   UkraineRoute: typeof UkraineRoute
@@ -162,6 +175,13 @@ declare module '@tanstack/react-router' {
       path: '/print'
       fullPath: '/print'
       preLoaderRoute: typeof PrintRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/longfellow': {
+      id: '/longfellow'
+      path: '/longfellow'
+      fullPath: '/longfellow'
+      preLoaderRoute: typeof LongfellowRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/learn': {
@@ -200,6 +220,7 @@ const rootRouteChildren: RootRouteChildren = {
   ContractsRoute: ContractsRoute,
   DemoRoute: DemoRoute,
   LearnRoute: LearnRoute,
+  LongfellowRoute: LongfellowRoute,
   PrintRoute: PrintRoute,
   SandboxRoute: SandboxRoute,
   UkraineRoute: UkraineRoute,
