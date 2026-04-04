@@ -84,6 +84,15 @@ mod tests {
     }
 
     #[test]
+    fn full_prove_verify_round_trip() {
+        // End-to-end: generate circuit, prove age_over_18, verify — all via FFI
+        unsafe {
+            let ret = longfellow_smoke_test();
+            assert_eq!(ret, 0, "smoke test failed with code {ret}");
+        }
+    }
+
+    #[test]
     fn verification_type_enum_values() {
         assert_eq!(VerificationType_VERIFY_EQ, 0);
         assert_eq!(VerificationType_VERIFY_LEQ, 1);

@@ -102,3 +102,7 @@ extern const ZkSpecStruct* find_zk_spec(
 // These are defined in the C++ library
 #define kNumZkSpecs 12
 extern const ZkSpecStruct kZkSpecs[12];
+
+// Smoke test: prove + verify age_over_18 on built-in test mdoc.
+// Returns 0 on success, negative on failure.
+extern int longfellow_smoke_test(void);
