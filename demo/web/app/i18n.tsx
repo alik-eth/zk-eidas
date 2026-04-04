@@ -481,6 +481,10 @@ const translations: Record<string, Record<Locale, string>> = {
   "escrow.decryptBtn": { en: "Decrypt as Authority", uk: "Розшифрувати як орган" },
   "escrow.decryptedTitle": { en: "Decrypted Identity", uk: "Розшифрована особа" },
   "escrow.decrypting": { en: "Decrypting...", uk: "Розшифровуємо..." },
+  "escrow.authorityLabel": { en: "Escrow Authority", uk: "Ескроу-авторитет" },
+  "escrow.fingerprint": { en: "Fingerprint", uk: "Відбиток" },
+  "doc.proofLabel": { en: "P", uk: "P" },
+  "doc.escrowLabel": { en: "E", uk: "E" },
   "escrow.qrLabel": { en: "Escrow Envelope (ML-KEM-768)", uk: "Ескроу-конверт (ML-KEM-768)" },
   "escrow.qrSubtitle": {
     en: "Post-quantum encrypted. Decryption only by escrow authority.",

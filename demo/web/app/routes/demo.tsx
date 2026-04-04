@@ -1436,7 +1436,7 @@ function DocumentStep({ state, setState, t }: { state: ContractWizardState; setS
                                 alt={`QR ${qrGlobalStart + qi + 1}/${totalQrs}`}
                                 className="w-28 h-28 print:w-[50mm] print:h-[50mm]"
                               />
-                              <p className="text-[9px] text-gray-400 -mt-0.5">{qrGlobalStart + qi + 1}/{totalQrs}</p>
+                              <p className="text-[9px] text-gray-400 -mt-0.5">{t('doc.proofLabel')}{qrGlobalStart + qi + 1}/{totalQrs}</p>
                             </div>
                           ))}
                         </div>
@@ -1461,10 +1461,23 @@ function DocumentStep({ state, setState, t }: { state: ContractWizardState; setS
                             <div><span className="text-gray-400 print:text-black/40">{t('escrow.credentialHash')}:</span> {formatFieldHash(ed.credential_hash)}</div>
                             <div><span className="text-gray-400 print:text-black/40">{t('escrow.keyCommitment')}:</span> {formatFieldHash(ed.key_commitment)}</div>
                           </div>
+                          {/* Authority info */}
+                          <div className="mb-2 text-[9px] text-gray-500 print:text-black/60">
+                            <span className="text-gray-400 print:text-black/40">{t('escrow.authorityLabel')}:</span>{' '}
+                            <span className="font-medium">{DEMO_AUTHORITY_NAME}</span>
+                          </div>
+                          {/* Bordered escrow QRs with E counter */}
                           <div className="flex flex-wrap gap-2">
                             {escrowParty.urls.map((url: string, ei: number) => (
-                              <div key={ei} className="border border-gray-300 rounded p-1 print:border-black/30">
-                                <img src={url} alt={`${req.role} Escrow QR ${ei + 1}`} className="w-24 h-24 print:w-[35mm] print:h-[35mm]" />
+                              <div key={ei} className="text-center">
+                                <div className="border-[3px] border-amber-900 p-0.5 rounded print:border-black/60">
+                                  <div className="border border-amber-700 rounded print:border-black/30">
+                                    <img src={url} alt={`${req.role} Escrow E${ei + 1}`} className="w-24 h-24 print:w-[35mm] print:h-[35mm]" />
+                                  </div>
+                                </div>
+                                <p className="text-[9px] text-gray-400 mt-0.5">
+                                  {t('doc.escrowLabel')}{escrowParty.escrowIndex + 1}/{escrowParty.escrowCount} 🔒
+                                </p>
                               </div>
                             ))}
                           </div>
@@ -1523,7 +1536,11 @@ function DocumentStep({ state, setState, t }: { state: ContractWizardState; setS
             <div className="text-center text-[9px] text-gray-400 mt-4">
               <span>zk-eidas.com/verify</span>
               <span className="mx-2">·</span>
-              <span>{state.qrDataUrls.length} QR · {(state.compressedSize / 1024).toFixed(1)} KB</span>
+              <span>
+                {state.qrDataUrls.length} {t('doc.proofLabel')} QR
+                {state.escrowQrUrls.length > 0 && ` · ${state.escrowQrUrls.reduce((s: number, e: any) => s + e.urls.length, 0)} ${t('doc.escrowLabel')} QR`}
+                {' · '}{(state.compressedSize / 1024).toFixed(1)} KB
+              </span>
             </div>
           </div>
         </div>
