@@ -1382,7 +1382,7 @@ function DocumentStep({ state, setState, t }: { state: ContractWizardState; setS
                 globalQrIndex += credQrs.length
 
                 return (
-                  <div key={req.role} className="mb-5 border border-gray-300 rounded-lg p-4 print:border-black/30">
+                  <div key={req.role} className="mb-5 border border-gray-300 rounded-lg p-4 print:border-black/30 print:break-inside-avoid">
                     <p className="text-xs font-semibold text-gray-500 mb-3 uppercase tracking-wider">
                       {t(req.roleLabelKey)}
                     </p>
@@ -1491,7 +1491,7 @@ function DocumentStep({ state, setState, t }: { state: ContractWizardState; setS
 
             {/* Shared section */}
             {state.contractHash && (
-              <div className="mb-5 border border-gray-300 rounded-lg p-4 print:border-black/30">
+              <div className="mb-5 border border-gray-300 rounded-lg p-4 print:border-black/30 print:break-inside-avoid">
                 <p className="text-xs font-semibold text-gray-500 mb-2 uppercase tracking-wider">{t('contracts.shared')}</p>
                 <div className="space-y-1.5">
                   <div>
@@ -1516,7 +1516,7 @@ function DocumentStep({ state, setState, t }: { state: ContractWizardState; setS
             )}
 
             {/* Signature lines — one per party */}
-            <div className="border-t border-gray-200 pt-4 mt-4 space-y-3">
+            <div className="border-t border-gray-200 pt-4 mt-4 space-y-3 print:break-inside-avoid">
               {state.partyProofs.length > 0 ? (
                 state.partyProofs.map((party) => (
                   <div key={party.role} className="flex justify-between text-xs text-gray-400">
