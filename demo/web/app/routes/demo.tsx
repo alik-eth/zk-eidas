@@ -1426,6 +1426,35 @@ function DocumentStep({ state, setState, t }: { state: ContractWizardState; setS
                         </div>
                       </div>
                     )}
+
+                    {/* Escrow envelope inline with this credential */}
+                    {(() => {
+                      const escrowParty = state.escrowQrUrls.find(p => p.role === req.role)
+                      const ed = state.credentials[ci]?.escrowData
+                      if (!escrowParty || !ed) return null
+                      return (
+                        <div className="mt-3 pt-3 border-t border-gray-200 print:border-black/10">
+                          <div className="flex items-center gap-1.5 mb-2">
+                            <svg className="w-3.5 h-3.5 text-gray-400 print:text-black/50" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                              <rect width="18" height="11" x="3" y="11" rx="2" ry="2" />
+                              <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                            </svg>
+                            <span className="text-[10px] font-semibold text-gray-500 print:text-black/60 uppercase tracking-wider">{t('escrow.qrLabel')}</span>
+                          </div>
+                          <div className="mb-2 text-[9px] font-mono text-gray-500 print:text-black/60 space-y-0.5">
+                            <div><span className="text-gray-400 print:text-black/40">{t('escrow.credentialHash')}:</span> {formatFieldHash(ed.credential_hash)}</div>
+                            <div><span className="text-gray-400 print:text-black/40">{t('escrow.keyCommitment')}:</span> {formatFieldHash(ed.key_commitment)}</div>
+                          </div>
+                          <div className="flex flex-wrap gap-2">
+                            {escrowParty.urls.map((url: string, ei: number) => (
+                              <div key={ei} className="border border-gray-300 rounded p-1 print:border-black/30">
+                                <img src={url} alt={`${req.role} Escrow QR ${ei + 1}`} className="w-24 h-24 print:w-[35mm] print:h-[35mm]" />
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )
+                    })()}
                   </div>
                 )
               })
@@ -1473,42 +1502,6 @@ function DocumentStep({ state, setState, t }: { state: ContractWizardState; setS
                 </div>
               )}
             </div>
-
-            {/* Escrow Envelopes — per party, inside the document for print */}
-            {state.escrowQrUrls.length > 0 && (
-              <div className="mt-5 pt-5 border-t border-gray-300 print:border-black/20">
-                <div className="flex items-center gap-2 mb-2">
-                  <svg className="w-4 h-4 text-gray-500 print:text-black" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <rect width="18" height="11" x="3" y="11" rx="2" ry="2" />
-                    <path d="M7 11V7a5 5 0 0 1 10 0v4" />
-                  </svg>
-                  <h4 className="text-sm font-semibold text-gray-700 print:text-black">{t('escrow.qrLabel')}</h4>
-                </div>
-                <p className="text-[10px] text-gray-400 mb-3">{t('escrow.qrSubtitle')}</p>
-                {state.escrowQrUrls.map((party) => {
-                  const cred = state.credentials.find((_, i) => template?.credentials[i]?.role === party.role)
-                  const ed = cred?.escrowData
-                  return (
-                  <div key={party.role} className="mb-4">
-                    <p className="text-xs font-semibold text-gray-600 print:text-black mb-2">{t(party.roleLabelKey)}</p>
-                    {ed && (
-                      <div className="mb-2 text-[9px] font-mono text-gray-500 print:text-black/60 space-y-0.5">
-                        <div><span className="text-gray-400 print:text-black/40">{t('escrow.credentialHash')}:</span> {formatFieldHash(ed.credential_hash)}</div>
-                        <div><span className="text-gray-400 print:text-black/40">{t('escrow.keyCommitment')}:</span> {formatFieldHash(ed.key_commitment)}</div>
-                      </div>
-                    )}
-                    <div className="flex flex-wrap gap-2">
-                      {party.urls.map((url: string, i: number) => (
-                        <div key={i} className="border border-gray-300 rounded p-1 print:border-black/30">
-                          <img src={url} alt={`${party.role} Escrow QR ${i + 1}`} className="w-28 h-28 print:w-[40mm] print:h-[40mm]" />
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                  )
-                })}
-              </div>
-            )}
 
             {/* Footer */}
             <div className="text-center text-[9px] text-gray-400 mt-4">
