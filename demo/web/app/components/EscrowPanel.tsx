@@ -26,6 +26,17 @@ export const DEMO_AUTHORITY_SEED = '4517acb4dc2fdbedddd75851b056cd05bc775731ed1e
 export const DEMO_AUTHORITY_PUBKEY = DEMO_AUTHORITY_SEED
 export const DEMO_AUTHORITY_PRIVKEY = DEMO_AUTHORITY_SEED
 
+/** Derive ML-KEM-768 encapsulation key (public) from seed hex string. */
+export async function deriveEncapsulationKey(seedHex: string): Promise<Uint8Array> {
+  const { MlKem768 } = await import('mlkem')
+  const seedBytes = new Uint8Array(seedHex.match(/.{2}/g)!.map(b => parseInt(b, 16)))
+  const mlkem = new MlKem768()
+  const [ek, _dk] = await mlkem.deriveKeyPair(seedBytes)
+  return ek
+}
+
+export const DEMO_AUTHORITY_NAME = 'Bundesdruckerei'
+
 export function EscrowPanel({
   availableFields,
   predicateFields = [],
