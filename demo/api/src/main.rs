@@ -942,11 +942,14 @@ async fn verify_compound_proof(
 
 #[derive(Deserialize)]
 struct ProveBindingRequest {
-    sdjwt_a: String,
-    sdjwt_b: String,
-    binding_claim: String,
-    #[serde(default)]
-    binding_claim_b: Option<String>,  // if different from binding_claim for credential B
+    credential_a: String,
+    credential_b: String,
+    #[serde(default = "default_format")]
+    format_a: String,
+    #[serde(default = "default_format")]
+    format_b: String,
+    binding_claim_a: String,
+    binding_claim_b: String,
     predicates_a: Vec<PredicateRequest>,
     predicates_b: Vec<PredicateRequest>,
     #[serde(default)]
@@ -966,8 +969,7 @@ struct ProveBindingResponse {
 }
 
 fn compute_binding_cache_key(req: &ProveBindingRequest) -> String {
-    let claim_b = req.binding_claim_b.as_deref().unwrap_or(&req.binding_claim);
-    let key_material = format!("binding|{}|{}", req.binding_claim, claim_b);
+    let key_material = format!("binding|{}|{}", req.binding_claim_a, req.binding_claim_b);
     format!("{:016x}", fnv_hash(key_material.as_bytes()))
 }
 
@@ -975,142 +977,146 @@ async fn prove_binding(
     State(state): State<Arc<AppState>>,
     Json(req): Json<ProveBindingRequest>,
 ) -> Result<Json<ProveBindingResponse>, (StatusCode, String)> {
-    // Check binding cache
-    let cache_key = compute_binding_cache_key(&req);
-    if !req.skip_cache {
-    if let Some(cached) = state.binding_cache.get(&cache_key) {
-        eprintln!("[prove-binding] CACHE HIT for key {cache_key}");
-        return Ok(Json(ProveBindingResponse {
-            proofs_a: cached.proofs_a.iter().map(|p| ProofResult {
-                predicate: p.predicate.clone(),
-                proof_json: p.proof_json.clone(),
-                proof_hex: p.proof_hex.clone(),
-                op: p.op.clone(),
-            }).collect(),
-            proofs_b: cached.proofs_b.iter().map(|p| ProofResult {
-                predicate: p.predicate.clone(),
-                proof_json: p.proof_json.clone(),
-                proof_hex: p.proof_hex.clone(),
-                op: p.op.clone(),
-            }).collect(),
-            binding_hash: cached.binding_hash.clone(),
-            binding_verified: cached.binding_verified,
-            hidden_fields_a: cached.hidden_fields_a.clone(),
-            hidden_fields_b: cached.hidden_fields_b.clone(),
-            cached: true,
-        }));
+    // Longfellow only supports mdoc credentials
+    if req.format_a != "mdoc" || req.format_b != "mdoc" {
+        return Err((
+            StatusCode::NOT_IMPLEMENTED,
+            "SD-JWT proving not implemented — only mdoc is supported".into(),
+        ));
     }
-    }
-    eprintln!("[prove-binding] {} for key {cache_key}", if req.skip_cache { "CACHE SKIPPED" } else { "CACHE MISS" });
 
-    // Build and prove credential A with binding
-    let mut builder_a = zk_eidas::ZkCredential::from_sdjwt(&req.sdjwt_a, &state.circuits_path)
-        .map_err(|e| {
-            (
-                StatusCode::BAD_REQUEST,
-                format!("parse error (credential A): {e}"),
-            )
+    // --- Helper closure: parse credential, build attrs, prove ---
+    // Returns (proof, proofs_results, hidden_fields)
+    async fn prove_one_credential(
+        state: &Arc<AppState>,
+        credential: &str,
+        binding_claim: &str,
+        predicates: &[PredicateRequest],
+    ) -> Result<(longfellow_sys::mdoc::MdocProof, Vec<ProofResult>, Vec<String>), (StatusCode, String)> {
+        // Parse mdoc
+        let (mdoc_bytes, pkx_hex, pky_hex) = parse_mdoc_for_longfellow(credential)?;
+        let (mdoc_bytes_parse, pk_x, pk_y) = parse_mdoc_token(credential)
+            .map_err(|e| (StatusCode::BAD_REQUEST, format!("mdoc token: {e}")))?;
+        let cred = zk_eidas_mdoc::MdocParser::parse_with_issuer_key(&mdoc_bytes_parse, pk_x, pk_y)
+            .map_err(|e| (StatusCode::BAD_REQUEST, format!("mdoc parse: {e}")))?;
+        let claims = cred.claims().clone();
+
+        // Build attribute list — binding claim FIRST
+        let mut attrs: Vec<longfellow_sys::mdoc::AttributeRequest> = Vec::new();
+
+        // 1. Binding claim as first attribute (eq/disclosure on its actual value)
+        let binding_cv = claims.get(binding_claim).ok_or_else(|| {
+            (StatusCode::BAD_REQUEST, format!("binding claim '{}' not found", binding_claim))
         })?;
-    let all_fields_a: Vec<String> = builder_a.credential().claims().keys().cloned().collect();
-    let mut proven_claims_a: Vec<String> = Vec::new();
-    for pred in &req.predicates_a {
-        let predicate = parse_predicate(pred)?;
-        proven_claims_a.push(pred.claim.clone());
-        builder_a = builder_a.predicate(&pred.claim, predicate);
+        let binding_cbor = claim_to_cbor(binding_cv);
+        attrs.push(predicate_to_attribute(binding_claim, "eq", &binding_cbor));
+
+        // 2. Predicate attributes
+        for p in predicates {
+            let cbor_value = match p.op.as_str() {
+                "eq" | "disclosure" => {
+                    let cv = claims.get(&p.claim).ok_or_else(|| {
+                        (StatusCode::BAD_REQUEST, format!("claim '{}' not found", p.claim))
+                    })?;
+                    claim_to_cbor(cv)
+                }
+                _ => {
+                    let value_str = p.value.as_str()
+                        .map(|s| s.to_string())
+                        .unwrap_or_else(|| p.value.to_string());
+                    let cv = parse_threshold_value(&p.claim, &value_str);
+                    claim_to_cbor(&cv)
+                }
+            };
+            attrs.push(predicate_to_attribute(&p.claim, &p.op, &cbor_value));
+        }
+
+        // Get circuit
+        let _circuit_ref = get_circuit(state, attrs.len()).await?;
+
+        // Default now
+        let now = {
+            let d = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default();
+            let secs = d.as_secs();
+            let days = secs / 86400;
+            let time_of_day = secs % 86400;
+            let hours = time_of_day / 3600;
+            let minutes = (time_of_day % 3600) / 60;
+            let seconds = time_of_day % 60;
+            let (year, month, day) = epoch_days_to_date(days as i64);
+            format!("{year:04}-{month:02}-{day:02}T{hours:02}:{minutes:02}:{seconds:02}Z")
+        };
+
+        let num_attrs = attrs.len();
+        let state_clone = Arc::clone(state);
+
+        let proof = tokio::task::spawn_blocking(move || {
+            unsafe { libc::nice(10) };
+            let circuit = state_clone.longfellow_circuits[num_attrs - 1]
+                .get()
+                .ok_or_else(|| {
+                    (StatusCode::INTERNAL_SERVER_ERROR, "circuit not initialized".to_string())
+                })?;
+            longfellow_sys::mdoc::prove(
+                circuit,
+                &mdoc_bytes,
+                &pkx_hex,
+                &pky_hex,
+                b"zk-eidas-demo",
+                &attrs,
+                &now,
+                &[0u8; 8],
+            )
+            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("prove: {e}")))
+        })
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("join: {e}")))??;
+
+        // Format results
+        let proof_hex = format!("0x{}", hex::encode(&proof.proof_bytes));
+        let proof_json = serde_json::json!({
+            "proof_bytes": proof.proof_bytes,
+            "nullifier_hash": hex::encode(proof.nullifier_hash),
+            "binding_hash": hex::encode(proof.binding_hash),
+        })
+        .to_string();
+
+        let results: Vec<ProofResult> = predicates.iter().map(|p| ProofResult {
+            predicate: format!("{} {} {}", p.claim, p.op, p.value),
+            proof_json: proof_json.clone(),
+            proof_hex: proof_hex.clone(),
+            op: p.op.clone(),
+        }).collect();
+
+        let hidden_fields: Vec<String> = predicates.iter()
+            .filter(|p| p.op == "eq" || p.op == "disclosure")
+            .map(|p| p.claim.clone())
+            .collect();
+
+        Ok((proof, results, hidden_fields))
     }
+
+    // Acquire semaphore once, prove both in sequence
     let _permit = state.prove_semaphore.acquire().await.map_err(|_| {
         (StatusCode::SERVICE_UNAVAILABLE, "proving unavailable".to_string())
     })?;
-    let binding_claim_a = req.binding_claim.clone();
-    let (zk_proofs_a, binding_hash_a) = tokio::task::spawn_blocking(move || {
-        // SAFETY: nice() only adjusts scheduling priority; safe to call from any thread, cannot cause UB.
-        unsafe { libc::nice(10) };
-        builder_a.prove_with_binding(&binding_claim_a)
-    })
-    .await
-    .map_err(|e| {
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            format!("task join error: {e}"),
-        )
-    })?
-    .map_err(|e| {
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            format!("proving A failed: {e}"),
-        )
-    })?;
 
-    // Build and prove credential B with binding
-    let mut builder_b = zk_eidas::ZkCredential::from_sdjwt(&req.sdjwt_b, &state.circuits_path)
-        .map_err(|e| {
-            (
-                StatusCode::BAD_REQUEST,
-                format!("parse error (credential B): {e}"),
-            )
-        })?;
-    let all_fields_b: Vec<String> = builder_b.credential().claims().keys().cloned().collect();
-    let mut proven_claims_b: Vec<String> = Vec::new();
-    for pred in &req.predicates_b {
-        let predicate = parse_predicate(pred)?;
-        proven_claims_b.push(pred.claim.clone());
-        builder_b = builder_b.predicate(&pred.claim, predicate);
-    }
-    let binding_claim_b = req.binding_claim_b.clone().unwrap_or_else(|| req.binding_claim.clone());
-    let (zk_proofs_b, binding_hash_b) = tokio::task::spawn_blocking(move || {
-        builder_b.prove_with_binding(&binding_claim_b)
-    })
-    .await
-    .map_err(|e| {
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            format!("task join error: {e}"),
-        )
-    })?
-    .map_err(|e| {
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            format!("proving B failed: {e}"),
-        )
-    })?;
+    let (proof_a, proofs_a, hidden_fields_a) = prove_one_credential(
+        &state, &req.credential_a, &req.binding_claim_a, &req.predicates_a,
+    ).await?;
 
-    let binding_verified = binding_hash_a == binding_hash_b;
+    let (proof_b, proofs_b, hidden_fields_b) = prove_one_credential(
+        &state, &req.credential_b, &req.binding_claim_b, &req.predicates_b,
+    ).await?;
 
-    let proofs_a: Vec<ProofResult> = zk_proofs_a
-        .iter()
-        .map(|proof| ProofResult {
-            predicate: format!("{:?}", proof.predicate_op()),
-            proof_json: serde_json::to_string(proof).unwrap(),
-            proof_hex: format!("0x{}", hex::encode(proof.proof_bytes())),
-            op: format!("{:?}", proof.predicate_op()),
-        })
-        .collect();
-
-    let proofs_b: Vec<ProofResult> = zk_proofs_b
-        .iter()
-        .map(|proof| ProofResult {
-            predicate: format!("{:?}", proof.predicate_op()),
-            proof_json: serde_json::to_string(proof).unwrap(),
-            proof_hex: format!("0x{}", hex::encode(proof.proof_bytes())),
-            op: format!("{:?}", proof.predicate_op()),
-        })
-        .collect();
-
-    let hidden_fields_a: Vec<String> = all_fields_a
-        .iter()
-        .filter(|f| !proven_claims_a.contains(f))
-        .cloned()
-        .collect();
-    let hidden_fields_b: Vec<String> = all_fields_b
-        .iter()
-        .filter(|f| !proven_claims_b.contains(f))
-        .cloned()
-        .collect();
+    let binding_verified = proof_a.binding_hash == proof_b.binding_hash;
 
     Ok(Json(ProveBindingResponse {
         proofs_a,
         proofs_b,
-        binding_hash: format!("0x{}", hex::encode(binding_hash_a)),
+        binding_hash: format!("0x{}", hex::encode(proof_a.binding_hash)),
         binding_verified,
         hidden_fields_a,
         hidden_fields_b,
@@ -1292,314 +1298,151 @@ async fn contract_prove(
     State(state): State<Arc<AppState>>,
     Json(req): Json<ContractProveRequest>,
 ) -> Result<Json<ContractProveResponse>, (StatusCode, String)> {
-    // 1. Generate salt
-    let salt: u64 = rand::random();
+    // Longfellow only supports mdoc credentials
+    if req.format != "mdoc" {
+        return Err((
+            StatusCode::NOT_IMPLEMENTED,
+            "SD-JWT proving not implemented — only mdoc is supported".into(),
+        ));
+    }
+
     let role_str = req.role.clone().unwrap_or_else(|| "holder".to_string());
 
-    // 2. Compute contract_hash = SHA256(terms || timestamp) → u64
+    // Compute contract_hash = SHA256(terms || timestamp) → first 8 bytes
     use sha2::{Sha256, Digest};
     let mut hasher = Sha256::new();
     hasher.update(req.contract_terms.as_bytes());
     hasher.update(req.timestamp.as_bytes());
     let hash: [u8; 32] = hasher.finalize().into();
-    let contract_hash = u64::from_be_bytes(hash[..8].try_into().unwrap());
+    let contract_hash_bytes: [u8; 8] = hash[..8].try_into().unwrap();
 
-    // 3. Check predicate proof cache — same key as prove-compound
-    let cache_preds: Vec<serde_json::Value> = req.predicates.iter().map(|p| {
-        if matches!(p.op.as_str(), "gte" | "lte") {
-            serde_json::json!({"claim": p.claim, "op": p.op})
-        } else {
-            serde_json::json!({"claim": p.claim, "op": p.op, "value": p.value})
-        }
-    }).collect();
-    // Cache key uses predicates only — escrow is credential-specific, generated fresh
-    let cache_key_material = format!("{}|{}", req.format, serde_json::to_string(&cache_preds).unwrap());
-    let cache_key = format!("{:016x}", fnv_hash(cache_key_material.as_bytes()));
+    // Parse mdoc credential
+    let (mdoc_bytes, pkx_hex, pky_hex) = parse_mdoc_for_longfellow(&req.credential)?;
+    let (mdoc_bytes_parse, pk_x, pk_y) = parse_mdoc_token(&req.credential)
+        .map_err(|e| (StatusCode::BAD_REQUEST, format!("mdoc token: {e}")))?;
+    let credential = zk_eidas_mdoc::MdocParser::parse_with_issuer_key(&mdoc_bytes_parse, pk_x, pk_y)
+        .map_err(|e| (StatusCode::BAD_REQUEST, format!("mdoc parse: {e}")))?;
+    let claims = credential.claims().clone();
 
-    if !req.skip_cache {
-    if let Some(cached) = state.proof_cache.get(&cache_key) {
-        eprintln!("[contracts/prove] CACHE HIT for predicates, key {cache_key}");
-        // Cached predicate proof found — just need to generate the nullifier
-        // Parse the cached compound proof, attach nullifier, return
-        let mut compound: zk_eidas_types::proof::CompoundProof =
-            serde_json::from_str(&cached.compound_proof_json)
-                .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("cache parse: {e}")))?;
-
-        // Auto-detect credential_id field
-        let all_field_names_cached = cached.hidden_fields.iter()
-            .chain(req.predicates.iter().map(|p| &p.claim))
-            .cloned()
-            .collect::<std::collections::HashSet<_>>();
-        let credential_id_field = if let Some(ref nf) = req.nullifier_field {
-            nf.as_str()
-        } else {
-            let id_field_candidates = ["document_number", "license_number", "diploma_number", "vin", "student_number"];
-            *id_field_candidates.iter()
-                .find(|f| all_field_names_cached.contains(&f.to_string()))
-                .ok_or_else(|| (StatusCode::BAD_REQUEST, "no credential_id field found".to_string()))?
+    // Build attribute list from predicates
+    let mut attrs: Vec<longfellow_sys::mdoc::AttributeRequest> = Vec::new();
+    for p in &req.predicates {
+        let cbor_value = match p.op.as_str() {
+            "eq" | "disclosure" => {
+                let cv = claims.get(&p.claim).ok_or_else(|| {
+                    (StatusCode::BAD_REQUEST, format!("claim '{}' not found in credential", p.claim))
+                })?;
+                claim_to_cbor(cv)
+            }
+            _ => {
+                let value_str = p.value.as_str()
+                    .map(|s| s.to_string())
+                    .unwrap_or_else(|| p.value.to_string());
+                let cv = parse_threshold_value(&p.claim, &value_str);
+                claim_to_cbor(&cv)
+            }
         };
-
-        // Parse credential to get credential_id value
-        let builder_for_null = if req.format == "mdoc" {
-            let (mdoc_bytes, pub_key_x, pub_key_y) = parse_mdoc_token(&req.credential)
-                .map_err(|e| (StatusCode::BAD_REQUEST, format!("mdoc token: {e}")))?;
-            let credential = zk_eidas_mdoc::MdocParser::parse_with_issuer_key(&mdoc_bytes, pub_key_x, pub_key_y)
-                .map_err(|e| (StatusCode::BAD_REQUEST, format!("mdoc parse: {e}")))?;
-            zk_eidas::ZkCredential::from_credential(credential, &state.circuits_path)
-        } else {
-            zk_eidas::ZkCredential::from_sdjwt(&req.credential, &state.circuits_path)
-                .map_err(|e| (StatusCode::BAD_REQUEST, format!("parse error: {e}")))?
-        };
-
-        let cid_field = credential_id_field.to_string();
-        let doc_value = builder_for_null.credential().claims().get(&cid_field)
-            .ok_or_else(|| (StatusCode::BAD_REQUEST, format!("claim not found: {cid_field}")))?
-            .clone();
-        let credential_id = doc_value.to_circuit_u64();
-
-        // Check ECDSA commitment cache
-        let cached_ecdsa = state.ecdsa_cache.lock().unwrap().get(&credential_id).cloned();
-
-        let _permit = state.prove_semaphore.acquire().await
-            .map_err(|_| (StatusCode::SERVICE_UNAVAILABLE, "proving unavailable".into()))?;
-
-        let circuits_path = state.circuits_path.clone();
-        let ecdsa_cache_ref = state.ecdsa_cache.clone();
-        let role_for_closure = role_str.clone();
-
-        let cn = tokio::task::spawn_blocking(move || -> Result<_, (StatusCode, String)> {
-            unsafe { libc::nice(10) };
-
-            let (commitment_bytes, sd_array_hash, message_hash) = if let Some(ecdsa) = cached_ecdsa {
-                eprintln!("[contracts/prove] ECDSA CACHE HIT for credential_id {credential_id}");
-                ecdsa
-            } else {
-                eprintln!("[contracts/prove] ECDSA CACHE MISS for credential_id {credential_id} — generating...");
-                let mut builder = builder_for_null;
-                let (commitment, sd_hash, msg_hash) = builder.ensure_ecdsa_pub(&cid_field)
-                    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("ecdsa: {e}")))?;
-                let result = (commitment.value().to_vec(), sd_hash, msg_hash);
-                ecdsa_cache_ref.lock().unwrap().insert(credential_id, result.clone());
-                result
-            };
-
-            let commitment = zk_eidas_types::commitment::EcdsaCommitment::new(commitment_bytes);
-            let prover = zk_eidas_prover::Prover::new(&circuits_path);
-            let nullifier_proof = prover.prove_nullifier(credential_id, contract_hash, salt, &commitment, &sd_array_hash, &message_hash)
-                .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("nullifier: {e}")))?;
-
-            let nullifier_bytes = nullifier_proof.nullifier()
-                .ok_or_else(|| (StatusCode::INTERNAL_SERVER_ERROR, "missing nullifier output".to_string()))?
-                .to_vec();
-
-            Ok(zk_eidas_types::proof::ContractNullifier {
-                role: role_for_closure,
-                nullifier: nullifier_bytes,
-                contract_hash: contract_hash.to_be_bytes().to_vec(),
-                salt: salt.to_be_bytes().to_vec(),
-                proof: nullifier_proof,
-            })
-        }).await
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("join: {e}")))??;
-
-        let nullifier_bytes = cn.nullifier.clone();
-        compound = compound.with_contract_nullifier(cn);
-
-        // Check escrow cache, generate if miss
-        if let Some(ref escrow_req) = req.identity_escrow {
-            let claims = extract_claims(&req.credential, &req.format)?;
-            let escrow_key = compute_escrow_cache_key(&claims, escrow_req);
-
-            let escrow_data: zk_eidas_types::proof::IdentityEscrowData = if let Some(cached_escrow) = state.escrow_cache.get(&escrow_key) {
-                eprintln!("[contracts/prove] ESCROW CACHE HIT for key {escrow_key}");
-                serde_json::from_str(cached_escrow)
-                    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("escrow parse: {e}")))?
-            } else {
-                eprintln!("[contracts/prove] ESCROW CACHE MISS for key {escrow_key} — generating...");
-                let circuits_path = state.circuits_path.clone();
-                let credential_str = req.credential.clone();
-                let format = req.format.clone();
-                let escrow_req = escrow_req.clone();
-
-                tokio::task::spawn_blocking(move || -> Result<_, (StatusCode, String)> {
-                    let mut builder = if format == "mdoc" {
-                        let (mdoc_bytes, pub_key_x, pub_key_y) = parse_mdoc_token(&credential_str)
-                            .map_err(|e| (StatusCode::BAD_REQUEST, format!("mdoc token: {e}")))?;
-                        let credential = zk_eidas_mdoc::MdocParser::parse_with_issuer_key(&mdoc_bytes, pub_key_x, pub_key_y)
-                            .map_err(|e| (StatusCode::BAD_REQUEST, format!("mdoc parse: {e}")))?;
-                        zk_eidas::ZkCredential::from_credential(credential, &circuits_path)
-                    } else {
-                        zk_eidas::ZkCredential::from_sdjwt(&credential_str, &circuits_path)
-                            .map_err(|e| (StatusCode::BAD_REQUEST, format!("parse: {e}")))?
-                    };
-                    let pubkey = hex::decode(&escrow_req.authority_pubkey)
-                        .map_err(|e| (StatusCode::BAD_REQUEST, format!("invalid authority_pubkey hex: {e}")))?;
-                    let field_refs: Vec<&str> = escrow_req.field_names.iter().map(|s| s.as_str()).collect();
-                    builder = builder.identity_escrow(field_refs, &escrow_req.ecdsa_claim, &pubkey);
-                    builder.generate_escrow_only()
-                        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("escrow: {e}")))
-                }).await
-                .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("join: {e}")))?
-                ?
-            };
-
-            compound = compound.with_identity_escrow(escrow_data);
-        }
-
-        let compound_proof_json = serde_json::to_string(&compound)
-            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("serialize: {e}")))?;
-
-        return Ok(Json(ContractProveResponse {
-            compound_proof_json,
-            op: cached.op.clone(),
-            sub_proofs_count: cached.sub_proofs_count,
-            hidden_fields: cached.hidden_fields.clone(),
-            nullifier: format!("0x{}", hex::encode(&nullifier_bytes)),
-            contract_hash: format!("0x{:016x}", contract_hash),
-            salt: format!("0x{:016x}", salt),
-            role: role_str.clone(),
-        }));
+        attrs.push(predicate_to_attribute(&p.claim, &p.op, &cbor_value));
     }
-    } // skip_cache
-    eprintln!("[contracts/prove] {} for predicates, key {cache_key}", if req.skip_cache { "CACHE SKIPPED" } else { "CACHE MISS" });
 
-    // 4. Parse credential (no cache — full proving path)
-    let (mut builder, all_field_names) = if req.format == "mdoc" {
-        let (mdoc_bytes, pub_key_x, pub_key_y) = parse_mdoc_token(&req.credential)
-            .map_err(|e| (StatusCode::BAD_REQUEST, format!("mdoc token: {e}")))?;
-        let credential =
-            zk_eidas_mdoc::MdocParser::parse_with_issuer_key(&mdoc_bytes, pub_key_x, pub_key_y)
-                .map_err(|e| (StatusCode::BAD_REQUEST, format!("mdoc parse: {e}")))?;
-        let names: Vec<String> = credential.claims().keys().cloned().collect();
-        (
-            zk_eidas::ZkCredential::from_credential(credential, &state.circuits_path),
-            names,
-        )
-    } else {
-        let builder = zk_eidas::ZkCredential::from_sdjwt(&req.credential, &state.circuits_path)
-            .map_err(|e| (StatusCode::BAD_REQUEST, format!("parse error: {e}")))?;
-        let names: Vec<String> = builder.credential().claims().keys().cloned().collect();
-        (builder, names)
+    if attrs.is_empty() {
+        return Err((StatusCode::BAD_REQUEST, "at least one predicate is required".into()));
+    }
+
+    // Get or generate the cached circuit
+    let _circuit_ref = get_circuit(&state, attrs.len()).await?;
+
+    // Default now
+    let now = {
+        let d = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default();
+        let secs = d.as_secs();
+        let days = secs / 86400;
+        let time_of_day = secs % 86400;
+        let hours = time_of_day / 3600;
+        let minutes = (time_of_day % 3600) / 60;
+        let seconds = time_of_day % 60;
+        let (year, month, day) = epoch_days_to_date(days as i64);
+        format!("{year:04}-{month:02}-{day:02}T{hours:02}:{minutes:02}:{seconds:02}Z")
     };
 
-    // 4. Add predicates
-    let mut claims_predicates: std::collections::BTreeMap<String, Vec<zk_eidas::Predicate>> =
-        std::collections::BTreeMap::new();
-    let mut proven_claims: Vec<String> = Vec::new();
-
-    for pred in &req.predicates {
-        let predicate = parse_predicate(pred)?;
-        if !proven_claims.contains(&pred.claim) {
-            proven_claims.push(pred.claim.clone());
-        }
-        claims_predicates
-            .entry(pred.claim.clone())
-            .or_default()
-            .push(predicate);
-    }
-
-    for (claim, subs) in claims_predicates {
-        let compound_pred = zk_eidas::Predicate::and(subs);
-        builder = builder.predicate(&claim, compound_pred);
-    }
-
-    // Identity escrow
-    if let Some(ref escrow_req) = req.identity_escrow {
-        let pubkey = hex::decode(&escrow_req.authority_pubkey).map_err(|e| {
-            (StatusCode::BAD_REQUEST, format!("invalid authority_pubkey hex: {e}"))
-        })?;
-        let field_refs: Vec<&str> = escrow_req.field_names.iter().map(|s| s.as_str()).collect();
-        builder = builder.identity_escrow(field_refs, &escrow_req.ecdsa_claim, &pubkey);
-    }
-
-    // 5. Set contract nullifier — auto-detect credential_id field
-    let credential_id_field = if let Some(ref nf) = req.nullifier_field {
-        nf.as_str()
-    } else {
-        let id_field_candidates = ["document_number", "license_number", "diploma_number", "vin", "student_number"];
-        *id_field_candidates.iter()
-            .find(|f| all_field_names.contains(&f.to_string()))
-            .ok_or_else(|| (StatusCode::BAD_REQUEST, "no credential_id field found".to_string()))?
-    };
-    builder = builder.contract_nullifier(credential_id_field, contract_hash, salt);
-
-    // Compute credential_id for ECDSA caching
-    let cid_field_str = credential_id_field.to_string();
-    let cid_value = builder.credential().claims().get(&cid_field_str)
-        .map(|v| v.to_circuit_u64());
-
-    // 6. Prove
+    // Acquire proving semaphore
     let _permit = state.prove_semaphore.acquire().await.map_err(|_| {
         (StatusCode::SERVICE_UNAVAILABLE, "proving unavailable".to_string())
     })?;
-    let ecdsa_cache_ref = state.ecdsa_cache.clone();
-    let (mut compound_proof, proven_claims, all_field_names) =
-        tokio::task::spawn_blocking(move || -> Result<_, (StatusCode, String)> {
-            // SAFETY: nice() only adjusts scheduling priority; safe to call from any thread, cannot cause UB.
-            unsafe { libc::nice(10) };
-            let compound_proof = builder.prove_compound().map_err(|e| {
-                (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    format!("contract proving failed: {e}"),
-                )
+
+    let num_attrs = attrs.len();
+    let state_clone = Arc::clone(&state);
+
+    // Longfellow does it all in ONE call: predicates + nullifier
+    let proof = tokio::task::spawn_blocking(move || {
+        unsafe { libc::nice(10) };
+        let circuit = state_clone.longfellow_circuits[num_attrs - 1]
+            .get()
+            .ok_or_else(|| {
+                (StatusCode::INTERNAL_SERVER_ERROR, "circuit not initialized".to_string())
             })?;
-
-            // Cache ECDSA commitment for future contract-prove calls
-            if let Some(credential_id) = cid_value {
-                if let Some(ecdsa_proof) = compound_proof.ecdsa_proofs().get(&cid_field_str) {
-                    let inputs = ecdsa_proof.public_inputs();
-                    if inputs.len() >= 3 {
-                        let data = (inputs[0].clone(), inputs[1].clone(), inputs[2].clone());
-                        ecdsa_cache_ref.lock().unwrap().insert(credential_id, data);
-                        eprintln!("[contracts/prove] cached ECDSA commitment for credential_id {credential_id}");
-                    }
-                }
-            }
-
-            Ok((compound_proof, proven_claims, all_field_names))
-        })
-        .await
-        .map_err(|e| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                format!("task join error: {e}"),
-            )
-        })??;
-
-    // 6b. Set role on contract nullifiers
-    compound_proof.set_nullifier_role(&role_str);
-
-    // 7. Extract nullifier from compound proof
-    let nullifier_hex = compound_proof
-        .contract_nullifier()
-        .map(|cn| format!("0x{}", hex::encode(&cn.nullifier)))
-        .unwrap_or_else(|| "0x".to_string());
-
-    let op_label = format!("{:?}", compound_proof.op());
-    let sub_proofs_count = compound_proof.proofs().len();
-
-    let compound_proof_json = serde_json::to_string(&compound_proof).map_err(|e| {
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            format!("serialization failed: {e}"),
+        longfellow_sys::mdoc::prove(
+            circuit,
+            &mdoc_bytes,
+            &pkx_hex,
+            &pky_hex,
+            b"zk-eidas-demo",
+            &attrs,
+            &now,
+            &contract_hash_bytes,
         )
-    })?;
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("prove: {e}")))
+    })
+    .await
+    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("join: {e}")))??;
 
-    let hidden_fields: Vec<String> = all_field_names
-        .iter()
-        .filter(|f| !proven_claims.contains(f))
-        .cloned()
+    // Format response
+    let proof_hex = format!("0x{}", hex::encode(&proof.proof_bytes));
+    let nullifier_hex = format!("0x{}", hex::encode(proof.nullifier_hash));
+
+    let proof_json = serde_json::json!({
+        "proof_bytes": proof.proof_bytes,
+        "nullifier_hash": hex::encode(proof.nullifier_hash),
+        "binding_hash": hex::encode(proof.binding_hash),
+    })
+    .to_string();
+
+    // Build compound proof JSON wrapping the sub-proofs
+    let sub_results: Vec<serde_json::Value> = req.predicates.iter().map(|p| {
+        serde_json::json!({
+            "predicate": format!("{} {} {}", p.claim, p.op, p.value),
+            "proof_json": proof_json,
+            "proof_hex": proof_hex,
+            "op": p.op,
+        })
+    }).collect();
+
+    let compound_proof_json = serde_json::json!({
+        "op": "AND",
+        "sub_proofs": sub_results,
+        "nullifier_hash": hex::encode(proof.nullifier_hash),
+        "contract_hash": hex::encode(&contract_hash_bytes),
+        "role": role_str,
+    })
+    .to_string();
+
+    let hidden_fields: Vec<String> = req.predicates.iter()
+        .filter(|p| p.op == "eq" || p.op == "disclosure")
+        .map(|p| p.claim.clone())
         .collect();
 
-    // 8. Return hex-encoded values
+    let contract_hash_u64 = u64::from_be_bytes(contract_hash_bytes);
+
     Ok(Json(ContractProveResponse {
         compound_proof_json,
-        op: op_label,
-        sub_proofs_count,
+        op: "AND".to_string(),
+        sub_proofs_count: req.predicates.len(),
         hidden_fields,
         nullifier: nullifier_hex,
-        contract_hash: format!("0x{:016x}", contract_hash),
-        salt: format!("0x{:016x}", salt),
+        contract_hash: format!("0x{:016x}", contract_hash_u64),
+        salt: "0x0000000000000000".to_string(),
         role: role_str,
     }))
 }
