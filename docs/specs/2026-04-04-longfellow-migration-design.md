@@ -44,18 +44,35 @@ mdoc → Longfellow C++ Circuits → Sumcheck+Ligero → ~350KB proofs → IPFS 
 
 ## Circuit Extensions
 
-All extensions go inside Longfellow's existing hash circuit (GF(2^128) field), not as separate composed circuits. The hash circuit already extracts attribute values during mdoc CBOR parsing — we add constraint gadgets on those values.
+### Predicate Circuits — `assert_attribute()` Modification
 
-### Predicate Circuits
+**Approach validated by ID-wallet-snark/longfellow-zk fork.** Instead of standalone predicate gadgets composed via MAC, we extend the existing `assert_attribute()` function in `mdoc_hash.h` to support comparison types beyond equality.
 
-| Predicate | Implementation | Public inputs |
+**How it works:** Add a `verification_type` field (2 bits, packed into the attribute length byte's top bits) to `RequestedAttribute`. The hash circuit already extracts attribute values during CBOR parsing and compares them — we change the comparison from equality-only to type-selected:
+
+```cpp
+// Inside assert_attribute():
+auto is_leq = CMP.leq(n, val_got, val_want);  // val_got <= val_want
+auto is_geq = CMP.leq(n, val_want, val_got);  // val_got >= val_want
+auto is_eq  = lc_.land(is_leq, is_geq);        // val_got == val_want
+
+// Select based on verification_type (0=EQ, 1=LEQ, 2=GEQ, 3=NEQ)
+auto pass = mux(type, is_eq, is_leq, is_geq, lnot(is_eq));
+lc_.assert1(pass);
+```
+
+Date strings (e.g., `"1998-09-04"`) are compared lexicographically via `Memcmp::leq` — no epoch conversion needed. This is the same primitive upstream already uses for `validFrom <= now`.
+
+| Predicate | verification_type | How it works |
 |---|---|---|
-| gte | `Memcmp::geq(claim_value, threshold)` | threshold |
-| lte | `Memcmp::leq(claim_value, threshold)` | threshold |
-| eq | `vassert_eq(claim_value, expected)` | expected |
-| neq | `lnot(eq(claim_value, expected))` | expected |
-| range | `geq(claim, low) AND leq(claim, high)` | low, high |
-| set_member | Iterate set, assert `OR(eq(claim, set[i]))` via boolean flags | set[], set_len |
+| eq | 0 | `val_got == val_want` (original behavior) |
+| lte / "age >= N" | 1 | `birth_date <= cutoff_date` (lexicographic) |
+| gte | 2 | `val_got >= val_want` (lexicographic) |
+| neq | 3 | `val_got != val_want` |
+| range | Two attributes | One LEQ + one GEQ on same field |
+| set_member | Multiple EQ attributes | OR over multiple EQ checks on same field |
+
+**Changes required:** ~3 lines in `mdoc_zk.h` (add `verification_type` to `RequestedAttribute`), ~20 lines in `mdoc_hash.h` (branch logic in `assert_attribute()`). No new circuits, no MAC composition changes, no new witness generation.
 
 ### Nullifier
 
@@ -65,6 +82,7 @@ Computed inside the hash circuit: `SHA-256(credential_id || contract_hash || sal
 - `contract_hash` and `salt` are public inputs
 - `nullifier` is a public output
 - No extra MAC composition needed — data is already in scope
+- **Note:** Google's PR #134 (balfanz:ppid) adds HMAC-SHA256 pseudonyms internally. If this ships upstream, we should adopt their approach instead.
 
 ### Holder Binding
 
@@ -141,51 +159,26 @@ ZkCredential::from_mdoc(mdoc, circuit_config)
 
 ## Longfellow Fork
 
-We fork `google/longfellow-zk` and extend the hash circuit in `lib/circuits/mdoc/`:
+Forked to `alik-eth/longfellow-zk`. Upstream tracked via `upstream` remote.
 
-### Extended Hash Circuit
+### Predicate Integration (Minimal Diff)
 
-Add to `mdoc_hash_circuit.h`:
-- Predicate gadgets (gte, lte, eq, neq, range, set_member) applied to extracted attribute values
-- Nullifier computation: `SHA-256(credential_id || contract_hash || salt)`
-- Binding hash computation: `SHA-256(binding_field)`
-- Credential hash for escrow: `SHA-256(field_0 || ... || field_N)`
+Following the approach validated by ID-wallet-snark/longfellow-zk:
 
-### Extended C API
+1. **`mdoc_zk.h`** — Add `uint8_t verification_type;` to `RequestedAttribute` struct (~3 lines)
+2. **`mdoc_hash.h`** — Modify `assert_attribute()` to decode `verification_type` and branch on EQ/LEQ/GEQ/NEQ using `Memcmp::leq()` (~20 lines)
+3. **`mdoc_zk.cc`** — Pass `verification_type` through in `fill_attributes()` (~2 lines)
 
-```c
-// Extended structs
-typedef struct {
-    int predicate_type;     // 0=gte, 1=lte, 2=eq, 3=neq, 4=range, 5=set_member
-    const char* claim_name;
-    const uint8_t* value;   // threshold, expected, or set elements
-    size_t value_len;
-} ZkPredicate;
+No new circuits, no new files for predicates. The existing `run_mdoc_prover` / `run_mdoc_verifier` C API stays unchanged — predicates are encoded in the `RequestedAttribute.verification_type` field.
 
-typedef struct {
-    const char* nullifier_field;
-    uint64_t contract_hash;
-    uint64_t salt;
-} ZkNullifierConfig;
+### Nullifier & Binding (New Circuits)
 
-typedef struct {
-    const char* binding_field;
-} ZkBindingConfig;
+These require new SHA-256 computations inside the hash circuit:
+- Nullifier: `SHA-256(credential_id || contract_hash || salt)` → new public output
+- Binding: `SHA-256(binding_field)` → new public output
+- Credential hash for escrow: `SHA-256(field_0 || ... || field_N)` → new public output
 
-// Extended prover/verifier
-int run_mdoc_prover_extended(
-    const uint8_t* circuit, size_t circuit_len,
-    const uint8_t* mdoc, size_t mdoc_len,
-    const uint8_t* issuer_pk, size_t pk_len,
-    const uint8_t* transcript, size_t transcript_len,
-    const char** attributes, size_t attr_count,
-    const ZkPredicate* predicates, size_t pred_count,
-    const ZkNullifierConfig* nullifier,   // nullable
-    const ZkBindingConfig* binding,       // nullable
-    uint64_t current_time,
-    uint8_t* proof_out, size_t* proof_len
-);
-```
+These use `FlatSHA256Circuit` (already available in the hash circuit) and require modifying `mdoc_hash.h` to add the computation + witness generation.
 
 ## Migration Phases
 
