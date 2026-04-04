@@ -746,9 +746,9 @@ function ProveStep({ state, setState, t }: { state: ContractWizardState; setStat
             const urls: string[] = []
             for (const chunk of chunks) {
               const url = await QRCode.toDataURL([{ data: chunk, mode: 'byte' as const }], {
-                errorCorrectionLevel: 'L',
+                errorCorrectionLevel: 'M',
                 margin: 1,
-                width: 280,
+                width: 320,
               })
               urls.push(url)
             }
@@ -1472,7 +1472,7 @@ function DocumentStep({ state, setState, t }: { state: ContractWizardState; setS
                               <div key={ei} className="text-center">
                                 <div className="border-[3px] border-amber-900 p-0.5 rounded print:border-black/60">
                                   <div className="border border-amber-700 rounded print:border-black/30">
-                                    <img src={url} alt={`${req.role} Escrow E${ei + 1}`} className="w-24 h-24 print:w-[35mm] print:h-[35mm]" />
+                                    <img src={url} alt={`${req.role} Escrow E${ei + 1}`} className="w-28 h-28 print:w-[50mm] print:h-[50mm]" />
                                   </div>
                                 </div>
                                 <p className="text-[9px] text-gray-400 mt-0.5">

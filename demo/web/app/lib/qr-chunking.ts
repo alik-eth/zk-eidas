@@ -114,14 +114,15 @@ export function encodeProofChunks(
   proofIndex: number,
   proofCount: number,
   logicalOp: LogicalOpFlag,
+  maxPayload: number = MAX_PAYLOAD,
 ): Uint8Array[] {
-  const totalChunks = Math.ceil(compressedCbor.length / MAX_PAYLOAD)
+  const totalChunks = Math.ceil(compressedCbor.length / maxPayload)
   if (totalChunks > 255) throw new Error(`Proof too large: needs ${totalChunks} chunks (max 255)`)
 
   const chunks: Uint8Array[] = []
   for (let i = 0; i < totalChunks; i++) {
-    const start = i * MAX_PAYLOAD
-    const end = Math.min(start + MAX_PAYLOAD, compressedCbor.length)
+    const start = i * maxPayload
+    const end = Math.min(start + maxPayload, compressedCbor.length)
     const payload = compressedCbor.slice(start, end)
 
     const header = encodeHeader({
@@ -158,6 +159,9 @@ export async function encodeTermsQr(
 }
 
 /** Encode an escrow envelope into QR-ready chunks. */
+// Escrow QRs use smaller chunks (1400 B) to reduce QR density for phone scanning
+const ESCROW_MAX_PAYLOAD = 1400
+
 export async function encodeEscrowChunks(
   envelope: EscrowEnvelopeQr,
   credentialIndex: number,
@@ -167,7 +171,7 @@ export async function encodeEscrowChunks(
   const cbor = encode(envelope)
   const compressed = await compressDeflate(new Uint8Array(cbor))
   const proofId = escrowProofId(credentialIndex)
-  return encodeProofChunks(compressed, proofId, credentialIndex, escrowCount, LogicalOpFlag.Single)
+  return encodeProofChunks(compressed, proofId, credentialIndex, escrowCount, LogicalOpFlag.Single, ESCROW_MAX_PAYLOAD)
 }
 
 /** Encode contract metadata into a single QR-ready chunk. */
