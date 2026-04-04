@@ -23,12 +23,18 @@ const BN254_ORDER = 218882428718392752222464057452572750885483644004160343436982
  * @param fieldNames - names of the encrypted fields
  * @returns map of field name → decrypted value string
  */
+export interface DecryptResult {
+  fields: Record<string, string>
+  integrityValid: boolean
+}
+
 export async function decryptEscrow(
   encryptedKey: number[],
   secretKey: string,
   ciphertextFields: number[][],
   fieldNames: string[],
-): Promise<Record<string, string>> {
+  expectedCredentialHash?: number[],
+): Promise<DecryptResult> {
   // Step 1: ML-KEM-768 decapsulate to recover K
   const { MlKem768 } = await import('mlkem')
   const mlkem = new MlKem768()
@@ -62,6 +68,7 @@ export async function decryptEscrow(
   const F = poseidon.F
 
   const result: Record<string, string> = {}
+  const plaintexts: bigint[] = []
   for (let i = 0; i < ciphertextFields.length && i < fieldNames.length; i++) {
     // Convert ciphertext bytes to BigInt (decimal string encoded as UTF-8 bytes)
     const ctStr = new TextDecoder().decode(new Uint8Array(ciphertextFields[i]))
@@ -74,9 +81,19 @@ export async function decryptEscrow(
     const plaintext = ((ct - keystream) % BN254_ORDER + BN254_ORDER) % BN254_ORDER
 
     result[fieldNames[i]] = fieldElementToValue(plaintext)
+    plaintexts.push(plaintext)
   }
 
-  return result
+  // Integrity check: Poseidon(plaintext[0..7]) should match credential_hash
+  let integrityValid = false
+  if (expectedCredentialHash && plaintexts.length === 8) {
+    const integrityHasher = poseidon(plaintexts)
+    const computed = F.toObject(integrityHasher).toString()
+    const expected = new TextDecoder().decode(new Uint8Array(expectedCredentialHash))
+    integrityValid = computed === expected
+  }
+
+  return { fields: result, integrityValid }
 }
 
 function hexToBytes(hex: string): Uint8Array {

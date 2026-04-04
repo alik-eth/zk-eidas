@@ -175,6 +175,7 @@ export interface ChainVerifyResult {
   ecdsaResults: Record<string, EcdsaVerifyResult>;
   predicateResults: PredicateVerifyResult[];
   chainValid: boolean | null;
+  escrowValid: boolean | null;
   timing: {
     ecdsa: number;
     predicates: number;
@@ -196,11 +197,24 @@ export interface SubProof {
   ecdsa_commitment?: number[] | null;
 }
 
+/** Identity escrow data in the compound proof envelope. */
+export interface IdentityEscrowEnvelope {
+  proof: SubProof;
+  credential_hash: number[];
+  ciphertext: number[][];
+  key_commitment: number[];
+  encrypted_key: number[];
+  authority_pubkey: number[];
+  field_names: string[];
+  claim_index: number;
+}
+
 /** Compound proof envelope with optional ECDSA proofs for full-chain verification. */
 export interface CompoundEnvelope {
   proofs: SubProof[];
   op: string;
   ecdsa_proofs?: Record<string, SubProof>;
+  identity_escrow?: IdentityEscrowEnvelope;
 }
 
 /**
@@ -301,6 +315,26 @@ export async function verifyCompoundProof(
   }
   const tChain = performance.now();
 
+  // Step 4: Verify identity escrow proof if present
+  let escrowValid: boolean | null = null;
+  if (envelope.identity_escrow?.proof) {
+    const sp = envelope.identity_escrow.proof;
+    const proofJson = new TextDecoder().decode(new Uint8Array(sp.proof_bytes));
+    const publicSignals = (sp.public_inputs || []).map(
+      (inp: number[]) => new TextDecoder().decode(new Uint8Array(inp))
+    );
+    const combined = JSON.stringify({ ...JSON.parse(proofJson), publicSignals });
+    try {
+      escrowValid = await verifyProof(
+        new TextEncoder().encode(combined),
+        sp.predicate_op || "IdentityEscrow",
+        vks
+      );
+    } catch {
+      escrowValid = false;
+    }
+  }
+
   const allEcdsaValid = Object.values(ecdsaResults).every((r) => r.valid);
   const allPredicatesValid = predicateResults.every((r) => r.valid);
   const valid = allPredicatesValid && (!hasEcdsa || (allEcdsaValid && chainValid === true));
@@ -310,11 +344,12 @@ export async function verifyCompoundProof(
     ecdsaResults,
     predicateResults,
     chainValid,
+    escrowValid,
     timing: {
       ecdsa: tEcdsa - t0,
       predicates: tPredicates - tEcdsa,
       chain: tChain - tPredicates,
-      total: tChain - t0,
+      total: performance.now() - t0,
     },
   };
 }

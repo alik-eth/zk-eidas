@@ -71,6 +71,7 @@ export interface ChainVerifyResult {
     ecdsaResults: Record<string, EcdsaVerifyResult>;
     predicateResults: PredicateVerifyResult[];
     chainValid: boolean | null;
+    escrowValid: boolean | null;
     timing: {
         ecdsa: number;
         predicates: number;
@@ -90,11 +91,23 @@ export interface SubProof {
     version?: number;
     ecdsa_commitment?: number[] | null;
 }
+/** Identity escrow data in the compound proof envelope. */
+export interface IdentityEscrowEnvelope {
+    proof: SubProof;
+    credential_hash: number[];
+    ciphertext: number[][];
+    key_commitment: number[];
+    encrypted_key: number[];
+    authority_pubkey: number[];
+    field_names: string[];
+    claim_index: number;
+}
 /** Compound proof envelope with optional ECDSA proofs for full-chain verification. */
 export interface CompoundEnvelope {
     proofs: SubProof[];
     op: string;
     ecdsa_proofs?: Record<string, SubProof>;
+    identity_escrow?: IdentityEscrowEnvelope;
 }
 /**
  * Verify a compound proof with full chain verification.

@@ -1569,9 +1569,14 @@ function VerifyStep({ state, t }: { state: ContractWizardState; t: (key: string)
   const [error, setError] = useState<string | null>(null)
   const [verificationMethod, setVerificationMethod] = useState<'wasm' | 'server' | null>(null)
   const [verifyTimeMs, setVerifyTimeMs] = useState<number | null>(null)
+  const [chainDetails, setChainDetails] = useState<{
+    ecdsaResults: Record<string, { valid: boolean; commitment: string }>
+    chainValid: boolean | null
+    escrowValid: boolean | null
+  } | null>(null)
   const autoVerifyRan = useRef(false)
-  // Per-party escrow decrypt state: role → decrypted fields
-  const [decryptedByRole, setDecryptedByRole] = useState<Record<string, Record<string, string>>>({})
+  // Per-party escrow decrypt state: role → { fields, integrityValid }
+  const [decryptedByRole, setDecryptedByRole] = useState<Record<string, { fields: Record<string, string>; integrityValid: boolean }>>({})
   const [decryptingRole, setDecryptingRole] = useState<string | null>(null)
 
   const escrowCredentials = state.credentials
@@ -1582,13 +1587,14 @@ function VerifyStep({ state, t }: { state: ContractWizardState; t: (key: string)
     setDecryptingRole(role)
     try {
       const { decryptEscrow } = await import('../lib/escrow-decrypt')
-      const fields = await decryptEscrow(
+      const result = await decryptEscrow(
         escrowData.encrypted_key,
         DEMO_AUTHORITY_PRIVKEY,
         escrowData.ciphertext,
         escrowData.field_names,
+        escrowData.credential_hash,
       )
-      setDecryptedByRole(prev => ({ ...prev, [role]: fields }))
+      setDecryptedByRole(prev => ({ ...prev, [role]: result }))
     } catch (e: any) {
       alert(`Decrypt failed: ${e.message}`)
     } finally {
@@ -1613,6 +1619,10 @@ function VerifyStep({ state, t }: { state: ContractWizardState; t: (key: string)
         const trustedVks = await sdk.loadTrustedVks('/trusted-vks.json')
         await sdk.initVerifier()
 
+        const mergedEcdsa: Record<string, { valid: boolean; commitment: string }> = {}
+        let mergedChainValid: boolean | null = null
+        let mergedEscrowValid: boolean | null = null
+
         for (let ci = 0; ci < state.credentials.length; ci++) {
           const cred = state.credentials[ci]
           const req = template?.credentials[ci]
@@ -1626,11 +1636,23 @@ function VerifyStep({ state, t }: { state: ContractWizardState; t: (key: string)
             const desc = cred.predicateDescriptions[i] || pr.op || 'unknown'
             subResults.push({ role: req.role, predicate: desc, valid: pr.valid })
           }
+
+          // Merge ECDSA results
+          for (const [claim, res] of Object.entries(chainResult.ecdsaResults)) {
+            mergedEcdsa[`${req.role}:${claim}`] = res
+          }
+          if (chainResult.chainValid !== null) {
+            mergedChainValid = mergedChainValid === null ? chainResult.chainValid : (mergedChainValid && chainResult.chainValid)
+          }
+          if (chainResult.escrowValid !== undefined && chainResult.escrowValid !== null) {
+            mergedEscrowValid = mergedEscrowValid === null ? chainResult.escrowValid : (mergedEscrowValid && chainResult.escrowValid)
+          }
         }
 
         const valid = subResults.every(r => r.valid)
         setResults(subResults)
         setAllValid(valid)
+        setChainDetails({ ecdsaResults: mergedEcdsa, chainValid: mergedChainValid, escrowValid: mergedEscrowValid })
         setVerificationMethod('wasm')
         setVerifyTimeMs(performance.now() - t0)
         setVerified(true)
@@ -1775,6 +1797,85 @@ function VerifyStep({ state, t }: { state: ContractWizardState; t: (key: string)
             </div>
           </div>
 
+          {/* ECDSA Signature Verification */}
+          {chainDetails && Object.keys(chainDetails.ecdsaResults).length > 0 && (
+            <div className="bg-slate-800 rounded-lg border border-blue-700/30 overflow-hidden">
+              <div className="bg-blue-900/30 px-6 py-3">
+                <h3 className="text-sm font-semibold text-blue-300">{t('contracts.ecdsaVerification')}</h3>
+              </div>
+              <div className="divide-y divide-slate-700">
+                {Object.entries(chainDetails.ecdsaResults).map(([claim, res]) => (
+                  <div key={claim} className="flex items-center justify-between px-5 py-3">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm text-slate-300">{claim.split(':')[1] || claim}</span>
+                      <span className="text-[10px] font-mono text-slate-600">{claim.split(':')[0]}</span>
+                    </div>
+                    {res.valid ? (
+                      <span className="text-blue-400 text-xs font-semibold flex items-center gap-1">
+                        <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                        OK
+                      </span>
+                    ) : (
+                      <span className="text-red-400 text-xs font-semibold">FAIL</span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Commitment Chain */}
+          {chainDetails && chainDetails.chainValid !== null && (
+            <div className={`flex items-center gap-3 rounded-lg px-5 py-3 border ${
+              chainDetails.chainValid
+                ? 'bg-blue-950/20 border-blue-700/30 text-blue-300'
+                : 'bg-red-950/30 border-red-700/40 text-red-300'
+            }`}>
+              <svg className="w-5 h-5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
+                <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
+              </svg>
+              <div className="flex-1">
+                <p className="text-sm font-semibold">
+                  {chainDetails.chainValid ? t('contracts.chainValid') : t('contracts.chainBroken')}
+                </p>
+                <p className="text-xs opacity-70">
+                  {t('contracts.chainDesc')}
+                </p>
+              </div>
+              {chainDetails.chainValid ? (
+                <svg className="w-5 h-5 text-blue-400 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+              ) : (
+                <svg className="w-5 h-5 text-red-400 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+              )}
+            </div>
+          )}
+
+          {/* Escrow Proof Verification */}
+          {chainDetails && chainDetails.escrowValid !== null && (
+            <div className={`flex items-center gap-3 rounded-lg px-5 py-3 border ${
+              chainDetails.escrowValid
+                ? 'bg-amber-950/20 border-amber-700/30 text-amber-300'
+                : 'bg-red-950/30 border-red-700/40 text-red-300'
+            }`}>
+              <svg className="w-5 h-5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <rect width="18" height="11" x="3" y="11" rx="2" ry="2" />
+                <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+              </svg>
+              <div className="flex-1">
+                <p className="text-sm font-semibold">
+                  {chainDetails.escrowValid ? t('contracts.escrowProofValid') : t('contracts.escrowProofFail')}
+                </p>
+                <p className="text-xs opacity-70">{t('contracts.escrowProofDesc')}</p>
+              </div>
+              {chainDetails.escrowValid ? (
+                <svg className="w-5 h-5 text-amber-400 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+              ) : (
+                <svg className="w-5 h-5 text-red-400 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+              )}
+            </div>
+          )}
+
           {/* Holder bindings */}
           {state.bindings.length > 0 && (
             <div className="bg-slate-800 rounded-lg border border-purple-700/30 overflow-hidden">
@@ -1824,12 +1925,24 @@ function VerifyStep({ state, t }: { state: ContractWizardState; t: (key: string)
                 <div className="bg-amber-500/5 border border-amber-500/20 rounded-lg p-4">
                   <p className="text-xs text-amber-400 font-semibold mb-2">{t('escrow.decryptedTitle')}</p>
                   <div className="space-y-1">
-                    {Object.entries(decryptedByRole[req!.role]).map(([name, value]) => (
+                    {Object.entries(decryptedByRole[req!.role].fields).map(([name, value]) => (
                       <div key={name} className="flex justify-between text-xs">
                         <span className="text-slate-400">{name}</span>
                         <span className="font-mono text-amber-300">{String(value)}</span>
                       </div>
                     ))}
+                  </div>
+                  <div className={`mt-3 pt-3 border-t border-amber-500/20 flex items-center gap-2 text-xs ${
+                    decryptedByRole[req!.role].integrityValid ? 'text-green-400' : 'text-red-400'
+                  }`}>
+                    {decryptedByRole[req!.role].integrityValid ? (
+                      <svg className="w-3.5 h-3.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                    ) : (
+                      <svg className="w-3.5 h-3.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                    )}
+                    <span className="font-semibold">
+                      {decryptedByRole[req!.role].integrityValid ? t('contracts.integrityValid') : t('contracts.integrityFail')}
+                    </span>
                   </div>
                 </div>
               )}

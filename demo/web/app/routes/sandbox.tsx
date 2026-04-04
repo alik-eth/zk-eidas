@@ -681,7 +681,7 @@ function VerifierStep({ state, setState, t }: { state: WizardState; setState: Re
     } catch { return null }
   })()
 
-  const [decryptedFields, setDecryptedFields] = useState<Record<string, string> | null>(null)
+  const [decryptedFields, setDecryptedFields] = useState<{ fields: Record<string, string>; integrityValid: boolean } | null>(null)
   const [decrypting, setDecrypting] = useState(false)
 
   const bytesToHex = (bytes: number[]) => bytes.map((b: number) => b.toString(16).padStart(2, '0')).join('')
@@ -691,13 +691,14 @@ function VerifierStep({ state, setState, t }: { state: WizardState; setState: Re
     setDecrypting(true)
     try {
       const { decryptEscrow } = await import('../lib/escrow-decrypt')
-      const fields = await decryptEscrow(
+      const result = await decryptEscrow(
         escrowData.encrypted_key,
         state.escrowPrivkey,
         escrowData.ciphertext,
         escrowData.field_names,
+        escrowData.credential_hash,
       )
-      setDecryptedFields(fields)
+      setDecryptedFields(result)
     } catch (e: any) {
       alert(`Decrypt failed: ${e.message}`)
     } finally {
@@ -1294,12 +1295,24 @@ function VerifierStep({ state, setState, t }: { state: WizardState; setState: Re
                   <div className="bg-amber-500/5 border border-amber-500/20 rounded-lg p-4">
                     <p className="text-xs text-amber-400 font-semibold mb-2">{t('escrow.decryptedTitle')}</p>
                     <div className="space-y-1">
-                      {Object.entries(decryptedFields).map(([name, value]) => (
+                      {Object.entries(decryptedFields.fields).map(([name, value]) => (
                         <div key={name} className="flex justify-between text-xs">
                           <span className="text-slate-400">{name}</span>
                           <span className="font-mono text-amber-300">{String(value)}</span>
                         </div>
                       ))}
+                    </div>
+                    <div className={`mt-3 pt-3 border-t border-amber-500/20 flex items-center gap-2 text-xs ${
+                      decryptedFields.integrityValid ? 'text-green-400' : 'text-red-400'
+                    }`}>
+                      {decryptedFields.integrityValid ? (
+                        <svg className="w-3.5 h-3.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                      ) : (
+                        <svg className="w-3.5 h-3.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                      )}
+                      <span className="font-semibold">
+                        {decryptedFields.integrityValid ? t('contracts.integrityValid') : t('contracts.integrityFail')}
+                      </span>
                     </div>
                   </div>
                 )}
