@@ -106,3 +106,10 @@ extern const ZkSpecStruct kZkSpecs[12];
 // Smoke test: prove + verify age_over_18 on built-in test mdoc.
 // Returns 0 on success, negative on failure.
 extern int longfellow_smoke_test(void);
+
+// Prove + verify with pre-generated circuit (avoids ~16s circuit regeneration).
+// Returns 0 on success, -2 on prove failure, -3 on verify failure.
+// If proof_out/proof_len_out are non-null, caller receives proof bytes (must free).
+extern int longfellow_prove_verify_cached(
+    const uint8_t* circuit, unsigned long circuit_len,
+    uint8_t** proof_out, unsigned long* proof_len_out);

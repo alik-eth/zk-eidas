@@ -22,6 +22,8 @@ struct AppState {
     ecdsa_cache: Arc<std::sync::Mutex<HashMap<u64, (Vec<u8>, Vec<u8>, Vec<u8>)>>>,
     /// Escrow proof cache: escrow_cache_key → serialized IdentityEscrowData JSON
     escrow_cache: HashMap<String, String>,
+    /// Cached Longfellow circuit (generated once on first use)
+    longfellow_circuit: tokio::sync::OnceCell<Vec<u8>>,
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -2011,19 +2013,46 @@ fn build_cors_layer() -> CorsLayer {
 // === Longfellow Demo ===
 
 async fn longfellow_demo(
-    State(_state): State<Arc<AppState>>,
+    State(state): State<Arc<AppState>>,
 ) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
-    // Run Longfellow prove+verify on built-in test mdoc (age_over_18)
-    // This calls the C++ smoke test function via FFI
-    let start = std::time::Instant::now();
+    let total_start = std::time::Instant::now();
 
-    let result = tokio::task::spawn_blocking(|| unsafe {
-        longfellow_sys::longfellow_smoke_test()
+    // Generate circuit once (cached across requests)
+    let circuit_start = std::time::Instant::now();
+    let circuit_bytes = state.longfellow_circuit.get_or_try_init(|| async {
+        tokio::task::spawn_blocking(|| {
+            longfellow_sys::safe::gen_circuit(0) // 1-attribute v7 circuit
+        })
+        .await
+        .map_err(|e| format!("join error: {e}"))?
+        .map_err(|e| format!("circuit gen: {e}"))
+    }).await.map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e))?;
+    let circuit_ms = circuit_start.elapsed().as_millis();
+    let circuit_cached = circuit_ms < 100; // <100ms means it was cached
+
+    // Prove + verify using cached circuit bytes
+    let circuit_clone = circuit_bytes.clone();
+    let prove_start = std::time::Instant::now();
+    let (result, proof_size) = tokio::task::spawn_blocking(move || unsafe {
+        let mut proof_ptr: *mut u8 = std::ptr::null_mut();
+        let mut proof_len: std::os::raw::c_ulong = 0;
+        let ret = longfellow_sys::longfellow_prove_verify_cached(
+            circuit_clone.as_ptr(),
+            circuit_clone.len() as std::os::raw::c_ulong,
+            &mut proof_ptr,
+            &mut proof_len,
+        );
+        let size = proof_len as usize;
+        if !proof_ptr.is_null() {
+            libc::free(proof_ptr as *mut libc::c_void);
+        }
+        (ret, size)
     })
     .await
     .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("join error: {e}")))?;
+    let prove_ms = prove_start.elapsed().as_millis();
 
-    let elapsed_ms = start.elapsed().as_millis();
+    let total_ms = total_start.elapsed().as_millis();
 
     if result == 0 {
         Ok(Json(serde_json::json!({
@@ -2033,11 +2062,13 @@ async fn longfellow_demo(
             "quantum_safe": true,
             "trusted_setup": false,
             "test": "age_over_18 on built-in mdoc",
-            "elapsed_ms": elapsed_ms,
-            "details": {
-                "circuit_generation": "included in timing",
-                "proving": "ECDSA P-256 + SHA-256 hash + attribute disclosure",
-                "verification": "pass"
+            "circuit_bytes": circuit_bytes.len(),
+            "proof_bytes": proof_size,
+            "timing": {
+                "circuit_gen_ms": circuit_ms,
+                "circuit_cached": circuit_cached,
+                "prove_verify_ms": prove_ms,
+                "total_ms": total_ms,
             }
         })))
     } else {
@@ -2059,6 +2090,7 @@ pub fn build_app(circuits_path: &str) -> Router {
         binding_cache: loaded.bindings,
         ecdsa_cache: Arc::new(std::sync::Mutex::new(loaded.ecdsa_commitments)),
         escrow_cache: loaded.escrow,
+        longfellow_circuit: tokio::sync::OnceCell::new(),
     });
 
     Router::new()
