@@ -24,6 +24,8 @@ struct AppState {
     escrow_cache: HashMap<String, String>,
     /// Cached Longfellow circuit (generated once on first use)
     longfellow_circuit: tokio::sync::OnceCell<Vec<u8>>,
+    /// Content-addressed proof blob store: SHA-256 hex CID → raw bytes
+    proof_blobs: std::sync::RwLock<HashMap<String, Vec<u8>>>,
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -2079,6 +2081,41 @@ async fn longfellow_demo(
     }
 }
 
+// === Proof Blob Store ===
+
+async fn store_proof_blob(
+    State(state): State<Arc<AppState>>,
+    body: axum::body::Bytes,
+) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
+    use sha2::{Sha256, Digest};
+    let mut hasher = Sha256::new();
+    hasher.update(&body);
+    let cid = hex::encode(hasher.finalize());
+    state
+        .proof_blobs
+        .write()
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("lock poisoned: {e}")))?
+        .insert(cid.clone(), body.to_vec());
+    Ok(Json(serde_json::json!({ "cid": cid })))
+}
+
+async fn get_proof_blob(
+    State(state): State<Arc<AppState>>,
+    AxumPath(cid): AxumPath<String>,
+) -> Result<impl axum::response::IntoResponse, (StatusCode, String)> {
+    let bytes = state
+        .proof_blobs
+        .read()
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("lock poisoned: {e}")))?
+        .get(&cid)
+        .cloned()
+        .ok_or_else(|| (StatusCode::NOT_FOUND, format!("blob not found: {cid}")))?;
+    Ok((
+        [(axum::http::header::CONTENT_TYPE, "application/octet-stream")],
+        bytes,
+    ))
+}
+
 pub fn build_app(circuits_path: &str) -> Router {
     let api_dir = env!("CARGO_MANIFEST_DIR");
     let loaded = load_proof_cache(api_dir);
@@ -2091,6 +2128,7 @@ pub fn build_app(circuits_path: &str) -> Router {
         ecdsa_cache: Arc::new(std::sync::Mutex::new(loaded.ecdsa_commitments)),
         escrow_cache: loaded.escrow,
         longfellow_circuit: tokio::sync::OnceCell::new(),
+        proof_blobs: std::sync::RwLock::new(HashMap::new()),
     });
 
     Router::new()
@@ -2113,6 +2151,8 @@ pub fn build_app(circuits_path: &str) -> Router {
         .route("/verifier/presentation-request", post(presentation_request))
         .route("/escrow/decrypt", post(escrow_decrypt))
         .route("/longfellow/demo", get(longfellow_demo))
+        .route("/proofs", post(store_proof_blob))
+        .route("/proofs/{cid}", get(get_proof_blob))
         .layer(build_cors_layer())
         .with_state(state)
 }
@@ -3175,5 +3215,52 @@ mod tests {
         // Should get a parse error, NOT an HTML page
         assert!(status == 400 || status == 500, "expected API error, got {status}");
         assert!(!body.contains("<!DOCTYPE"), "got HTML instead of API response — route not registered");
+    }
+
+    // === Proof Blob Store ===
+
+    #[tokio::test]
+    async fn blob_store_round_trip() {
+        let url = light_setup().await;
+        let client = reqwest::Client::new();
+
+        let payload: Vec<u8> = b"fake proof bytes for testing".to_vec();
+
+        // Store the blob
+        let store_res = client
+            .post(format!("{url}/proofs"))
+            .header("content-type", "application/octet-stream")
+            .body(payload.clone())
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(store_res.status().as_u16(), 200, "store failed");
+        let store_json: serde_json::Value = store_res.json().await.unwrap();
+        let cid = store_json["cid"].as_str().unwrap().to_string();
+        assert_eq!(cid.len(), 64, "CID should be 64 hex chars (SHA-256)");
+
+        // Retrieve the blob
+        let get_res = client
+            .get(format!("{url}/proofs/{cid}"))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(get_res.status().as_u16(), 200, "get failed");
+        let content_type = get_res.headers()
+            .get("content-type")
+            .and_then(|v| v.to_str().ok())
+            .unwrap_or("")
+            .to_string();
+        assert!(content_type.contains("application/octet-stream"), "wrong content-type: {content_type}");
+        let returned = get_res.bytes().await.unwrap();
+        assert_eq!(returned.as_ref(), payload.as_slice(), "returned bytes must match stored bytes");
+
+        // Unknown CID returns 404
+        let missing_res = client
+            .get(format!("{url}/proofs/deadbeef"))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(missing_res.status().as_u16(), 404, "missing CID should return 404");
     }
 }
