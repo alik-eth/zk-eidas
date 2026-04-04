@@ -18,6 +18,31 @@ export const METADATA_PROOF_INDEX = 0xff
 export const TERMS_PROOF_ID = 0xfffe
 export const METADATA_PROOF_ID = 0xffff
 
+export const ESCROW_PROOF_ID_BASE = 0xfff0
+export const ESCROW_PROOF_ID_MAX = 0xfffd
+
+export function isEscrowProofId(proofId: number): boolean {
+  return proofId >= ESCROW_PROOF_ID_BASE && proofId <= ESCROW_PROOF_ID_MAX
+}
+
+export function escrowProofId(credentialIndex: number): number {
+  return ESCROW_PROOF_ID_BASE + credentialIndex
+}
+
+export function escrowCredentialIndex(proofId: number): number {
+  return proofId - ESCROW_PROOF_ID_BASE
+}
+
+export interface EscrowEnvelopeQr {
+  encrypted_key: number[]
+  credential_hash: number[]
+  key_commitment: number[]
+  ciphertext: number[][]
+  field_names: string[]
+  authority_pubkey: number[]
+  authority_name: string
+}
+
 export const enum LogicalOpFlag {
   Single = 0b00,
   And = 0b01,
@@ -130,6 +155,19 @@ export async function encodeTermsQr(
   const chunks = encodeProofChunks(compressed, TERMS_PROOF_ID, TERMS_PROOF_INDEX, proofCount, LogicalOpFlag.Single)
   if (chunks.length !== 1) throw new Error(`Terms QR requires ${chunks.length} chunks (expected 1)`)
   return chunks[0]
+}
+
+/** Encode an escrow envelope into QR-ready chunks. */
+export async function encodeEscrowChunks(
+  envelope: EscrowEnvelopeQr,
+  credentialIndex: number,
+  escrowCount: number,
+): Promise<Uint8Array[]> {
+  const { encode } = await import('cbor-x')
+  const cbor = encode(envelope)
+  const compressed = await compressDeflate(new Uint8Array(cbor))
+  const proofId = escrowProofId(credentialIndex)
+  return encodeProofChunks(compressed, proofId, credentialIndex, escrowCount, LogicalOpFlag.Single)
 }
 
 /** Encode contract metadata into a single QR-ready chunk. */
@@ -278,12 +316,22 @@ export class ChunkCollector {
   /** Check if all expected proofs are complete. */
   isAllComplete(): boolean {
     if (this.chunks.size === 0) return false
-    const firstHeader = this.headers.values().next().value
-    if (!firstHeader) return false
-    const expectedCount = firstHeader.proofCount
-    if (this.chunks.size !== expectedCount) return false
-    for (const proofId of this.chunks.keys()) {
-      if (!this.isProofComplete(proofId)) return false
+    const proofIds = [...this.chunks.keys()].filter(id => !isEscrowProofId(id))
+    const escrowIds = [...this.chunks.keys()].filter(id => isEscrowProofId(id))
+    if (proofIds.length === 0) return false
+    const firstProofHeader = this.headers.get(proofIds[0])
+    if (!firstProofHeader) return false
+    if (proofIds.length !== firstProofHeader.proofCount) return false
+    for (const id of proofIds) {
+      if (!this.isProofComplete(id)) return false
+    }
+    if (escrowIds.length > 0) {
+      const firstEscrowHeader = this.headers.get(escrowIds[0])
+      if (!firstEscrowHeader) return false
+      if (escrowIds.length !== firstEscrowHeader.proofCount) return false
+      for (const id of escrowIds) {
+        if (!this.isProofComplete(id)) return false
+      }
     }
     return true
   }
@@ -329,8 +377,8 @@ export class ChunkCollector {
   }
 
   /** Get a dynamic checklist of scanned items for progress display. */
-  scannedItems(): { type: 'terms' | 'metadata' | 'proof'; proofIndex: number; complete: boolean }[] {
-    const items: { type: 'terms' | 'metadata' | 'proof'; proofIndex: number; complete: boolean }[] = []
+  scannedItems(): { type: 'terms' | 'metadata' | 'proof' | 'escrow'; proofIndex: number; complete: boolean }[] {
+    const items: { type: 'terms' | 'metadata' | 'proof' | 'escrow'; proofIndex: number; complete: boolean }[] = []
     for (const [proofId] of this.headers) {
       const header = this.headers.get(proofId)!
       const complete = this.isProofComplete(proofId)
@@ -338,10 +386,52 @@ export class ChunkCollector {
         items.push({ type: 'terms', proofIndex: header.proofIndex, complete })
       } else if (header.proofIndex === METADATA_PROOF_INDEX) {
         items.push({ type: 'metadata', proofIndex: header.proofIndex, complete })
+      } else if (isEscrowProofId(proofId)) {
+        items.push({ type: 'escrow', proofIndex: escrowCredentialIndex(proofId), complete })
       } else {
         items.push({ type: 'proof', proofIndex: header.proofIndex, complete })
       }
     }
     return items
+  }
+
+  /** Check if any escrow envelopes have been scanned. */
+  hasEscrow(): boolean {
+    return [...this.chunks.keys()].some(id => isEscrowProofId(id))
+  }
+
+  /** Get all escrow proofIds. */
+  escrowProofIds(): number[] {
+    return [...this.chunks.keys()].filter(id => isEscrowProofId(id))
+  }
+
+  /** Get escrow scan progress: [scanned, total]. */
+  escrowProgress(): [number, number] {
+    const escrowIds = this.escrowProofIds()
+    if (escrowIds.length === 0) return [0, 0]
+    const firstHeader = this.headers.get(escrowIds[0])
+    const total = firstHeader?.proofCount ?? 0
+    const scanned = escrowIds.filter(id => this.isProofComplete(id)).length
+    return [scanned, total]
+  }
+
+  /** Get proof (non-escrow) scan progress: [scanned, total]. */
+  proofProgress(): [number, number] {
+    const proofIds = [...this.chunks.keys()].filter(id => !isEscrowProofId(id))
+    if (proofIds.length === 0) return [0, 0]
+    const firstHeader = this.headers.get(proofIds[0])
+    const total = firstHeader?.proofCount ?? 0
+    const scanned = proofIds.filter(id => this.isProofComplete(id)).length
+    return [scanned, total]
+  }
+
+  /** Extract and decode an escrow envelope by credential index. Returns null if not yet collected. */
+  async getEscrowEnvelope(credentialIndex: number): Promise<EscrowEnvelopeQr | null> {
+    const proofId = escrowProofId(credentialIndex)
+    const compressed = this.reassemble(proofId)
+    if (!compressed) return null
+    const cbor = await decompressDeflate(compressed)
+    const { decode } = await import('cbor-x')
+    return decode(cbor) as EscrowEnvelopeQr
   }
 }

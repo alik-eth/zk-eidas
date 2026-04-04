@@ -27,7 +27,7 @@ function VerifyPage() {
   const [dragging, setDragging] = useState(false)
   const [wasmReady, setWasmReady] = useState(false)
   const [scanMode, setScanMode] = useState(false)
-  const [scanProgress, setScanProgress] = useState<{ scanned: number; total: number; items: { type: 'terms' | 'metadata' | 'proof'; proofIndex: number; complete: boolean }[] }>({ scanned: 0, total: 0, items: [] })
+  const [scanProgress, setScanProgress] = useState<{ scanned: number; total: number; items: { type: 'terms' | 'metadata' | 'proof' | 'escrow'; proofIndex: number; complete: boolean }[] }>({ scanned: 0, total: 0, items: [] })
   const [contractTerms, setContractTerms] = useState<{ terms: string; timestamp: string } | null>(null)
   const [contractMeta, setContractMeta] = useState<{ contract_hash: string; parties: { role: string; nullifier: string; salt: string }[] } | null>(null)
   const [hashCheckResult, setHashCheckResult] = useState<'match' | 'mismatch' | null>(null)
