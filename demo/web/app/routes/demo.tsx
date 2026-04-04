@@ -61,6 +61,11 @@ interface ContractWizardState {
 
 const API_URL = typeof window !== 'undefined' && window.location.hostname === 'localhost' ? 'http://localhost:3001' : ''
 
+function formatFieldHash(bytes: number[]): string {
+  const s = String.fromCharCode(...bytes)
+  return s.length > 20 ? s.slice(0, 10) + '...' + s.slice(-10) : s
+}
+
 const INITIAL_STATE: ContractWizardState = {
   step: 1,
   templateId: null,
@@ -1480,18 +1485,28 @@ function DocumentStep({ state, setState, t }: { state: ContractWizardState; setS
                   <h4 className="text-sm font-semibold text-gray-700 print:text-black">{t('escrow.qrLabel')}</h4>
                 </div>
                 <p className="text-[10px] text-gray-400 mb-3">{t('escrow.qrSubtitle')}</p>
-                {state.escrowQrUrls.map((party) => (
+                {state.escrowQrUrls.map((party) => {
+                  const cred = state.credentials.find((_, i) => template?.credentials[i]?.role === party.role)
+                  const ed = cred?.escrowData
+                  return (
                   <div key={party.role} className="mb-4">
                     <p className="text-xs font-semibold text-gray-600 print:text-black mb-2">{t(party.roleLabelKey)}</p>
+                    {ed && (
+                      <div className="mb-2 text-[9px] font-mono text-gray-500 print:text-black/60 space-y-0.5">
+                        <div><span className="text-gray-400 print:text-black/40">{t('escrow.credentialHash')}:</span> {formatFieldHash(ed.credential_hash)}</div>
+                        <div><span className="text-gray-400 print:text-black/40">{t('escrow.keyCommitment')}:</span> {formatFieldHash(ed.key_commitment)}</div>
+                      </div>
+                    )}
                     <div className="flex flex-wrap gap-2">
-                      {party.urls.map((url, i) => (
+                      {party.urls.map((url: string, i: number) => (
                         <div key={i} className="border border-gray-300 rounded p-1 print:border-black/30">
                           <img src={url} alt={`${party.role} Escrow QR ${i + 1}`} className="w-28 h-28 print:w-[40mm] print:h-[40mm]" />
                         </div>
                       ))}
                     </div>
                   </div>
-                ))}
+                  )
+                })}
               </div>
             )}
 
