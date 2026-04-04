@@ -97,6 +97,67 @@ fn parse_mdoc_token(token: &str) -> Result<(Vec<u8>, [u8; 32], [u8; 32]), String
     Ok((bytes, pub_key_x, pub_key_y))
 }
 
+fn predicate_to_attribute(
+    claim: &str,
+    op: &str,
+    cbor_value: &[u8],
+) -> longfellow_sys::mdoc::AttributeRequest {
+    use longfellow_sys::safe::VerifyType;
+    let verify_type = match op {
+        "gte" => VerifyType::Geq,
+        "lte" => VerifyType::Leq,
+        "eq" | "disclosure" => VerifyType::Eq,
+        "neq" => VerifyType::Neq,
+        _ => VerifyType::Eq,
+    };
+    longfellow_sys::mdoc::AttributeRequest {
+        namespace: "org.iso.18013.5.1".into(),
+        identifier: claim.into(),
+        cbor_value: cbor_value.to_vec(),
+        verify_type,
+    }
+}
+
+fn parse_mdoc_for_longfellow(token: &str) -> Result<(Vec<u8>, String, String), (StatusCode, String)> {
+    let (mdoc_bytes, pk_x, pk_y) = parse_mdoc_token(token)
+        .map_err(|e| (StatusCode::BAD_REQUEST, format!("mdoc parse: {e}")))?;
+    let pkx_hex = format!("0x{}", hex::encode(pk_x));
+    let pky_hex = format!("0x{}", hex::encode(pk_y));
+    Ok((mdoc_bytes, pkx_hex, pky_hex))
+}
+
+fn claim_to_cbor(value: &zk_eidas_types::credential::ClaimValue) -> Vec<u8> {
+    use zk_eidas_types::credential::ClaimValue;
+    match value {
+        ClaimValue::Boolean(true) => vec![0xf5],
+        ClaimValue::Boolean(false) => vec![0xf4],
+        ClaimValue::Integer(n) if *n >= 0 && *n <= 23 => vec![*n as u8],
+        ClaimValue::Integer(n) if *n >= 0 && *n <= 255 => vec![0x18, *n as u8],
+        ClaimValue::Integer(n) if *n >= 0 => vec![0x19, (*n >> 8) as u8, *n as u8],
+        ClaimValue::Integer(n) => {
+            let abs = ((-1 - *n) as u64).to_be_bytes();
+            let mut v = vec![0x3b];
+            v.extend_from_slice(&abs);
+            v
+        }
+        ClaimValue::String(s) => {
+            let mut v = Vec::new();
+            let len = s.len();
+            if len <= 23 { v.push(0x60 + len as u8); }
+            else { v.push(0x78); v.push(len as u8); }
+            v.extend_from_slice(s.as_bytes());
+            v
+        }
+        ClaimValue::Date { year, month, day } => {
+            let s = format!("{year:04}-{month:02}-{day:02}");
+            let mut v = vec![0xD9, 0x03, 0xEC]; // tag(1004)
+            v.push(0x60 + s.len() as u8);
+            v.extend_from_slice(s.as_bytes());
+            v
+        }
+    }
+}
+
 #[derive(Serialize)]
 struct IssueResponse {
     credential: String,
