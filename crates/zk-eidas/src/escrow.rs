@@ -1,13 +1,63 @@
-//! Identity escrow utilities: credential field packing, key generation, and ECIES encryption.
+//! Identity escrow utilities: credential field packing, key generation, and encryption.
 //!
-//! These utilities support the identity escrow circuit, which encrypts 8 credential data
-//! fields using Poseidon-CTR inside a ZK proof. The symmetric key K is encrypted to an
-//! escrow authority's public key (secp256k1 ECIES) outside the circuit.
+//! These utilities support identity escrow: AES-256-GCM encrypts credential fields
+//! outside the circuit. The symmetric key K is encrypted to an escrow authority's
+//! ML-KEM-768 public key, released only on court order or arbitration ruling.
 
+use aes_gcm::{Aes256Gcm, KeyInit, Nonce};
+use aes_gcm::aead::Aead;
 use num_bigint::BigUint;
 use zk_eidas_types::credential::{ClaimValue, Credential};
 
 use crate::builder::ZkError;
+
+/// Encrypt credential field values with AES-256-GCM using `key`.
+///
+/// Returns `(ciphertexts, tags)` where each element corresponds to one field.
+/// Each nonce is derived deterministically from the field index (counter mode).
+pub fn encrypt_fields_aes_gcm(
+    fields: &[(&str, &[u8])],
+    key: &[u8; 32],
+) -> Result<(Vec<Vec<u8>>, Vec<Vec<u8>>), ZkError> {
+    let cipher = Aes256Gcm::new(key.into());
+    let mut ciphertexts = Vec::new();
+    let mut tags = Vec::new();
+    for (i, (_name, value)) in fields.iter().enumerate() {
+        let mut nonce_bytes = [0u8; 12];
+        nonce_bytes[8..12].copy_from_slice(&(i as u32).to_be_bytes());
+        let nonce = Nonce::from_slice(&nonce_bytes);
+        let ct = cipher.encrypt(nonce, value.as_ref())
+            .map_err(|e| ZkError::InvalidInput(format!("AES-GCM encrypt: {e}")))?;
+        let (ct_only, tag) = ct.split_at(ct.len() - 16);
+        ciphertexts.push(ct_only.to_vec());
+        tags.push(tag.to_vec());
+    }
+    Ok((ciphertexts, tags))
+}
+
+/// Decrypt AES-256-GCM ciphertexts using `key`.
+///
+/// `ciphertexts` and `tags` must be the same length and correspond to fields in order.
+/// Returns the plaintext bytes for each field.
+pub fn decrypt_fields_aes_gcm(
+    ciphertexts: &[Vec<u8>],
+    tags: &[Vec<u8>],
+    key: &[u8; 32],
+) -> Result<Vec<Vec<u8>>, ZkError> {
+    let cipher = Aes256Gcm::new(key.into());
+    let mut fields = Vec::new();
+    for (i, (ct, tag)) in ciphertexts.iter().zip(tags.iter()).enumerate() {
+        let mut nonce_bytes = [0u8; 12];
+        nonce_bytes[8..12].copy_from_slice(&(i as u32).to_be_bytes());
+        let nonce = Nonce::from_slice(&nonce_bytes);
+        let mut ct_with_tag = ct.clone();
+        ct_with_tag.extend_from_slice(tag);
+        let plaintext = cipher.decrypt(nonce, ct_with_tag.as_ref())
+            .map_err(|e| ZkError::InvalidInput(format!("AES-GCM decrypt: {e}")))?;
+        fields.push(plaintext);
+    }
+    Ok(fields)
+}
 
 /// BN254 scalar field order: p = 21888242871839275222246405745257275088548364400416034343698204186575808495617
 const BN254_ORDER: &str =
@@ -351,5 +401,27 @@ mod tests {
         let decimal = claim_value_to_escrow_decimal(&cv);
         let parsed: BigUint = decimal.parse().unwrap();
         assert_eq!(parsed, BigUint::from(42u64));
+    }
+
+    #[test]
+    fn aes_gcm_escrow_round_trip() {
+        let key = [0x42u8; 32];
+        let fields = vec![
+            ("name", b"Alice".as_slice()),
+            ("dob", b"1990-01-15".as_slice()),
+        ];
+        let (cts, tags) = encrypt_fields_aes_gcm(&fields, &key).unwrap();
+        let decrypted = decrypt_fields_aes_gcm(&cts, &tags, &key).unwrap();
+        assert_eq!(decrypted[0], b"Alice");
+        assert_eq!(decrypted[1], b"1990-01-15");
+    }
+
+    #[test]
+    fn aes_gcm_tampered_tag_fails() {
+        let key = [0x42u8; 32];
+        let fields = vec![("name", b"Alice".as_slice())];
+        let (cts, mut tags) = encrypt_fields_aes_gcm(&fields, &key).unwrap();
+        tags[0][0] ^= 0xff;
+        assert!(decrypt_fields_aes_gcm(&cts, &tags, &key).is_err());
     }
 }

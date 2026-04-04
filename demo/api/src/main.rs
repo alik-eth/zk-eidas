@@ -158,6 +158,27 @@ fn claim_to_cbor(value: &zk_eidas_types::credential::ClaimValue) -> Vec<u8> {
     }
 }
 
+/// Parse a threshold value string into a `ClaimValue` for CBOR encoding.
+fn parse_threshold_value(_claim: &str, value_str: &str) -> zk_eidas_types::credential::ClaimValue {
+    use zk_eidas_types::credential::ClaimValue;
+    // Try date (YYYY-MM-DD)
+    if value_str.len() == 10 && value_str.chars().nth(4) == Some('-') {
+        let parts: Vec<&str> = value_str.split('-').collect();
+        if parts.len() == 3 {
+            if let (Ok(y), Ok(m), Ok(d)) = (parts[0].parse(), parts[1].parse(), parts[2].parse()) {
+                return ClaimValue::Date { year: y, month: m, day: d };
+            }
+        }
+    }
+    // Try boolean
+    if value_str == "true" { return ClaimValue::Boolean(true); }
+    if value_str == "false" { return ClaimValue::Boolean(false); }
+    // Try integer
+    if let Ok(n) = value_str.parse::<i64>() { return ClaimValue::Integer(n); }
+    // Default to string
+    ClaimValue::String(value_str.to_string())
+}
+
 #[derive(Serialize)]
 struct IssueResponse {
     credential: String,
@@ -331,6 +352,7 @@ struct ProveRequest {
     #[serde(default = "default_format")]
     format: String,
     predicates: Vec<PredicateRequest>,
+    now: Option<String>,
 }
 
 #[derive(Deserialize, Clone)]
@@ -428,129 +450,147 @@ async fn generate_proof(
     State(state): State<Arc<AppState>>,
     Json(req): Json<ProveRequest>,
 ) -> Result<Json<ProveResponse>, (StatusCode, String)> {
-    let (mut builder, all_field_names) = if req.format == "mdoc" {
-        let (mdoc_bytes, pub_key_x, pub_key_y) = parse_mdoc_token(&req.credential)
-            .map_err(|e| (StatusCode::BAD_REQUEST, format!("mdoc token: {e}")))?;
-        let credential =
-            zk_eidas_mdoc::MdocParser::parse_with_issuer_key(&mdoc_bytes, pub_key_x, pub_key_y)
-                .map_err(|e| (StatusCode::BAD_REQUEST, format!("mdoc parse: {e}")))?;
-        let names: Vec<String> = credential.claims().keys().cloned().collect();
-        (
-            zk_eidas::ZkCredential::from_credential(credential, &state.circuits_path),
-            names,
-        )
-    } else {
-        let builder = zk_eidas::ZkCredential::from_sdjwt(&req.credential, &state.circuits_path)
-            .map_err(|e| (StatusCode::BAD_REQUEST, format!("parse error: {e}")))?;
-        let names: Vec<String> = builder.credential().claims().keys().cloned().collect();
-        (builder, names)
-    };
-
-    let mut proven_claims: Vec<String> = Vec::new();
-    let mut proof_descriptions: Vec<String> = Vec::new();
-
-    for pred in &req.predicates {
-        let predicate = parse_predicate(pred)?;
-        let desc = match pred.op.as_str() {
-            "gte" => {
-                let v = pred.value.as_i64().unwrap_or(0);
-                if pred.claim == "birthdate" || pred.claim == "birth_date" {
-                    format!("age >= {}", v)
-                } else {
-                    format!("{} >= {}", pred.claim, v)
-                }
-            }
-            "eq" => format!("{} equals expected value", pred.claim),
-            "set_member" => format!("{} in allowed set", pred.claim),
-            "neq" => format!("{} != {}", pred.claim, pred.value.as_str().unwrap_or("")),
-            "lte" => format!("{} <= {}", pred.claim, pred.value.as_i64().unwrap_or(0)),
-            "range" => {
-                let arr = pred
-                    .value
-                    .as_array()
-                    .map(|a| {
-                        (
-                            a.first().and_then(|v| v.as_i64()).unwrap_or(0),
-                            a.get(1).and_then(|v| v.as_i64()).unwrap_or(0),
-                        )
-                    })
-                    .unwrap_or((0, 0));
-                if pred.claim == "birthdate" || pred.claim == "birth_date" {
-                    format!("{} <= age <= {}", arr.0, arr.1)
-                } else {
-                    format!("{} <= {} <= {}", arr.0, pred.claim, arr.1)
-                }
-            }
-            _ => format!("{} {}", pred.claim, pred.op),
-        };
-        proof_descriptions.push(desc);
-        proven_claims.push(pred.claim.clone());
-        builder = builder.predicate(&pred.claim, predicate);
+    // Longfellow only supports mdoc credentials
+    if req.format != "mdoc" {
+        return Err((
+            StatusCode::NOT_IMPLEMENTED,
+            "SD-JWT proving not implemented — only mdoc is supported".into(),
+        ));
     }
 
-    let has_nullifier = false;
+    // Parse the mdoc token for Longfellow (hex public key strings)
+    let (mdoc_bytes, pkx_hex, pky_hex) = parse_mdoc_for_longfellow(&req.credential)?;
+
+    // Also parse the mdoc to extract claim values (needed for eq/disclosure CBOR encoding)
+    let (mdoc_bytes_parse, pk_x, pk_y) = parse_mdoc_token(&req.credential)
+        .map_err(|e| (StatusCode::BAD_REQUEST, format!("mdoc token: {e}")))?;
+    let credential =
+        zk_eidas_mdoc::MdocParser::parse_with_issuer_key(&mdoc_bytes_parse, pk_x, pk_y)
+            .map_err(|e| (StatusCode::BAD_REQUEST, format!("mdoc parse: {e}")))?;
+    let claims = credential.claims().clone();
+
+    // Build AttributeRequest list from predicates
+    let mut attrs: Vec<longfellow_sys::mdoc::AttributeRequest> = Vec::new();
+    for p in &req.predicates {
+        let cbor_value = match p.op.as_str() {
+            "eq" | "disclosure" => {
+                // Use the actual claim value from the credential
+                let cv = claims.get(&p.claim).ok_or_else(|| {
+                    (StatusCode::BAD_REQUEST, format!("claim '{}' not found in credential", p.claim))
+                })?;
+                claim_to_cbor(cv)
+            }
+            _ => {
+                // Use the threshold value from the request
+                let value_str = p.value.as_str()
+                    .map(|s| s.to_string())
+                    .unwrap_or_else(|| p.value.to_string());
+                let cv = parse_threshold_value(&p.claim, &value_str);
+                claim_to_cbor(&cv)
+            }
+        };
+        attrs.push(predicate_to_attribute(&p.claim, &p.op, &cbor_value));
+    }
+
+    // Get or generate the cached circuit for this attribute count
+    let _circuit_ref = get_circuit(&state, attrs.len()).await?;
+
+    // Default `now` to current UTC time in ISO 8601 format
+    let now = req.now.unwrap_or_else(|| {
+        let d = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default();
+        let secs = d.as_secs();
+        // Simple UTC timestamp: seconds since epoch → YYYY-MM-DDTHH:MM:SSZ
+        let days = secs / 86400;
+        let time_of_day = secs % 86400;
+        let hours = time_of_day / 3600;
+        let minutes = (time_of_day % 3600) / 60;
+        let seconds = time_of_day % 60;
+        // Days since 1970-01-01
+        let (year, month, day) = epoch_days_to_date(days as i64);
+        format!("{year:04}-{month:02}-{day:02}T{hours:02}:{minutes:02}:{seconds:02}Z")
+    });
+
+    // Acquire proving semaphore (only one proof at a time)
     let _permit = state.prove_semaphore.acquire().await.map_err(|_| {
         (StatusCode::SERVICE_UNAVAILABLE, "proving unavailable".to_string())
     })?;
-    let (zk_proofs, proof_descriptions, proven_claims, all_field_names) =
-        tokio::task::spawn_blocking(move || -> Result<_, (StatusCode, String)> {
-            // SAFETY: nice() only adjusts scheduling priority; safe to call from any thread, cannot cause UB.
-            unsafe { libc::nice(10) };
-            let zk_proofs = builder.prove_all().map_err(|e| {
-                (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    format!("proving failed: {e}"),
-                )
+
+    // Clone Arc<AppState> so the spawn_blocking closure can access the circuit
+    let state_clone = Arc::clone(&state);
+    let num_attrs = attrs.len();
+    let attrs_clone = attrs.clone();
+    let mdoc_bytes_clone = mdoc_bytes.clone();
+    let pkx_clone = pkx_hex.clone();
+    let pky_clone = pky_hex.clone();
+    let now_clone = now.clone();
+
+    let proof = tokio::task::spawn_blocking(move || {
+        // SAFETY: nice() only adjusts scheduling priority; safe to call from any thread.
+        unsafe { libc::nice(10) };
+        let circuit = state_clone.longfellow_circuits[num_attrs - 1]
+            .get()
+            .ok_or_else(|| {
+                (StatusCode::INTERNAL_SERVER_ERROR, "circuit not initialized".to_string())
             })?;
-            Ok((
-                zk_proofs,
-                proof_descriptions,
-                proven_claims,
-                all_field_names,
-            ))
-        })
-        .await
-        .map_err(|e| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                format!("task join error: {e}"),
-            )
-        })??;
+        longfellow_sys::mdoc::prove(
+            circuit,
+            &mdoc_bytes_clone,
+            &pkx_clone,
+            &pky_clone,
+            b"zk-eidas-demo",
+            &attrs_clone,
+            &now_clone,
+            &[0u8; 8],
+        )
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("prove: {e}")))
+    })
+    .await
+    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("join: {e}")))??;
 
-    let nullifier_hex = if has_nullifier {
-        zk_proofs
-            .iter()
-            .find_map(|p| p.nullifier())
-            .map(|n| format!("0x{}", hex::encode(n)))
-    } else {
-        None
-    };
+    // Format response
+    let proof_hex = format!("0x{}", hex::encode(&proof.proof_bytes));
+    let proof_json = serde_json::json!({
+        "proof_bytes": proof.proof_bytes,
+        "nullifier_hash": hex::encode(proof.nullifier_hash),
+        "binding_hash": hex::encode(proof.binding_hash),
+    })
+    .to_string();
 
-    let proofs: Vec<ProofResult> = zk_proofs
-        .iter()
-        .zip(proof_descriptions.iter())
-        .map(|(proof, desc)| {
-            let op = format!("{:?}", proof.predicate_op());
-            ProofResult {
-                predicate: desc.clone(),
-                proof_json: serde_json::to_string(proof).unwrap(),
-                proof_hex: format!("0x{}", hex::encode(proof.proof_bytes())),
-                op,
-            }
-        })
-        .collect();
+    let results: Vec<ProofResult> = req.predicates.iter().map(|p| ProofResult {
+        predicate: format!("{} {} {}", p.claim, p.op, p.value),
+        proof_json: proof_json.clone(),
+        proof_hex: proof_hex.clone(),
+        op: p.op.clone(),
+    }).collect();
 
-    let hidden_fields: Vec<String> = all_field_names
-        .iter()
-        .filter(|f| !proven_claims.contains(f))
-        .cloned()
+    let hidden_fields: Vec<String> = req.predicates.iter()
+        .filter(|p| p.op == "eq" || p.op == "disclosure")
+        .map(|p| p.claim.clone())
         .collect();
 
     Ok(Json(ProveResponse {
-        proofs,
+        proofs: results,
         hidden_fields,
-        nullifier: nullifier_hex,
+        nullifier: None,
     }))
+}
+
+/// Convert days since Unix epoch to (year, month, day).
+fn epoch_days_to_date(days: i64) -> (i64, u32, u32) {
+    // Civil calendar algorithm from Howard Hinnant
+    let z = days + 719468;
+    let era = if z >= 0 { z } else { z - 146096 } / 146097;
+    let doe = (z - era * 146097) as u32;
+    let yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;
+    let y = yoe as i64 + era * 400;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let d = doy - (153 * mp + 2) / 5 + 1;
+    let m = if mp < 10 { mp + 3 } else { mp - 9 };
+    let y = if m <= 2 { y + 1 } else { y };
+    (y, m, d)
 }
 
 // === Verify ===

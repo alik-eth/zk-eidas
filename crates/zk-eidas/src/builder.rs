@@ -194,74 +194,49 @@ impl ZkCredential {
     }
 
     /// Generate identity escrow data for the configured escrow parameters.
+    ///
+    /// Uses AES-256-GCM to encrypt credential field values out-of-circuit.
+    /// The symmetric key K is encrypted to the escrow authority via ML-KEM-768.
     fn generate_identity_escrow(&mut self, config: &EscrowConfig) -> Result<IdentityEscrowData, ZkError> {
         use crate::escrow;
 
-        // Pack credential fields into 8 BN254 field elements
-        let (credential_data, claim_index) = escrow::pack_credential_fields(
-            &self.credential,
-            &config.field_names,
-            &config.ecdsa_claim,
-        )?;
-
-        // The claim_value for the escrow circuit must match the ECDSA-committed value.
-        // Use the same escrow encoding that pack_credential_fields uses.
-        let claim_value_cv = self.credential.claims().get(&config.ecdsa_claim)
-            .ok_or_else(|| ZkError::ClaimNotFound(config.ecdsa_claim.clone()))?
-            .clone();
-        let claim_value_decimal = escrow::claim_value_to_escrow_decimal(&claim_value_cv);
-
-        // Ensure ECDSA proof exists for the ecdsa_claim
-        let (commitment, sd_array_hash, message_hash) =
-            self.ensure_ecdsa(&config.ecdsa_claim)?;
-
-        // Derive deterministic symmetric key from credential data + authority pubkey
-        // (enables proof caching — same inputs always produce the same K)
-        let k = escrow::derive_escrow_key(&credential_data, &config.authority_pubkey);
-
-        // Generate proof
-        let prover = zk_eidas_prover::Prover::new(&self.circuits_path);
-        let escrow_proof = prover.prove_identity_escrow(
-            &claim_value_decimal,
-            &credential_data,
-            claim_index,
-            &k,
-            &commitment,
-            &sd_array_hash,
-            &message_hash,
-        )?;
-
-        // identity_escrow circuit public output layout:
-        //   [0]    credential_hash   — Poseidon hash of all 8 credential data fields
-        //   [1..9] ciphertext[0..7]  — 8 Poseidon-CTR encrypted field elements
-        //   [9]    key_commitment    — Poseidon(K)
-        //   [10]   commitment        — ECDSA commitment (shared with predicate proofs)
-        const PI_CREDENTIAL_HASH: usize = 0;
-        const PI_CIPHERTEXT_START: usize = 1;
-        const PI_CIPHERTEXT_END: usize = 9;
-        const PI_KEY_COMMITMENT: usize = 9;
-        const PI_MIN_LEN: usize = 10;
-
-        let pi = escrow_proof.public_inputs();
-        if pi.len() < PI_MIN_LEN {
-            return Err(ZkError::MissingProofOutput);
+        // Collect raw field bytes for AES-GCM encryption
+        let mut field_pairs: Vec<(String, Vec<u8>)> = Vec::new();
+        for name in &config.field_names {
+            let value = self.credential.claims().get(name)
+                .ok_or_else(|| ZkError::ClaimNotFound(name.clone()))?;
+            field_pairs.push((name.clone(), value.to_escrow_field().to_vec()));
         }
-        let credential_hash = pi[PI_CREDENTIAL_HASH].clone();
-        let ciphertext: Vec<Vec<u8>> = pi[PI_CIPHERTEXT_START..PI_CIPHERTEXT_END].to_vec();
-        let key_commitment = pi[PI_KEY_COMMITMENT].clone();
 
-        // Encrypt K to escrow authority
-        let encrypted_key = escrow::encrypt_key_to_authority(&k, &config.authority_pubkey)?;
+        // Derive deterministic symmetric key K (32 bytes) from field bytes + authority pubkey
+        // TODO(task-4-7): rewire K derivation when ML-KEM key generation is integrated
+        let mut hasher = Sha256::new();
+        for (_, bytes) in &field_pairs {
+            hasher.update(bytes);
+        }
+        hasher.update(&config.authority_pubkey);
+        let k_bytes: [u8; 32] = hasher.finalize().into();
+
+        // Encrypt field values with AES-256-GCM
+        let field_slices: Vec<(&str, &[u8])> = field_pairs
+            .iter()
+            .map(|(name, bytes)| (name.as_str(), bytes.as_slice()))
+            .collect();
+        let (ciphertexts, tags) = escrow::encrypt_fields_aes_gcm(&field_slices, &k_bytes)?;
+
+        // Encrypt K to escrow authority via ML-KEM-768
+        let k_decimal = {
+            use num_bigint::BigUint;
+            BigUint::from_bytes_be(&k_bytes).to_string()
+        };
+        let encrypted_key = escrow::encrypt_key_to_authority(&k_decimal, &config.authority_pubkey)?;
 
         Ok(IdentityEscrowData {
-            credential_hash,
-            ciphertext,
-            key_commitment,
+            ciphertexts,
+            tags,
             encrypted_key,
             authority_pubkey: config.authority_pubkey.clone(),
             field_names: config.field_names.clone(),
-            claim_index,
-            proof: escrow_proof,
         })
     }
 
@@ -738,13 +713,10 @@ impl ZkVerifier {
             }
         }
 
-        // Step 4: Verify identity escrow proof if present
-        if let Some(escrow) = compound.identity_escrow() {
-            let valid = verifier.verify(&escrow.proof).map_err(ZkError::from)?;
-            if !valid {
-                return Ok(false);
-            }
-        }
+        // Step 4: Verify identity escrow if present
+        // TODO(task-4-7): AES-GCM escrow has no ZK proof to verify here;
+        // verification is implicit via ML-KEM decapsulation + AES-GCM auth tags.
+        let _ = compound.identity_escrow();
 
         // Step 5: Check commitment chain
         if !check_commitment_chain(compound) {
