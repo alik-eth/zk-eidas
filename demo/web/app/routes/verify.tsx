@@ -1,7 +1,7 @@
 import { createFileRoute, Link } from '@tanstack/react-router'
 import { useState, useCallback, useEffect, useRef } from 'react'
 import { useT, useLocale } from '../i18n'
-import { ChunkCollector, decompressDeflate, TERMS_PROOF_ID, METADATA_PROOF_ID } from '../lib/qr-chunking'
+import { ChunkCollector, decompressDeflate, TERMS_PROOF_ID, METADATA_PROOF_ID, isEscrowProofId, escrowCredentialIndex } from '../lib/qr-chunking'
 import { useQrScanner } from '../lib/use-qr-scanner'
 
 export const Route = createFileRoute('/verify')({
@@ -27,7 +27,13 @@ function VerifyPage() {
   const [dragging, setDragging] = useState(false)
   const [wasmReady, setWasmReady] = useState(false)
   const [scanMode, setScanMode] = useState(false)
-  const [scanProgress, setScanProgress] = useState<{ scanned: number; total: number; items: { type: 'terms' | 'metadata' | 'proof' | 'escrow'; proofIndex: number; complete: boolean }[] }>({ scanned: 0, total: 0, items: [] })
+  const [scanProgress, setScanProgress] = useState<{
+    scanned: number; total: number;
+    proofScanned: number; proofTotal: number;
+    escrowScanned: number; escrowTotal: number;
+    items: { type: 'terms' | 'metadata' | 'proof' | 'escrow'; proofIndex: number; complete: boolean }[]
+  }>({ scanned: 0, total: 0, proofScanned: 0, proofTotal: 0, escrowScanned: 0, escrowTotal: 0, items: [] })
+  const [escrowEnvelopes, setEscrowEnvelopes] = useState<Map<number, any>>(new Map())
   const [contractTerms, setContractTerms] = useState<{ terms: string; timestamp: string } | null>(null)
   const [contractMeta, setContractMeta] = useState<{ contract_hash: string; parties: { role: string; nullifier: string; salt: string }[] } | null>(null)
   const [hashCheckResult, setHashCheckResult] = useState<'match' | 'mismatch' | null>(null)
@@ -202,11 +208,11 @@ function VerifyPage() {
     if (!isNew) return
 
     // Update overall progress
-    const ids = collector.proofIds()
-    const firstHeader = ids.length > 0 ? collector.getHeader(ids[0]) : null
-    const total = firstHeader?.proofCount ?? 0
-    const scanned = ids.filter(id => collector.isProofComplete(id)).length
-    setScanProgress({ scanned, total, items: collector.scannedItems() })
+    const [proofScanned, proofTotal] = collector.proofProgress()
+    const [escrowScanned, escrowTotal] = collector.escrowProgress()
+    const scanned = proofScanned + escrowScanned
+    const total = proofTotal + escrowTotal
+    setScanProgress({ scanned, total, proofScanned, proofTotal, escrowScanned, escrowTotal, items: collector.scannedItems() })
 
     // Check if all complete
     if (collector.isAllComplete()) {
@@ -215,6 +221,7 @@ function VerifyPage() {
         const allProofs: DecodedProof[] = []
         for (const proofId of collector.proofIds()) {
           if (proofId === TERMS_PROOF_ID || proofId === METADATA_PROOF_ID) continue
+          if (isEscrowProofId(proofId)) continue
           const compressed = collector.reassemble(proofId)!
           const decompressed = await decompressDeflate(compressed)
           const cborMod = cborRef.current ?? await import('cbor-x')
@@ -237,6 +244,16 @@ function VerifyPage() {
           }
         }
 
+        // Extract escrow envelopes if present
+        const escrowMap = new Map<number, any>()
+        if (collector.hasEscrow()) {
+          for (const eid of collector.escrowProofIds()) {
+            const ci = escrowCredentialIndex(eid)
+            const envelope = await collector.getEscrowEnvelope(ci)
+            if (envelope) escrowMap.set(ci, envelope)
+          }
+        }
+
         // Extract contract data if present
         const isContract = collector.isContractDocument()
         let termsData: { terms: string; timestamp: string } | null = null
@@ -248,6 +265,7 @@ function VerifyPage() {
 
         setScanMode(false)
         stopScanRef.current()
+        setEscrowEnvelopes(escrowMap)
         setProofs(allProofs)
         setFileName('paper-proof (scanned)')
         setContractTerms(termsData)
@@ -261,7 +279,7 @@ function VerifyPage() {
         setError(e instanceof Error ? e.message : 'Proof data corrupted, try re-scanning.')
       } finally {
         collectorRef.current.clear()
-        setScanProgress({ scanned: 0, total: 0, items: [] })
+        setScanProgress({ scanned: 0, total: 0, proofScanned: 0, proofTotal: 0, escrowScanned: 0, escrowTotal: 0, items: [] })
       }
     }
   }, [])
@@ -389,7 +407,8 @@ function VerifyPage() {
                         <div className="h-full bg-green-500 transition-all" style={{ width: `${(scanProgress.scanned / scanProgress.total) * 100}%` }} />
                       </div>
                       <span className="text-xs text-slate-400">
-                        {t('verify.scanOverall').replace('{n}', String(scanProgress.scanned)).replace('{total}', String(scanProgress.total))}
+                        P {scanProgress.proofScanned}/{scanProgress.proofTotal}
+                        {scanProgress.escrowTotal > 0 && ` · E ${scanProgress.escrowScanned}/${scanProgress.escrowTotal}`}
                       </span>
                     </div>
                     <div className="space-y-1">
@@ -401,6 +420,7 @@ function VerifyPage() {
                           <span className={item.complete ? 'text-slate-300' : 'text-slate-500'}>
                             {item.type === 'terms' ? t('verify.termsQr')
                               : item.type === 'metadata' ? t('verify.metadataQr')
+                              : item.type === 'escrow' ? `E${item.proofIndex + 1} \uD83D\uDD12`
                               : t('verify.proofN').replace('{n}', String(item.proofIndex + 1))}
                           </span>
                         </div>
@@ -410,7 +430,7 @@ function VerifyPage() {
                 )}
 
                 <button
-                  onClick={() => { scanner.stop(); setScanMode(false); setScanProgress({ scanned: 0, total: 0, items: [] }); collectorRef.current.clear() }}
+                  onClick={() => { scanner.stop(); setScanMode(false); setScanProgress({ scanned: 0, total: 0, proofScanned: 0, proofTotal: 0, escrowScanned: 0, escrowTotal: 0, items: [] }); collectorRef.current.clear() }}
                   className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white text-sm font-medium rounded-lg transition-colors"
                 >
                   {t('verify.stopScanning')}
@@ -598,7 +618,7 @@ function VerifyPage() {
             )}
 
             <button
-              onClick={() => { setProofs([]); setVerified(false); setFileName(null); setError(null); setContractTerms(null); setContractMeta(null); setHashCheckResult(null); setComputedHash(null); setPartyCheckOpen(false); setCredentialIdInput(''); setPartyCheckResults(null) }}
+              onClick={() => { setProofs([]); setVerified(false); setFileName(null); setError(null); setContractTerms(null); setContractMeta(null); setHashCheckResult(null); setComputedHash(null); setPartyCheckOpen(false); setCredentialIdInput(''); setPartyCheckResults(null); setEscrowEnvelopes(new Map()) }}
               className="w-full bg-slate-700 hover:bg-slate-600 text-white font-semibold py-3 rounded-lg transition-colors"
             >
               {t('verify.verifyAnother')}
