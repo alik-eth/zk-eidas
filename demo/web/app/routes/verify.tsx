@@ -34,6 +34,9 @@ function VerifyPage() {
     items: { type: 'terms' | 'metadata' | 'proof' | 'escrow'; proofIndex: number; complete: boolean }[]
   }>({ scanned: 0, total: 0, proofScanned: 0, proofTotal: 0, escrowScanned: 0, escrowTotal: 0, items: [] })
   const [escrowEnvelopes, setEscrowEnvelopes] = useState<Map<number, any>>(new Map())
+  const [escrowSeedInput, setEscrowSeedInput] = useState('')
+  const [decryptedEscrow, setDecryptedEscrow] = useState<Record<number, { fields: Record<string, string>; integrityValid: boolean }>>({})
+  const [decryptingEscrow, setDecryptingEscrow] = useState<number | null>(null)
   const [contractTerms, setContractTerms] = useState<{ terms: string; timestamp: string } | null>(null)
   const [contractMeta, setContractMeta] = useState<{ contract_hash: string; parties: { role: string; nullifier: string; salt: string }[] } | null>(null)
   const [hashCheckResult, setHashCheckResult] = useState<'match' | 'mismatch' | null>(null)
@@ -317,6 +320,30 @@ function VerifyPage() {
       setError(`Verification failed: ${e.message}`)
     } finally {
       setVerifying(false)
+    }
+  }
+
+  function formatFieldHash(bytes: number[]): string {
+    const s = String.fromCharCode(...bytes)
+    return s.length > 20 ? s.slice(0, 10) + '...' + s.slice(-10) : s
+  }
+
+  const handleEscrowDecrypt = async (ci: number, env: any) => {
+    setDecryptingEscrow(ci)
+    try {
+      const { decryptEscrow } = await import('../lib/escrow-decrypt')
+      const result = await decryptEscrow(
+        env.encrypted_key,
+        escrowSeedInput.trim(),
+        env.ciphertext,
+        env.field_names,
+        env.credential_hash,
+      )
+      setDecryptedEscrow(prev => ({ ...prev, [ci]: result }))
+    } catch (e: any) {
+      alert(`Decrypt failed: ${e.message}`)
+    } finally {
+      setDecryptingEscrow(null)
     }
   }
 
@@ -617,8 +644,78 @@ function VerifyPage() {
               </div>
             )}
 
+            {/* Escrow Envelopes from scanned QRs */}
+            {escrowEnvelopes.size > 0 && verified && (
+              <div className="bg-amber-900/10 rounded-lg border border-amber-700/30 px-6 py-4 space-y-4">
+                <h3 className="text-sm font-semibold uppercase tracking-wider text-amber-300 flex items-center gap-2">
+                  <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <rect width="18" height="11" x="3" y="11" rx="2" ry="2" />
+                    <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                  </svg>
+                  {t('verify.escrowDetected')}
+                </h3>
+
+                {[...escrowEnvelopes.entries()].map(([ci, env]) => {
+                  const fingerprint = env.authority_pubkey
+                    ? Array.from(env.authority_pubkey.slice(0, 4) as number[]).map((b: number) => b.toString(16).padStart(2, '0')).join('')
+                      + '...'
+                      + Array.from(env.authority_pubkey.slice(-4) as number[]).map((b: number) => b.toString(16).padStart(2, '0')).join('')
+                    : '—'
+
+                  return (
+                    <div key={ci} className="bg-slate-800/60 rounded-lg p-4 space-y-3">
+                      <div className="text-xs text-slate-400 space-y-1">
+                        <div><span className="text-slate-500">{t('verify.escrowAuthority')}:</span> <span className="text-amber-300 font-medium">{env.authority_name || '—'}</span></div>
+                        <div><span className="text-slate-500">{t('verify.escrowFingerprint')}:</span> <span className="font-mono">{fingerprint}</span></div>
+                        <div><span className="text-slate-500">Credential hash:</span> <span className="font-mono">{formatFieldHash(env.credential_hash)}</span></div>
+                        <div><span className="text-slate-500">Key commitment:</span> <span className="font-mono">{formatFieldHash(env.key_commitment)}</span></div>
+                      </div>
+
+                      {!decryptedEscrow[ci] ? (
+                        <div className="space-y-2">
+                          <input
+                            type="text"
+                            placeholder={t('verify.escrowSeedPlaceholder')}
+                            value={escrowSeedInput}
+                            onChange={e => setEscrowSeedInput(e.target.value)}
+                            className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-xs text-white font-mono placeholder-slate-500 focus:outline-none focus:border-amber-500"
+                          />
+                          <button
+                            onClick={() => handleEscrowDecrypt(ci, env)}
+                            disabled={!escrowSeedInput.trim() || decryptingEscrow === ci}
+                            className="w-full py-2 bg-amber-600 hover:bg-amber-700 disabled:bg-slate-600 text-white text-sm font-medium rounded-lg transition-colors"
+                          >
+                            {decryptingEscrow === ci ? '...' : t('verify.escrowDecrypt')}
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="space-y-2">
+                          <div className={`text-xs font-medium px-3 py-1.5 rounded ${
+                            decryptedEscrow[ci].integrityValid
+                              ? 'bg-green-900/30 text-green-300'
+                              : 'bg-red-900/30 text-red-300'
+                          }`}>
+                            {decryptedEscrow[ci].integrityValid ? '\u2713' : '\u2717'}{' '}
+                            {decryptedEscrow[ci].integrityValid ? t('verify.escrowIntegrityValid') : t('verify.escrowIntegrityFail')}
+                          </div>
+                          <div className="grid grid-cols-2 gap-2">
+                            {Object.entries(decryptedEscrow[ci].fields).map(([k, v]) => (
+                              <div key={k} className="text-xs">
+                                <span className="text-slate-500">{k}:</span>{' '}
+                                <span className="text-white font-mono">{v}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+
             <button
-              onClick={() => { setProofs([]); setVerified(false); setFileName(null); setError(null); setContractTerms(null); setContractMeta(null); setHashCheckResult(null); setComputedHash(null); setPartyCheckOpen(false); setCredentialIdInput(''); setPartyCheckResults(null); setEscrowEnvelopes(new Map()) }}
+              onClick={() => { setProofs([]); setVerified(false); setFileName(null); setError(null); setContractTerms(null); setContractMeta(null); setHashCheckResult(null); setComputedHash(null); setPartyCheckOpen(false); setCredentialIdInput(''); setPartyCheckResults(null); setEscrowEnvelopes(new Map()); setDecryptedEscrow({}); setEscrowSeedInput(''); setDecryptingEscrow(null) }}
               className="w-full bg-slate-700 hover:bg-slate-600 text-white font-semibold py-3 rounded-lg transition-colors"
             >
               {t('verify.verifyAnother')}

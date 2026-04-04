@@ -1513,6 +1513,39 @@ const translations: Record<string, Record<Locale, string>> = {
     uk: "Доказ {n}",
   },
 
+  "verify.escrowDetected": {
+    en: "Identity Escrow Envelopes Detected",
+    uk: "Виявлено ескроу-конверти ідентичності",
+  },
+  "verify.escrowAuthority": {
+    en: "Authority",
+    uk: "Авторитет",
+  },
+  "verify.escrowFingerprint": {
+    en: "Fingerprint",
+    uk: "Відбиток",
+  },
+  "verify.escrowDecrypt": {
+    en: "Decrypt (paste authority seed)",
+    uk: "Розшифрувати (вставте сід авторитету)",
+  },
+  "verify.escrowSeedPlaceholder": {
+    en: "Authority seed (hex)",
+    uk: "Сід авторитету (hex)",
+  },
+  "verify.escrowDecrypted": {
+    en: "Decrypted Identity",
+    uk: "Розшифрована особа",
+  },
+  "verify.escrowIntegrityValid": {
+    en: "Integrity verified — hash matches",
+    uk: "Цілісність перевірена — хеш збігається",
+  },
+  "verify.escrowIntegrityFail": {
+    en: "Integrity check failed — hash mismatch",
+    uk: "Перевірку цілісності не пройдено — хеш не збігається",
+  },
+
   // ── Print page ──────────────────────────────────────────────────────────
   "print.title": {
     en: "Zero-Knowledge Attestation",
