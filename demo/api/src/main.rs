@@ -22,8 +22,10 @@ struct AppState {
     ecdsa_cache: Arc<std::sync::Mutex<HashMap<u64, (Vec<u8>, Vec<u8>, Vec<u8>)>>>,
     /// Escrow proof cache: escrow_cache_key → serialized IdentityEscrowData JSON
     escrow_cache: HashMap<String, String>,
-    /// Cached Longfellow circuit (generated once on first use)
+    /// Cached Longfellow circuit (generated once on first use) — used by benchmark endpoint
     longfellow_circuit: tokio::sync::OnceCell<Vec<u8>>,
+    /// Per-attribute-count Longfellow circuit cache (indices 0–3 → 1–4 attributes)
+    longfellow_circuits: [tokio::sync::OnceCell<longfellow_sys::mdoc::MdocCircuit>; 4],
     /// Content-addressed proof blob store: SHA-256 hex CID → raw bytes
     proof_blobs: std::sync::RwLock<HashMap<String, Vec<u8>>>,
 }
@@ -2012,6 +2014,31 @@ fn build_cors_layer() -> CorsLayer {
     }
 }
 
+// === Longfellow Circuit Cache ===
+
+/// Lazily generate and cache a `MdocCircuit` for the given attribute count (1–4).
+async fn get_circuit(
+    state: &AppState,
+    num_attrs: usize,
+) -> Result<&longfellow_sys::mdoc::MdocCircuit, (StatusCode, String)> {
+    if num_attrs == 0 || num_attrs > 4 {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            format!("num_attrs must be 1-4, got {num_attrs}"),
+        ));
+    }
+    state.longfellow_circuits[num_attrs - 1]
+        .get_or_try_init(|| async {
+            tokio::task::spawn_blocking(move || {
+                longfellow_sys::mdoc::MdocCircuit::generate(num_attrs)
+                    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("circuit gen: {e}")))
+            })
+            .await
+            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("join: {e}")))?
+        })
+        .await
+}
+
 // === Longfellow Demo ===
 
 async fn longfellow_demo(
@@ -2128,6 +2155,7 @@ pub fn build_app(circuits_path: &str) -> Router {
         ecdsa_cache: Arc::new(std::sync::Mutex::new(loaded.ecdsa_commitments)),
         escrow_cache: loaded.escrow,
         longfellow_circuit: tokio::sync::OnceCell::new(),
+        longfellow_circuits: std::array::from_fn(|_| tokio::sync::OnceCell::new()),
         proof_blobs: std::sync::RwLock::new(HashMap::new()),
     });
 
