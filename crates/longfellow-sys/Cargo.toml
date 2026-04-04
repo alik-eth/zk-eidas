@@ -1,0 +1,14 @@
+[package]
+name = "longfellow-sys"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "FFI bindings to Google's Longfellow ZK proving system"
+links = "mdoc_static"
+
+[build-dependencies]
+cmake = "0.1"
+bindgen = "0.71"
+
+[dependencies]
+libc = "0.2"

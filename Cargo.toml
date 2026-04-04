@@ -9,6 +9,7 @@ members = [
     "crates/zk-eidas-utils",
     "crates/zk-eidas",
     "crates/zk-eidas-wasm",
+    "crates/longfellow-sys",
     "crates/cbor-print",
     "demo/api",
     "tools/vk-extract",
