@@ -41,7 +41,7 @@ export async function decryptEscrow(
   const encryptedK = new Uint8Array(encryptedKey.slice(mlkemCtSize))
 
   const sharedSecret = await mlkem.decap(mlkemCt, dk)
-  const mask = new Uint8Array(await crypto.subtle.digest('SHA-256', sharedSecret as unknown as ArrayBuffer))
+  const mask = new Uint8Array(await crypto.subtle.digest('SHA-256', sharedSecret.buffer as ArrayBuffer))
   const keyBytes = new Uint8Array(32)
   for (let i = 0; i < 32; i++) keyBytes[i] = encryptedK[i] ^ mask[i]
 
