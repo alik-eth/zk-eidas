@@ -1,0 +1,71 @@
+# Longfellow-specific Dockerfile — post-quantum ZK proving via Sumcheck+Ligero
+# No rapidsnark, no circuit zkeys, no WASM — native C++ Longfellow only
+
+# Stage 1: Build Rust API (+ Longfellow C++ via build.rs)
+FROM ubuntu:24.04 AS rust-builder
+RUN apt-get update && apt-get install -y \
+    curl build-essential pkg-config libssl-dev clang git \
+    cmake libzstd-dev zlib1g-dev \
+    && rm -rf /var/lib/apt/lists/*
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain 1.93.0
+ENV PATH="/root/.cargo/bin:${PATH}"
+WORKDIR /app
+
+# Layer 1: copy workspace structure for dependency caching
+COPY Cargo.toml Cargo.lock ./
+COPY crates/ crates/
+COPY vendor/ vendor/
+COPY demo/api/Cargo.toml demo/api/Cargo.toml
+COPY tools/ tools/
+RUN mkdir -p demo/api/src && echo 'fn main() {}' > demo/api/src/main.rs && \
+    CMAKE_BUILD_PARALLEL_LEVEL=2 cargo build --release -p zk-eidas-demo-api 2>/dev/null || true && \
+    rm -rf demo/api/src
+
+# Layer 2: build actual source
+COPY demo/api/ demo/api/
+RUN touch demo/api/src/main.rs && \
+    rm -rf target/release/.fingerprint/zk-eidas-demo-api-* \
+           target/release/zk-eidas-demo-api \
+           target/release/deps/zk_eidas_demo_api-* && \
+    CMAKE_BUILD_PARALLEL_LEVEL=2 cargo build --release -p zk-eidas-demo-api --bin zk-eidas-demo-api
+
+# Stage 2: Build frontend
+FROM node:22-slim AS web-builder
+RUN apt-get update && apt-get install -y python3 make g++ && rm -rf /var/lib/apt/lists/*
+WORKDIR /app/demo/web
+COPY demo/web/package.json demo/web/pnpm-lock.yaml* demo/web/package-lock.json* ./
+COPY packages/ /app/packages/
+RUN cd /app/packages/verifier-sdk && npm install && npm run build 2>/dev/null || true
+RUN npm install 2>/dev/null || (corepack enable && pnpm install)
+COPY demo/web/ ./
+# Create stub WASM package (Longfellow is native only, no browser proving)
+RUN mkdir -p ./pkg && echo 'export default {}; export const prove = () => { throw new Error("Longfellow: native proving only"); };' > ./pkg/zk-eidas-wasm.js && echo '{ "name": "zk-eidas-wasm", "version": "0.1.0", "main": "zk-eidas-wasm.js" }' > ./pkg/package.json
+RUN npm run build 2>/dev/null || npx vinxi build 2>/dev/null || echo "Build attempted"
+
+# Stage 3: Runtime
+FROM ubuntu:24.04
+RUN apt-get update && apt-get install -y \
+    nginx supervisor curl libstdc++6 ca-certificates gnupg \
+    libssl3 libzstd1 zlib1g \
+    && mkdir -p /etc/apt/keyrings \
+    && curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key | gpg --dearmor -o /etc/apt/keyrings/nodesource.gpg \
+    && echo "deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.com/node_22.x nodistro main" > /etc/apt/sources.list.d/nodesource.list \
+    && apt-get update && apt-get install -y nodejs \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Copy Rust binary (includes Longfellow C++ statically linked)
+COPY --from=rust-builder /app/target/release/zk-eidas-demo-api /app/api-server
+
+# Copy frontend build
+COPY --from=web-builder /app/demo/web/ /app/web/
+
+# Deploy configs
+COPY deploy/loading.html /app/loading.html
+COPY deploy/nginx-longfellow.conf /etc/nginx/sites-available/default
+COPY deploy/supervisord-longfellow.conf /etc/supervisor/conf.d/demo.conf
+
+EXPOSE 8080
+
+CMD ["supervisord", "-n"]
