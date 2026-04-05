@@ -389,73 +389,6 @@ struct ProofResult {
     op: String,
 }
 
-fn parse_predicate(pred: &PredicateRequest) -> Result<zk_eidas::Predicate, (StatusCode, String)> {
-    match pred.op.as_str() {
-        "gte" => {
-            let v = pred
-                .value
-                .as_i64()
-                .ok_or_else(|| (StatusCode::BAD_REQUEST, "gte value must be integer".into()))?;
-            Ok(zk_eidas::Predicate::gte(v))
-        }
-        "lte" => {
-            let v = pred
-                .value
-                .as_i64()
-                .ok_or_else(|| (StatusCode::BAD_REQUEST, "lte value must be integer".into()))?;
-            Ok(zk_eidas::Predicate::lte(v))
-        }
-        "eq" => {
-            let v = pred
-                .value
-                .as_str()
-                .ok_or_else(|| (StatusCode::BAD_REQUEST, "eq value must be string".into()))?;
-            Ok(zk_eidas::Predicate::eq(v))
-        }
-        "neq" => {
-            let v = pred
-                .value
-                .as_str()
-                .ok_or_else(|| (StatusCode::BAD_REQUEST, "neq value must be string".into()))?;
-            Ok(zk_eidas::Predicate::neq(v))
-        }
-        "set_member" => {
-            let arr = pred.value.as_array().ok_or_else(|| {
-                (
-                    StatusCode::BAD_REQUEST,
-                    "set_member value must be array".into(),
-                )
-            })?;
-            let values: Vec<&str> = arr.iter().filter_map(|v| v.as_str()).collect();
-            Ok(zk_eidas::Predicate::set_member(values))
-        }
-        "range" => {
-            let arr = pred.value.as_array().ok_or_else(|| {
-                (
-                    StatusCode::BAD_REQUEST,
-                    "range value must be [low, high] array".into(),
-                )
-            })?;
-            if arr.len() != 2 {
-                return Err((
-                    StatusCode::BAD_REQUEST,
-                    "range value must have exactly 2 elements".into(),
-                ));
-            }
-            let low = arr[0]
-                .as_i64()
-                .ok_or_else(|| (StatusCode::BAD_REQUEST, "range low must be integer".into()))?;
-            let high = arr[1]
-                .as_i64()
-                .ok_or_else(|| (StatusCode::BAD_REQUEST, "range high must be integer".into()))?;
-            Ok(zk_eidas::Predicate::range(low, high))
-        }
-        other => Err((
-            StatusCode::BAD_REQUEST,
-            format!("unsupported op: {}", other),
-        )),
-    }
-}
 
 async fn generate_proof(
     State(state): State<Arc<AppState>>,
@@ -1142,7 +1075,7 @@ async fn export_proof(
         descriptions.push(input.predicate.clone());
     }
 
-    let envelope = zk_eidas::ProofEnvelope::from_proofs(&zk_proofs, &descriptions);
+    let envelope = zk_eidas_types::envelope::ProofEnvelope::from_proofs(&zk_proofs, &descriptions);
 
     let cbor_bytes = envelope.to_bytes().map_err(|e| {
         (
@@ -1205,7 +1138,7 @@ async fn export_compound_proof(
         .map(|p| format!("{:?}", p.predicate_op()))
         .collect();
 
-    let mut envelope = zk_eidas::ProofEnvelope::from_proofs(compound.proofs(), &descriptions);
+    let mut envelope = zk_eidas_types::envelope::ProofEnvelope::from_proofs(compound.proofs(), &descriptions);
     envelope.set_logical_op(Some(compound.op()));
 
     let cbor_bytes = envelope.to_bytes().map_err(|e| {
@@ -1460,19 +1393,38 @@ async fn revocation_status(
 
 // === Presentation Request (OpenID4VP) ===
 
+// Minimal OpenID4VP types (inlined from zk-eidas facade, no prover dependency).
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct OidPresentationDefinition {
+    id: String,
+    input_descriptors: Vec<OidInputDescriptor>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct OidInputDescriptor {
+    id: String,
+    constraints: Vec<OidFieldConstraint>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct OidFieldConstraint {
+    path: String,
+    predicate_op: String,
+    value: String,
+}
+
 async fn presentation_request(
     Json(body): Json<serde_json::Value>,
 ) -> impl axum::response::IntoResponse {
-    use zk_eidas::openid4vp::{FieldConstraint, InputDescriptor, PresentationDefinition};
-
     let requirements = body["requirements"].as_array();
-    let descriptors: Vec<InputDescriptor> = match requirements {
+    let descriptors: Vec<OidInputDescriptor> = match requirements {
         Some(reqs) => reqs
             .iter()
             .enumerate()
-            .map(|(i, req)| InputDescriptor {
+            .map(|(i, req)| OidInputDescriptor {
                 id: format!("requirement-{}", i),
-                constraints: vec![FieldConstraint {
+                constraints: vec![OidFieldConstraint {
                     path: format!("$.{}", req["claim"].as_str().unwrap_or("")),
                     predicate_op: req["op"].as_str().unwrap_or("gte").to_string(),
                     value: req["value"].as_str().unwrap_or("").to_string(),
@@ -1490,7 +1442,7 @@ async fn presentation_request(
             .as_millis()
     );
 
-    let pd = PresentationDefinition {
+    let pd = OidPresentationDefinition {
         id,
         input_descriptors: descriptors,
     };
@@ -1539,9 +1491,10 @@ fn extract_claims(credential: &str, format: &str) -> Result<serde_json::Value, (
             .collect();
         Ok(serde_json::to_value(claims).unwrap_or_default())
     } else {
-        let builder = zk_eidas::ZkCredential::from_sdjwt(credential, "")
+        let cred = zk_eidas_parser::SdJwtParser::new()
+            .parse(credential)
             .map_err(|e| (StatusCode::BAD_REQUEST, format!("parse: {e}")))?;
-        let claims: std::collections::BTreeMap<_, _> = builder.credential().claims().iter()
+        let claims: std::collections::BTreeMap<_, _> = cred.claims().iter()
             .map(|(k, v)| (k.clone(), claim_value_to_string(v)))
             .collect();
         Ok(serde_json::to_value(claims).unwrap_or_default())
@@ -1777,6 +1730,73 @@ async fn serve_circuit_artifact(
 
 // === Prepare Inputs (for browser-side proving) ===
 
+/// Compute the epoch-days cutoff for an age threshold (inlined from zk-eidas facade).
+/// Returns the epoch-days value for (reference_date - min_age years).
+fn age_cutoff_epoch_days_from(min_age: u32, year: u32, month: u32, day: u32) -> u64 {
+    let cutoff_year = year.saturating_sub(min_age);
+    let days = zk_eidas_utils::date_to_epoch_days(cutoff_year, month, day);
+    days.max(0) as u64
+}
+
+/// Build the ECDSA circuit input JSON for a credential claim (inlined from zk-eidas facade).
+///
+/// Returns `(ecdsa_inputs_json_value, claim_u64)` or None if the credential
+/// lacks ECDSA signature data or the required claim disclosure.
+fn build_ecdsa_input_json_for_claim(
+    credential: &zk_eidas_types::credential::Credential,
+    claim_name: &str,
+) -> Option<(serde_json::Value, u64)> {
+    use sha2::{Digest, Sha256};
+    use zk_eidas_types::credential::SignatureData;
+    use zk_eidas_types::{bytes_to_u64, to_43bit_limbs};
+
+    match credential.signature_data() {
+        SignatureData::Ecdsa {
+            pub_key_x,
+            pub_key_y,
+            signature,
+            message_hash,
+            sd_claims_hashes,
+        } => {
+            let _disclosure = credential.disclosures().get(claim_name)?;
+            let claim_value = credential.claims().get(claim_name)?;
+            let claim_u64 = claim_value.to_circuit_u64();
+
+            let disclosure_bytes = credential.disclosures().get(claim_name)?;
+            let disclosure_hash_bytes: [u8; 32] = Sha256::digest(disclosure_bytes).into();
+            let disclosure_hash = bytes_to_u64(&disclosure_hash_bytes);
+
+            let mut signature_r = [0u8; 32];
+            let mut signature_s = [0u8; 32];
+            signature_r.copy_from_slice(&signature[..32]);
+            signature_s.copy_from_slice(&signature[32..]);
+
+            let mut sd_array = [0u64; 16];
+            for (i, hash) in sd_claims_hashes.iter().take(16).enumerate() {
+                sd_array[i] = bytes_to_u64(hash);
+            }
+
+            let to_strings = |bytes: &[u8; 32]| -> Vec<String> {
+                to_43bit_limbs(bytes).iter().map(|l| l.to_string()).collect()
+            };
+
+            let ecdsa_inputs = serde_json::json!({
+                "signature_r": to_strings(&signature_r),
+                "signature_s": to_strings(&signature_s),
+                "message_hash": to_strings(message_hash),
+                "pub_key_x": to_strings(pub_key_x),
+                "pub_key_y": to_strings(pub_key_y),
+                "claim_value": claim_u64.to_string(),
+                "disclosure_hash": disclosure_hash.to_string(),
+                "sd_array": sd_array.iter().map(|v| v.to_string()).collect::<Vec<_>>(),
+            });
+
+            Some((ecdsa_inputs, claim_u64))
+        }
+        _ => None,
+    }
+}
+
 #[derive(Deserialize)]
 struct PrepareInputsRequest {
     credential: String,
@@ -1803,32 +1823,29 @@ async fn prepare_inputs(
     State(state): State<Arc<AppState>>,
     Json(req): Json<PrepareInputsRequest>,
 ) -> Result<Json<PrepareInputsResponse>, (StatusCode, String)> {
-    let builder = if req.format == "mdoc" {
+    let credential = if req.format == "mdoc" {
         let (mdoc_bytes, pub_key_x, pub_key_y) = parse_mdoc_token(&req.credential)
             .map_err(|e| (StatusCode::BAD_REQUEST, format!("mdoc token: {e}")))?;
-        let credential =
-            zk_eidas_mdoc::MdocParser::parse_with_issuer_key(&mdoc_bytes, pub_key_x, pub_key_y)
-                .map_err(|e| (StatusCode::BAD_REQUEST, format!("mdoc parse: {e}")))?;
-        zk_eidas::ZkCredential::from_credential(credential, &state.circuits_path)
+        zk_eidas_mdoc::MdocParser::parse_with_issuer_key(&mdoc_bytes, pub_key_x, pub_key_y)
+            .map_err(|e| (StatusCode::BAD_REQUEST, format!("mdoc parse: {e}")))?
     } else {
-        zk_eidas::ZkCredential::from_sdjwt(&req.credential, &state.circuits_path)
+        zk_eidas_parser::SdJwtParser::new()
+            .parse(&req.credential)
             .map_err(|e| (StatusCode::BAD_REQUEST, format!("parse error: {e}")))?
     };
+    let _ = &state.circuits_path; // circuits_path not needed for input preparation
 
     // Use the first predicate's claim for ECDSA input (all predicates share the same ECDSA proof)
     let first_claim = req.predicates.first()
         .map(|p| p.claim.as_str())
         .ok_or_else(|| (StatusCode::BAD_REQUEST, "no predicates".to_string()))?;
 
-    let (ecdsa_json, claim_u64) = builder.ecdsa_input_json(first_claim)
+    let (ecdsa_inputs, claim_u64) = build_ecdsa_input_json_for_claim(&credential, first_claim)
         .ok_or_else(|| (StatusCode::BAD_REQUEST, "credential lacks ECDSA data or claim disclosure".to_string()))?;
-
-    let ecdsa_inputs: serde_json::Value = serde_json::from_str(&ecdsa_json)
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("input JSON error: {e}")))?;
 
     let mut predicates = Vec::new();
     for pred in &req.predicates {
-        let claim_val = builder.credential().claims().get(&pred.claim);
+        let claim_val = credential.claims().get(&pred.claim);
         let is_date = claim_val.map(|v| matches!(v, zk_eidas_types::credential::ClaimValue::Date { .. })).unwrap_or(false);
 
         // Date claims with small values (< 200) are age thresholds → invert gte↔lte
@@ -1840,16 +1857,14 @@ async fn prepare_inputs(
             "gte" if is_age_threshold => {
                 // gte(age) on date → lte(birthdate, cutoff_epoch_days)
                 let age = pred.value.as_u64().unwrap_or(0) as u32;
-                let cutoff = zk_eidas::age_cutoff_epoch_days_from(age, year, month, day)
-                    as u64;
+                let cutoff = age_cutoff_epoch_days_from(age, year, month, day);
                 ("lte", serde_json::Value::from(cutoff))
             }
             "gte" => ("gte", pred.value.clone()),
             "lte" if is_age_threshold => {
                 // lte(age) on date → gte(birthdate, cutoff_epoch_days)
                 let age = pred.value.as_u64().unwrap_or(0) as u32;
-                let cutoff = zk_eidas::age_cutoff_epoch_days_from(age, year, month, day)
-                    as u64;
+                let cutoff = age_cutoff_epoch_days_from(age, year, month, day);
                 ("gte", serde_json::Value::from(cutoff))
             }
             "lte" => ("lte", pred.value.clone()),
@@ -1879,6 +1894,40 @@ fn today_ymd() -> (u32, u32, u32) {
     zk_eidas_utils::epoch_days_to_ymd(days)
 }
 
+/// Decrypt the symmetric key K from ML-KEM-768 ciphertext (inlined from zk-eidas facade).
+///
+/// `encrypted` is (ciphertext || encrypted_k) as produced by the escrow encrypt path.
+/// `secret_key` is the ML-KEM-768 seed (64 bytes).
+/// Returns K as a decimal string.
+fn escrow_decrypt_key(encrypted: &[u8], secret_key: &[u8]) -> Result<String, String> {
+    use ml_kem::kem::TryDecapsulate;
+    use num_bigint::BigUint;
+    use sha2::{Digest, Sha256};
+
+    let seed: [u8; 64] = secret_key.try_into()
+        .map_err(|_| format!("ML-KEM-768 seed must be 64 bytes, got {}", secret_key.len()))?;
+    let dk = ml_kem::ml_kem_768::DecapsulationKey::from_seed(seed.into());
+
+    let ct_size = encrypted.len().checked_sub(32)
+        .ok_or_else(|| "encrypted data too short".to_string())?;
+    let ct_bytes = &encrypted[..ct_size];
+    let encrypted_k = &encrypted[ct_size..];
+
+    let ct_array: ml_kem::ml_kem_768::Ciphertext = ct_bytes.try_into()
+        .map_err(|_| format!("invalid ML-KEM ciphertext size: {}", ct_bytes.len()))?;
+    let ss = dk.try_decapsulate(&ct_array)
+        .map_err(|_| "ML-KEM decapsulation failed".to_string())?;
+
+    let ss_bytes: &[u8] = ss.as_ref();
+    let mask: [u8; 32] = Sha256::digest(ss_bytes).into();
+    let mut k_padded = [0u8; 32];
+    for i in 0..32 {
+        k_padded[i] = encrypted_k[i] ^ mask[i];
+    }
+
+    Ok(BigUint::from_bytes_be(&k_padded).to_string())
+}
+
 async fn escrow_decrypt(
     Json(req): Json<EscrowDecryptRequest>,
 ) -> Result<Json<EscrowDecryptResponse>, (StatusCode, String)> {
@@ -1887,7 +1936,7 @@ async fn escrow_decrypt(
     let secret_key = hex::decode(&req.secret_key)
         .map_err(|e| (StatusCode::BAD_REQUEST, format!("invalid secret_key hex: {e}")))?;
 
-    let k = zk_eidas::escrow::decrypt_key(&encrypted_key, &secret_key)
+    let k = escrow_decrypt_key(&encrypted_key, &secret_key)
         .map_err(|e| (StatusCode::BAD_REQUEST, format!("decrypt failed: {e}")))?;
 
     // Return ciphertext with field names — full Poseidon-CTR decryption
