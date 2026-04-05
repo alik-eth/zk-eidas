@@ -94,7 +94,9 @@ fn extract_claims_and_disclosures(
             .ok_or_else(|| MdocError::InvalidStructure("namespace value is not an array".into()))?;
 
         for item in items {
-            let item_map = item
+            // Items may be Tag(24, bstr(cbor)) per ISO 18013-5 or plain maps.
+            let unwrapped_item = unwrap_tag24(item);
+            let item_map = unwrapped_item
                 .as_map()
                 .ok_or_else(|| MdocError::InvalidStructure("item is not a map".into()))?;
 
@@ -108,9 +110,9 @@ fn extract_claims_and_disclosures(
             let claim_value = cbor_to_claim_value(identifier, value)?;
             claims.insert(identifier.to_string(), claim_value);
 
-            // Re-encode item to get its CBOR bytes for disclosure
+            // Re-encode the unwrapped item to get its CBOR bytes for disclosure
             let mut item_cbor = Vec::new();
-            ciborium::into_writer(item, &mut item_cbor)
+            ciborium::into_writer(&*unwrapped_item, &mut item_cbor)
                 .map_err(|e| MdocError::CborDecode(e.to_string()))?;
             disclosures.insert(identifier.to_string(), item_cbor);
         }
@@ -181,15 +183,24 @@ impl MdocParser {
         let parsed = navigate_mdoc(&root)?;
         let (claims, disclosures) = extract_claims_and_disclosures(parsed.ns_map)?;
 
-        // Extract and parse COSE_Sign1 from issuerAuth
+        // Extract and parse COSE_Sign1 from issuerAuth.
+        // issuerAuth can be either:
+        //   - CBOR bytes (legacy: coset-serialized tagged COSE_Sign1)
+        //   - CBOR Array (ISO 18013-5: inline [protected, unprotected, payload, signature])
         let auth_val = find_in_map(parsed.issuer_signed_map, "issuerAuth")
             .ok_or_else(|| MdocError::InvalidStructure("missing issuerAuth".into()))?;
 
-        let auth_bytes = auth_val
-            .as_bytes()
-            .ok_or_else(|| MdocError::InvalidStructure("issuerAuth is not bytes".into()))?;
-
-        let cose_extracted = cose::extract_cose_sign1(auth_bytes)?;
+        let cose_extracted = if let Some(auth_bytes) = auth_val.as_bytes() {
+            // Legacy format: opaque COSE_Sign1 bytes
+            cose::extract_cose_sign1(auth_bytes)?
+        } else if let Some(auth_arr) = auth_val.as_array() {
+            // ISO 18013-5 format: inline COSE_Sign1 array
+            cose::extract_cose_sign1_from_array(auth_arr)?
+        } else {
+            return Err(MdocError::InvalidStructure(
+                "issuerAuth is neither bytes nor array".into(),
+            ));
+        };
 
         // Parse MSO from COSE payload
         let mso = mso::parse_mso(&cose_extracted.payload)?;
@@ -213,6 +224,19 @@ impl MdocParser {
 
         Ok(Credential::new(claims, issuer, signature_data, disclosures))
     }
+}
+
+/// Unwrap a CBOR Tag(24, bstr(inner_cbor)) to the decoded inner value.
+/// If the value is not Tag(24, bytes), returns it as-is.
+fn unwrap_tag24(val: &ciborium::Value) -> std::borrow::Cow<'_, ciborium::Value> {
+    if let ciborium::Value::Tag(24, inner) = val {
+        if let Some(bytes) = inner.as_bytes() {
+            if let Ok(decoded) = ciborium::from_reader::<ciborium::Value, _>(bytes.as_slice()) {
+                return std::borrow::Cow::Owned(decoded);
+            }
+        }
+    }
+    std::borrow::Cow::Borrowed(val)
 }
 
 /// Find a value by text key in a CBOR map.
@@ -481,5 +505,93 @@ mod tests {
         assert_eq!(cred.disclosures().len(), 2);
         assert!(cred.disclosures().contains_key("age"));
         assert!(cred.disclosures().contains_key("given_name"));
+    }
+
+    /// Verify the byte-level CBOR structure matches Longfellow's C++ parser expectations.
+    #[test]
+    fn longfellow_compatible_structure() {
+        use ciborium::Value;
+
+        let (mdoc_bytes, _pkx, _pky) = crate::test_utils::build_ecdsa_signed_mdoc(
+            vec![
+                ("given_name", ClaimValue::String("Alice".into())),
+                ("age_over_18", ClaimValue::Boolean(true)),
+            ],
+            "test-issuer",
+        );
+
+        let root: Value = ciborium::from_reader(mdoc_bytes.as_slice()).unwrap();
+
+        // Navigate: root -> documents[0]
+        let docs = root.as_map().unwrap().iter()
+            .find(|(k, _)| k.as_text() == Some("documents")).unwrap().1
+            .as_array().unwrap();
+        let doc = docs[0].as_map().unwrap();
+
+        // docType must be present
+        let doc_type = doc.iter().find(|(k, _)| k.as_text() == Some("docType"))
+            .unwrap().1.as_text().unwrap();
+        assert_eq!(doc_type, "org.iso.18013.5.1.mDL");
+
+        // issuerSigned -> issuerAuth must be a 4-element array
+        let issuer_signed = doc.iter().find(|(k, _)| k.as_text() == Some("issuerSigned"))
+            .unwrap().1.as_map().unwrap();
+        let issuer_auth = issuer_signed.iter().find(|(k, _)| k.as_text() == Some("issuerAuth"))
+            .unwrap().1.as_array().unwrap();
+        assert_eq!(issuer_auth.len(), 4, "issuerAuth must be a 4-element COSE_Sign1 array");
+
+        // issuerAuth[0] = protected header bytes
+        assert!(issuer_auth[0].as_bytes().is_some());
+        // issuerAuth[1] = unprotected header (empty map)
+        assert!(issuer_auth[1].as_map().is_some());
+        // issuerAuth[2] = payload bytes (Tag-24 wrapped MSO)
+        let payload = issuer_auth[2].as_bytes().unwrap();
+        assert_eq!(payload[0], 0xD8, "MSO must start with Tag major type");
+        assert_eq!(payload[1], 0x18, "Tag number must be 24");
+        assert_eq!(payload[2], 0x59, "MSO bstr must use 2-byte length (59)");
+        // issuerAuth[3] = signature (64 bytes for ES256)
+        assert_eq!(issuer_auth[3].as_bytes().unwrap().len(), 64);
+
+        // nameSpaces items must be Tag(24, bstr)
+        let ns = issuer_signed.iter().find(|(k, _)| k.as_text() == Some("nameSpaces"))
+            .unwrap().1.as_map().unwrap();
+        let items = ns.iter().find(|(k, _)| k.as_text() == Some("org.iso.18013.5.1"))
+            .unwrap().1.as_array().unwrap();
+        assert_eq!(items.len(), 2);
+        for item in items {
+            assert!(matches!(item, Value::Tag(24, _)), "each item must be Tag(24, ...)");
+        }
+
+        // deviceSigned -> deviceAuth -> deviceSignature must be a 4-element array
+        let device_signed = doc.iter().find(|(k, _)| k.as_text() == Some("deviceSigned"))
+            .unwrap().1.as_map().unwrap();
+        let device_auth = device_signed.iter().find(|(k, _)| k.as_text() == Some("deviceAuth"))
+            .unwrap().1.as_map().unwrap();
+        let device_sig = device_auth.iter().find(|(k, _)| k.as_text() == Some("deviceSignature"))
+            .unwrap().1.as_array().unwrap();
+        assert_eq!(device_sig.len(), 4, "deviceSignature must be a 4-element COSE_Sign1 array");
+        assert_eq!(device_sig[3].as_bytes().unwrap().len(), 64);
+
+        // Verify MSO inner structure
+        let mso_len = ((payload[3] as usize) << 8) | (payload[4] as usize);
+        let mso_bytes = &payload[5..5 + mso_len];
+        let mso: Value = ciborium::from_reader(mso_bytes).unwrap();
+        let mso_map = mso.as_map().unwrap();
+
+        // Check MSO has all required fields
+        let field_names: Vec<&str> = mso_map.iter()
+            .filter_map(|(k, _)| k.as_text()).collect();
+        assert!(field_names.contains(&"version"));
+        assert!(field_names.contains(&"digestAlgorithm"));
+        assert!(field_names.contains(&"validityInfo"));
+        assert!(field_names.contains(&"deviceKeyInfo"));
+        assert!(field_names.contains(&"valueDigests"));
+
+        // Check valueDigests has 2 entries
+        let vd = mso_map.iter().find(|(k, _)| k.as_text() == Some("valueDigests"))
+            .unwrap().1.as_map().unwrap();
+        let org_digests = vd.iter().find(|(k, _)| k.as_text() == Some("org.iso.18013.5.1"))
+            .unwrap().1.as_map().unwrap();
+        assert_eq!(org_digests.len(), 2);
     }
 }

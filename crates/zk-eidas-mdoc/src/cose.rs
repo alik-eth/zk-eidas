@@ -2,6 +2,12 @@ use crate::MdocError;
 use coset::{CborSerializable, CoseSign1};
 use sha2::{Digest, Sha256};
 
+fn cbor_encode(val: &ciborium::Value) -> Vec<u8> {
+    let mut buf = Vec::new();
+    ciborium::into_writer(val, &mut buf).expect("CBOR encoding failed");
+    buf
+}
+
 /// Extracted fields from a COSE_Sign1 structure.
 #[derive(Debug)]
 pub(crate) struct CoseSign1Extracted {
@@ -41,6 +47,87 @@ pub(crate) fn extract_cose_sign1(cose_bytes: &[u8]) -> Result<CoseSign1Extracted
         message_hash,
         payload,
     })
+}
+
+/// Extract fields from a COSE_Sign1 represented as an inline CBOR array
+/// `[protected_bytes, unprotected_map, payload_bytes, signature_bytes]`.
+///
+/// This is the ISO 18013-5 format where issuerAuth is a CBOR array, not
+/// opaque tagged bytes.
+pub(crate) fn extract_cose_sign1_from_array(
+    arr: &[ciborium::Value],
+) -> Result<CoseSign1Extracted, MdocError> {
+    if arr.len() != 4 {
+        return Err(MdocError::InvalidStructure(format!(
+            "COSE_Sign1 array must have 4 elements, got {}",
+            arr.len()
+        )));
+    }
+
+    let protected_bytes = arr[0]
+        .as_bytes()
+        .ok_or_else(|| MdocError::InvalidStructure("COSE_Sign1[0] (protected) is not bytes".into()))?;
+
+    // arr[2] is the payload — it can be raw Tag-24 wrapped MSO bytes
+    let payload_bytes = arr[2]
+        .as_bytes()
+        .ok_or_else(|| MdocError::InvalidStructure("COSE_Sign1[2] (payload) is not bytes".into()))?;
+
+    // The payload is Tag-24 wrapped MSO: D8 18 59 <len2> <mso_cbor>
+    // We need to unwrap it to get the raw MSO bytes.
+    let mso_payload = unwrap_tag24_bytes(payload_bytes)?;
+
+    let signature = arr[3]
+        .as_bytes()
+        .ok_or_else(|| MdocError::InvalidStructure("COSE_Sign1[3] (signature) is not bytes".into()))?
+        .clone();
+
+    if signature.len() != 64 {
+        return Err(MdocError::InvalidStructure(format!(
+            "COSE signature must be 64 bytes (ES256), got {}",
+            signature.len()
+        )));
+    }
+
+    // Reconstruct the Sig_structure for hash computation:
+    // ["Signature1", protected_bytes, external_aad, payload]
+    let sig_structure = ciborium::Value::Array(vec![
+        ciborium::Value::Text("Signature1".into()),
+        ciborium::Value::Bytes(protected_bytes.clone()),
+        ciborium::Value::Bytes(vec![]),
+        ciborium::Value::Bytes(payload_bytes.clone()),
+    ]);
+    let tbs = cbor_encode(&sig_structure);
+    let message_hash: [u8; 32] = Sha256::digest(&tbs).into();
+
+    Ok(CoseSign1Extracted {
+        signature,
+        message_hash,
+        payload: mso_payload,
+    })
+}
+
+/// Unwrap Tag-24 encoded bytes: skip the D8 18 (58 XX | 59 XX XX) prefix
+/// to extract the inner CBOR bytes.
+fn unwrap_tag24_bytes(data: &[u8]) -> Result<Vec<u8>, MdocError> {
+    // The payload bytes may already be the raw tag-24 encoding:
+    // D8 18 58 XX <data>  (1-byte length, total prefix = 4 bytes)
+    // D8 18 59 XX XX <data>  (2-byte length, total prefix = 5 bytes)
+    if data.len() >= 4 && data[0] == 0xD8 && data[1] == 0x18 {
+        if data[2] == 0x58 {
+            let len = data[3] as usize;
+            if data.len() >= 4 + len {
+                return Ok(data[4..4 + len].to_vec());
+            }
+        } else if data[2] == 0x59 && data.len() >= 5 {
+            let len = ((data[3] as usize) << 8) | (data[4] as usize);
+            if data.len() >= 5 + len {
+                return Ok(data[5..5 + len].to_vec());
+            }
+        }
+    }
+    // Not tag-24 wrapped, return as-is (could be raw MSO bytes)
+    Ok(data.to_vec())
 }
 
 #[cfg(test)]
