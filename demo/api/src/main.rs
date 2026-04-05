@@ -883,20 +883,24 @@ async fn verify_compound_proof(
             )
         })?;
 
-    let valid = proof_data.get("proof_bytes").is_some()
-        && proof_data.get("nullifier_hash").is_some()
-        && proof_data.get("binding_hash").is_some();
+    // Longfellow compound proofs come in two shapes:
+    // 1. Direct: { proof_bytes, nullifier_hash, binding_hash } (from prove-compound)
+    // 2. Contract: { sub_proofs: [...], nullifier_hash, op, role } (from contract-prove)
+    let has_direct_proof = proof_data.get("proof_bytes").is_some();
+    let sub_proofs = proof_data.get("sub_proofs").and_then(|sp| sp.as_array());
+    let has_sub_proofs = sub_proofs.map(|arr| !arr.is_empty()).unwrap_or(false);
 
-    // Count sub_proofs from the compound proof JSON
-    let sub_count = proof_data
-        .get("sub_proofs")
-        .and_then(|sp| sp.as_array())
-        .map(|arr| arr.len())
-        .unwrap_or(1);
+    let valid = has_direct_proof || has_sub_proofs;
+    let sub_count = if has_direct_proof {
+        // Direct proof proves all predicates in one circuit
+        req.hidden_fields.len().max(1)
+    } else {
+        sub_proofs.map(|arr| arr.len()).unwrap_or(1)
+    };
 
     Ok(Json(CompoundVerifyResponse {
         valid,
-        op: "and".to_string(), // Longfellow proves all predicates together
+        op: "and".to_string(),
         sub_proofs_verified: if valid { sub_count } else { 0 },
         not_disclosed: req.hidden_fields,
     }))
