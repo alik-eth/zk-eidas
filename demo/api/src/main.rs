@@ -158,6 +158,25 @@ fn claim_to_cbor(value: &zk_eidas_types::credential::ClaimValue) -> Vec<u8> {
     }
 }
 
+/// Pad threshold CBOR to match the credential value's CBOR length.
+/// The Longfellow circuit asserts vlen (from threshold) == actual value length.
+/// For neq/gte/lte with different-length CBOR, we must pad the threshold with zeros.
+fn pad_threshold_cbor(
+    threshold_cbor: &[u8],
+    claim_name: &str,
+    claims: &std::collections::BTreeMap<String, zk_eidas_types::credential::ClaimValue>,
+) -> Vec<u8> {
+    if let Some(cv) = claims.get(claim_name) {
+        let actual_cbor = claim_to_cbor(cv);
+        if threshold_cbor.len() < actual_cbor.len() {
+            let mut padded = threshold_cbor.to_vec();
+            padded.resize(actual_cbor.len(), 0);
+            return padded;
+        }
+    }
+    threshold_cbor.to_vec()
+}
+
 /// Parse a threshold value string into a `ClaimValue` for CBOR encoding.
 fn parse_threshold_value(_claim: &str, value_str: &str) -> zk_eidas_types::credential::ClaimValue {
     use zk_eidas_types::credential::ClaimValue;
@@ -430,10 +449,21 @@ async fn generate_proof(
                     .map(|s| s.to_string())
                     .unwrap_or_else(|| p.value.to_string());
                 let cv = parse_threshold_value(&p.claim, &value_str);
-                claim_to_cbor(&cv)
+                pad_threshold_cbor(&claim_to_cbor(&cv), &p.claim, &claims)
             }
         };
         attrs.push(predicate_to_attribute(&p.claim, &p.op, &cbor_value)?);
+    }
+
+    // Debug: dump attribute CBOR bytes
+    eprintln!("[prove] {} attrs:", attrs.len());
+    for attr in &attrs {
+        eprintln!("  attr: id={} vtype={:?} cbor_hex={}",
+            attr.identifier, attr.verify_type, hex::encode(&attr.cbor_value));
+    }
+    for (name, cv) in &claims {
+        let cbor = claim_to_cbor(cv);
+        eprintln!("  cred: {} = {:?} → cbor={}", name, cv, hex::encode(&cbor));
     }
 
     // Get or generate the cached circuit for this attribute count
@@ -690,7 +720,7 @@ async fn generate_compound_proof(
                     .map(|s| s.to_string())
                     .unwrap_or_else(|| p.value.to_string());
                 let cv = parse_threshold_value(&p.claim, &value_str);
-                claim_to_cbor(&cv)
+                pad_threshold_cbor(&claim_to_cbor(&cv), &p.claim, &claims)
             }
         };
         attrs.push(predicate_to_attribute(&p.claim, &p.op, &cbor_value)?);
@@ -720,6 +750,18 @@ async fn generate_compound_proof(
     eprintln!("[prove-compound] format={} predicates:", req.format);
     for pred in &req.predicates {
         eprintln!("  claim={} op={} value={}", pred.claim, pred.op, pred.value);
+    }
+    // Debug: dump attribute CBOR bytes
+    for attr in &attrs {
+        eprintln!("[prove-compound] attr: ns={} id={} vtype={:?} cbor_hex={}",
+            attr.namespace, attr.identifier, attr.verify_type,
+            hex::encode(&attr.cbor_value));
+    }
+    // Debug: also dump the actual claim values from the credential
+    eprintln!("[prove-compound] credential claims:");
+    for (name, cv) in &claims {
+        let cbor = claim_to_cbor(cv);
+        eprintln!("  {} = {:?} → cbor_hex={}", name, cv, hex::encode(&cbor));
     }
 
     // Get or generate the cached circuit for this attribute count
@@ -944,6 +986,17 @@ async fn prove_binding(
                 }
             };
             attrs.push(predicate_to_attribute(&p.claim, &p.op, &cbor_value)?);
+        }
+
+        // Debug: dump binding attrs
+        eprintln!("[prove-binding] {} attrs for '{}':", attrs.len(), binding_claim);
+        for attr in &attrs {
+            eprintln!("  attr: id={} vtype={:?} cbor_hex={}",
+                attr.identifier, attr.verify_type, hex::encode(&attr.cbor_value));
+        }
+        for (name, cv) in &claims {
+            let cbor = claim_to_cbor(cv);
+            eprintln!("  cred: {} = {:?} → cbor={}", name, cv, hex::encode(&cbor));
         }
 
         // Get circuit
@@ -1301,7 +1354,7 @@ async fn contract_prove(
                     .map(|s| s.to_string())
                     .unwrap_or_else(|| p.value.to_string());
                 let cv = parse_threshold_value(&p.claim, &value_str);
-                claim_to_cbor(&cv)
+                pad_threshold_cbor(&claim_to_cbor(&cv), &p.claim, &claims)
             }
         };
         attrs.push(predicate_to_attribute(&p.claim, &p.op, &cbor_value)?);
@@ -1309,6 +1362,17 @@ async fn contract_prove(
 
     if attrs.is_empty() {
         return Err((StatusCode::BAD_REQUEST, "at least one predicate is required".into()));
+    }
+
+    // Debug: dump attrs and credential claims
+    eprintln!("[contract-prove] role={} {} attrs:", role_str, attrs.len());
+    for attr in &attrs {
+        eprintln!("  attr: id={} vtype={:?} cbor_hex={}",
+            attr.identifier, attr.verify_type, hex::encode(&attr.cbor_value));
+    }
+    for (name, cv) in &claims {
+        let cbor = claim_to_cbor(cv);
+        eprintln!("  cred: {} = {:?} → cbor={}", name, cv, hex::encode(&cbor));
     }
 
     // Get or generate the cached circuit

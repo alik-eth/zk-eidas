@@ -642,22 +642,27 @@ function ProveStep({ state, setState, t }: { state: ContractWizardState; setStat
         if (!exportRes.ok) throw new Error(await exportRes.text())
         const exportData = await exportRes.json()
 
-        // Generate QR codes for this credential's proof
-        const compressed = Uint8Array.from(atob(exportData.compressed_cbor_base64), c => c.charCodeAt(0))
+        // Generate QR codes for this credential's proof (skip if too large for QR)
+        const compressed = Uint8Array.from(atob(exportData.compressed_cbor_base64 || exportData.cbor_base64), c => c.charCodeAt(0))
         totalCompressedSize += compressed.length
-        const proofId = ci + 1
-        const logicalOp = proofCount > 1 ? LogicalOpFlag.And : LogicalOpFlag.Single
-        const chunks = encodeProofChunks(compressed, proofId, ci, proofCount, logicalOp)
-        const qrStartIndex = allQrDataUrls.length
-        for (const chunk of chunks) {
-          const url = await QRCode.toDataURL([{ data: chunk, mode: 'byte' as const }], {
-            errorCorrectionLevel: 'L',
-            margin: 1,
-            width: 280,
-          })
-          allQrDataUrls.push(url)
+        let qrUrlsForThisCredential: string[] = []
+        try {
+          const proofId = ci + 1
+          const logicalOp = proofCount > 1 ? LogicalOpFlag.And : LogicalOpFlag.Single
+          const chunks = encodeProofChunks(compressed, proofId, ci, proofCount, logicalOp)
+          const qrStartIndex = allQrDataUrls.length
+          for (const chunk of chunks) {
+            const url = await QRCode.toDataURL([{ data: chunk, mode: 'byte' as const }], {
+              errorCorrectionLevel: 'L',
+              margin: 1,
+              width: 280,
+            })
+            allQrDataUrls.push(url)
+          }
+          qrUrlsForThisCredential = allQrDataUrls.slice(qrStartIndex)
+        } catch (e) {
+          console.warn('QR generation skipped (proof too large for QR):', e)
         }
-        const qrUrlsForThisCredential = allQrDataUrls.slice(qrStartIndex)
 
         // Build predicate descriptions
         const predicateDescriptions = templatePredicates.map(p => t(p.labelKey))
@@ -770,10 +775,16 @@ function ProveStep({ state, setState, t }: { state: ContractWizardState; setStat
         })
         if (!expRes.ok) continue
         const expData = await expRes.json()
-        const comp = Uint8Array.from(atob(expData.compressed_cbor_base64), c => c.charCodeAt(0))
-        const { decompressDeflate } = await import('../lib/qr-chunking')
-        const cbor = await decompressDeflate(comp)
-        proofEnvelopes.push(decode(cbor))
+        if (expData.compressed_cbor_base64) {
+          const comp = Uint8Array.from(atob(expData.compressed_cbor_base64), c => c.charCodeAt(0))
+          const { decompressDeflate } = await import('../lib/qr-chunking')
+          const cbor = await decompressDeflate(comp)
+          proofEnvelopes.push(decode(cbor))
+        } else {
+          // Longfellow: cbor_base64 contains JSON-encoded proof bytes
+          const raw = Uint8Array.from(atob(expData.cbor_base64), c => c.charCodeAt(0))
+          proofEnvelopes.push(JSON.parse(new TextDecoder().decode(raw)))
+        }
       }
       const bundle = encode({
         version: 2,
@@ -1004,20 +1015,25 @@ function ProveStep({ state, setState, t }: { state: ContractWizardState; setStat
         if (!exportRes.ok) throw new Error(await exportRes.text())
         const exportData = await exportRes.json()
 
-        // Generate QR codes
-        const compressed = Uint8Array.from(atob(exportData.compressed_cbor_base64), c => c.charCodeAt(0))
+        // Generate QR codes (skip if proof too large)
+        const compressed = Uint8Array.from(atob(exportData.compressed_cbor_base64 || exportData.cbor_base64), c => c.charCodeAt(0))
         totalCompressedSize += compressed.length
-        const proofId = ci + 1
-        const logicalOp = proofCount > 1 ? LogicalOpFlag.And : LogicalOpFlag.Single
-        const chunks = encodeProofChunks(compressed, proofId, ci, proofCount, logicalOp)
-        const qrStartIndex = allQrDataUrls.length
-        for (const chunk of chunks) {
-          const url = await QRCode.toDataURL([{ data: chunk, mode: 'byte' as const }], {
-            errorCorrectionLevel: 'L', margin: 1, width: 280,
-          })
-          allQrDataUrls.push(url)
+        let qrUrlsForThisCredential: string[] = []
+        try {
+          const proofId = ci + 1
+          const logicalOp = proofCount > 1 ? LogicalOpFlag.And : LogicalOpFlag.Single
+          const chunks = encodeProofChunks(compressed, proofId, ci, proofCount, logicalOp)
+          const qrStartIndex = allQrDataUrls.length
+          for (const chunk of chunks) {
+            const url = await QRCode.toDataURL([{ data: chunk, mode: 'byte' as const }], {
+              errorCorrectionLevel: 'L', margin: 1, width: 280,
+            })
+            allQrDataUrls.push(url)
+          }
+          qrUrlsForThisCredential = allQrDataUrls.slice(qrStartIndex)
+        } catch (e) {
+          console.warn('QR generation skipped (proof too large for QR):', e)
         }
-        const qrUrlsForThisCredential = allQrDataUrls.slice(qrStartIndex)
 
         const predicateDescriptions = templatePredicates.map(p => t(p.labelKey))
 
@@ -1071,10 +1087,16 @@ function ProveStep({ state, setState, t }: { state: ContractWizardState; setStat
         })
         if (!expRes.ok) continue
         const expData = await expRes.json()
-        const comp = Uint8Array.from(atob(expData.compressed_cbor_base64), c => c.charCodeAt(0))
-        const { decompressDeflate } = await import('../lib/qr-chunking')
-        const cbor = await decompressDeflate(comp)
-        proofEnvelopes.push(decode(cbor))
+        if (expData.compressed_cbor_base64) {
+          const comp = Uint8Array.from(atob(expData.compressed_cbor_base64), c => c.charCodeAt(0))
+          const { decompressDeflate } = await import('../lib/qr-chunking')
+          const cbor = await decompressDeflate(comp)
+          proofEnvelopes.push(decode(cbor))
+        } else {
+          // Longfellow: cbor_base64 contains JSON-encoded proof bytes
+          const raw = Uint8Array.from(atob(expData.cbor_base64), c => c.charCodeAt(0))
+          proofEnvelopes.push(JSON.parse(new TextDecoder().decode(raw)))
+        }
       }
       const bundle = encode({
         version: 2,
