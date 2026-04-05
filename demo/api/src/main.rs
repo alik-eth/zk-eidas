@@ -887,10 +887,17 @@ async fn verify_compound_proof(
         && proof_data.get("nullifier_hash").is_some()
         && proof_data.get("binding_hash").is_some();
 
+    // Count sub_proofs from the compound proof JSON
+    let sub_count = proof_data
+        .get("sub_proofs")
+        .and_then(|sp| sp.as_array())
+        .map(|arr| arr.len())
+        .unwrap_or(1);
+
     Ok(Json(CompoundVerifyResponse {
         valid,
         op: "and".to_string(), // Longfellow proves all predicates together
-        sub_proofs_verified: 1, // single unified proof
+        sub_proofs_verified: if valid { sub_count } else { 0 },
         not_disclosed: req.hidden_fields,
     }))
 }
@@ -2251,6 +2258,7 @@ pub fn build_app(circuits_path: &str) -> Router {
         .route("/longfellow/demo", get(longfellow_demo))
         .route("/proofs", post(store_proof_blob))
         .route("/proofs/{cid}", get(get_proof_blob))
+        .layer(axum::extract::DefaultBodyLimit::max(10 * 1024 * 1024)) // 10MB
         .layer(build_cors_layer())
         .with_state(state)
 }

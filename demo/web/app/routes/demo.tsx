@@ -662,6 +662,20 @@ function ProveStep({ state, setState, t }: { state: ContractWizardState; setStat
           qrUrlsForThisCredential = allQrDataUrls.slice(qrStartIndex)
         } catch (e) {
           console.warn('QR generation skipped (proof too large for QR):', e)
+          try {
+            const blobRes = await fetch(`${API_URL}/proofs`, { method: 'POST', body: compressed })
+            if (blobRes.ok) {
+              const { cid } = await blobRes.json()
+              const verifyUrl = `${window.location.origin}/verify?cid=${cid}`
+              const qrUrl = await QRCode.toDataURL(verifyUrl, {
+                errorCorrectionLevel: 'L', margin: 1, width: 280,
+              })
+              qrUrlsForThisCredential = [qrUrl]
+              allQrDataUrls.push(qrUrl)
+            }
+          } catch (blobErr) {
+            console.warn('Blob store failed:', blobErr)
+          }
         }
 
         // Build predicate descriptions
@@ -776,7 +790,7 @@ function ProveStep({ state, setState, t }: { state: ContractWizardState; setStat
         if (!expRes.ok) continue
         const expData = await expRes.json()
         if (expData.compressed_cbor_base64) {
-          const comp = Uint8Array.from(atob(expData.compressed_cbor_base64), c => c.charCodeAt(0))
+          const comp = Uint8Array.from(atob(expData.compressed_cbor_base64 || expData.cbor_base64), c => c.charCodeAt(0))
           const { decompressDeflate } = await import('../lib/qr-chunking')
           const cbor = await decompressDeflate(comp)
           proofEnvelopes.push(decode(cbor))
@@ -795,7 +809,7 @@ function ProveStep({ state, setState, t }: { state: ContractWizardState; setStat
           parties: partyProofs.map(p => ({ role: p.role, nullifier: p.nullifier, salt: p.salt })),
         },
       })
-      const bundleCborUrl = `data:application/cbor;base64,${btoa(String.fromCharCode(...new Uint8Array(bundle)))}`
+      const bundleCborUrl = `data:application/cbor;base64,${(() => { const u8 = new Uint8Array(bundle); let s = ''; for (let i = 0; i < u8.length; i += 8192) s += String.fromCharCode(...u8.subarray(i, i + 8192)); return btoa(s); })()}`
 
       // Prove holder bindings if any
       const bindingResults: BindingResult[] = []
@@ -1033,6 +1047,20 @@ function ProveStep({ state, setState, t }: { state: ContractWizardState; setStat
           qrUrlsForThisCredential = allQrDataUrls.slice(qrStartIndex)
         } catch (e) {
           console.warn('QR generation skipped (proof too large for QR):', e)
+          try {
+            const blobRes = await fetch(`${API_URL}/proofs`, { method: 'POST', body: compressed })
+            if (blobRes.ok) {
+              const { cid } = await blobRes.json()
+              const verifyUrl = `${window.location.origin}/verify?cid=${cid}`
+              const qrUrl = await QRCode.toDataURL(verifyUrl, {
+                errorCorrectionLevel: 'L', margin: 1, width: 280,
+              })
+              qrUrlsForThisCredential = [qrUrl]
+              allQrDataUrls.push(qrUrl)
+            }
+          } catch (blobErr) {
+            console.warn('Blob store failed:', blobErr)
+          }
         }
 
         const predicateDescriptions = templatePredicates.map(p => t(p.labelKey))
@@ -1088,7 +1116,7 @@ function ProveStep({ state, setState, t }: { state: ContractWizardState; setStat
         if (!expRes.ok) continue
         const expData = await expRes.json()
         if (expData.compressed_cbor_base64) {
-          const comp = Uint8Array.from(atob(expData.compressed_cbor_base64), c => c.charCodeAt(0))
+          const comp = Uint8Array.from(atob(expData.compressed_cbor_base64 || expData.cbor_base64), c => c.charCodeAt(0))
           const { decompressDeflate } = await import('../lib/qr-chunking')
           const cbor = await decompressDeflate(comp)
           proofEnvelopes.push(decode(cbor))
@@ -1107,7 +1135,7 @@ function ProveStep({ state, setState, t }: { state: ContractWizardState; setStat
           parties: partyProofs.map(p => ({ role: p.role, nullifier: p.nullifier, salt: p.salt })),
         },
       })
-      const bundleCborUrl = `data:application/cbor;base64,${btoa(String.fromCharCode(...new Uint8Array(bundle)))}`
+      const bundleCborUrl = `data:application/cbor;base64,${(() => { const u8 = new Uint8Array(bundle); let s = ''; for (let i = 0; i < u8.length; i += 8192) s += String.fromCharCode(...u8.subarray(i, i + 8192)); return btoa(s); })()}`
 
       // Holder bindings (still server-side — only sends claim hashes, not credentials)
       const bindingResults: BindingResult[] = []
