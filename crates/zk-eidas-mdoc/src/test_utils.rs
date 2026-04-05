@@ -33,15 +33,69 @@ fn es256_protected_header_bytes() -> Vec<u8> {
     )]))
 }
 
-/// Build the COSE Sig_structure for signing:
-/// ["Signature1", protected_bytes, external_aad, payload]
-fn sig_structure(protected_bytes: &[u8], payload: &[u8]) -> Vec<u8> {
-    cbor_encode(&Value::Array(vec![
-        Value::Text("Signature1".into()),
-        Value::Bytes(protected_bytes.to_vec()),
-        Value::Bytes(vec![]), // external_aad = empty
-        Value::Bytes(payload.to_vec()),
-    ]))
+/// Build the COSE Sig_structure for the **issuer** signature:
+/// `["Signature1", protected_bytes, "", payload]`
+///
+/// Uses hand-crafted CBOR to match Longfellow's `kCose1Prefix` constant,
+/// which hardcodes a 2-byte bstr length (0x59) for the payload slot.
+fn issuer_sig_structure(protected_bytes: &[u8], payload: &[u8]) -> Vec<u8> {
+    // Match kCose1Prefix from mdoc_constants.h:
+    //   84              array(4)
+    //   6A "Signature1" text(10)
+    //   43 A1 01 26     bstr(3) = protected header {1: -7}
+    //   40              bstr(0) = external_aad
+    //   59 XX XX ...    bstr with 2-byte length = payload
+    let mut buf = Vec::new();
+    buf.push(0x84); // array(4)
+    buf.push(0x6A); // text(10)
+    buf.extend_from_slice(b"Signature1");
+    // protected header as bstr
+    append_cbor_bstr(&mut buf, protected_bytes);
+    // external_aad = empty bstr
+    buf.push(0x40);
+    // payload — always use 2-byte length (0x59) to match C++ kCose1Prefix
+    let plen = payload.len();
+    buf.push(0x59);
+    buf.push((plen >> 8) as u8);
+    buf.push((plen & 0xFF) as u8);
+    buf.extend_from_slice(payload);
+    buf
+}
+
+/// Build the COSE Sig_structure for the **device** signature:
+/// `["Signature1", protected_bytes, "", DeviceAuthenticationBytes]`
+///
+/// Uses hand-crafted CBOR matching `compute_transcript_hash` in
+/// `mdoc_witness.h`, which uses `append_bytes_len` (correct minimal CBOR)
+/// for the payload slot.
+fn device_sig_structure(protected_bytes: &[u8], payload: &[u8]) -> Vec<u8> {
+    let mut buf = Vec::new();
+    buf.push(0x84); // array(4)
+    buf.push(0x6A); // text(10)
+    buf.extend_from_slice(b"Signature1");
+    // protected header as bstr
+    append_cbor_bstr(&mut buf, protected_bytes);
+    // external_aad = empty bstr
+    buf.push(0x40);
+    // payload — use correct minimal CBOR encoding (matching C++ append_bytes_len)
+    append_cbor_bstr(&mut buf, payload);
+    buf
+}
+
+/// Encode a bstr with the correct minimal-length CBOR header.
+fn append_cbor_bstr(buf: &mut Vec<u8>, data: &[u8]) {
+    let len = data.len();
+    if len < 24 {
+        buf.push(0x40 + len as u8);
+    } else if len < 256 {
+        buf.push(0x58);
+        buf.push(len as u8);
+    } else {
+        buf.push(0x59);
+        buf.push((len >> 8) as u8);
+        buf.push((len & 0xFF) as u8);
+    }
+    buf.extend_from_slice(data);
 }
 
 /// Build a synthetic mdoc with real ECDSA (ES256/P-256) signatures, compatible
@@ -67,10 +121,23 @@ fn sig_structure(protected_bytes: &[u8], payload: &[u8]) -> Vec<u8> {
 /// }
 /// ```
 ///
+/// The device signature is computed over the DeviceAuthentication structure
+/// as defined in ISO 18013-5 §9.1.3.6, matching the `compute_transcript_hash`
+/// logic in Longfellow's `mdoc_witness.h`.
+///
 /// Returns `(mdoc_cbor_bytes, issuer_pub_key_x, issuer_pub_key_y)`.
 pub fn build_ecdsa_signed_mdoc(
     claims: Vec<(&str, ClaimValue)>,
     _issuer: &str,
+) -> (Vec<u8>, [u8; 32], [u8; 32]) {
+    build_ecdsa_signed_mdoc_with_transcript(claims, _issuer, b"zk-eidas-demo")
+}
+
+/// Same as [`build_ecdsa_signed_mdoc`] but with an explicit session transcript.
+pub fn build_ecdsa_signed_mdoc_with_transcript(
+    claims: Vec<(&str, ClaimValue)>,
+    _issuer: &str,
+    transcript: &[u8],
 ) -> (Vec<u8>, [u8; 32], [u8; 32]) {
     use p256::ecdsa::{signature::Signer, Signature, SigningKey};
     use rand::rngs::OsRng;
@@ -113,15 +180,20 @@ pub fn build_ecdsa_signed_mdoc(
         // CBOR-encode the IssuerSignedItem
         let item_bytes = cbor_encode(&item);
 
-        // SHA-256 digest of the CBOR-encoded item
-        let digest: [u8; 32] = Sha256::digest(&item_bytes).into();
+        // Wrap in Tag 24 (encoded CBOR data item) as required by ISO 18013-5
+        let tagged = tag24_wrap(&item_bytes);
+        let tagged_bytes = cbor_encode(&tagged);
+
+        // SHA-256 digest of the Tag(24)-wrapped bytes.
+        // The C++ circuit hashes the full tagged item (D8 18 58 XX <content>),
+        // NOT just the inner content.
+        let digest: [u8; 32] = Sha256::digest(&tagged_bytes).into();
         value_digests_entries.push((
             Value::Integer((i as i64).into()),
             Value::Bytes(digest.to_vec()),
         ));
 
-        // Wrap in Tag 24 (encoded CBOR data item) as required by ISO 18013-5
-        tagged_items.push(tag24_wrap(&item_bytes));
+        tagged_items.push(tagged);
     }
 
     // ── Step 4: Build MSO (Mobile Security Object) ─────────────────────
@@ -184,7 +256,7 @@ pub fn build_ecdsa_signed_mdoc(
 
     // ── Step 6: Build issuerAuth COSE_Sign1 (sign with issuer key) ─────
     let protected_bytes = es256_protected_header_bytes();
-    let tbs = sig_structure(&protected_bytes, &tagged_mso_bytes);
+    let tbs = issuer_sig_structure(&protected_bytes, &tagged_mso_bytes);
     let issuer_sig: Signature = issuer_sk.sign(&tbs);
     let issuer_sig = issuer_sig.normalize_s().unwrap_or(issuer_sig);
 
@@ -197,8 +269,58 @@ pub fn build_ecdsa_signed_mdoc(
     ]);
 
     // ── Step 7: Build deviceSignature COSE_Sign1 (sign with device key) ──
-    // Device signs an empty payload per ISO 18013-5 §9.1.3.6
-    let device_tbs = sig_structure(&protected_bytes, &[]);
+    // The device signs the DeviceAuthentication structure as defined in
+    // ISO 18013-5 §9.1.3.6.  The CBOR encoding here must match exactly
+    // what Longfellow's `compute_transcript_hash` produces in
+    // `mdoc_witness.h:405-435`.
+    //
+    // DeviceAuthentication = [
+    //   "DeviceAuthentication",       // text(20)
+    //   SessionTranscript,            // raw transcript bytes
+    //   DocType,                      // "org.iso.18013.5.1.mDL"
+    //   DeviceNameSpacesBytes         // Tag(24, bstr(empty_map))
+    // ]
+    let device_authentication_bytes = {
+        let mut da = Vec::new();
+        // array(4)
+        da.push(0x84);
+        // text(20) "DeviceAuthentication"
+        da.push(0x74);
+        da.extend_from_slice(b"DeviceAuthentication");
+        // SessionTranscript = raw transcript bytes (inserted as-is)
+        da.extend_from_slice(transcript);
+        // DocType = text(21) "org.iso.18013.5.1.mDL"
+        da.push(0x75);
+        da.extend_from_slice(b"org.iso.18013.5.1.mDL");
+        // DeviceNameSpacesBytes = Tag(24, bstr(1 byte = 0xA0 empty map))
+        da.push(0xd8); // tag(24)
+        da.push(0x18);
+        da.push(0x41); // bstr(1)
+        da.push(0xa0); // empty map
+        da
+    };
+
+    // Wrap DeviceAuthentication in Tag(24, bstr(...)) to get DeviceAuthenticationBytes
+    let device_authentication_tagged = {
+        let len = device_authentication_bytes.len();
+        let mut out = Vec::new();
+        out.push(0xd8); // tag(24)
+        out.push(0x18);
+        // Encode bstr length — use 2-byte form (0x59) for consistency with C++
+        if len <= 0xFF {
+            out.push(0x58); // bstr with 1-byte length
+            out.push(len as u8);
+        } else {
+            out.push(0x59); // bstr with 2-byte length
+            out.push((len >> 8) as u8);
+            out.push((len & 0xFF) as u8);
+        }
+        out.extend_from_slice(&device_authentication_bytes);
+        out
+    };
+
+    // COSE Sig_structure for device signature
+    let device_tbs = device_sig_structure(&protected_bytes, &device_authentication_tagged);
     let device_sig: Signature = device_sk.sign(&device_tbs);
     let device_sig = device_sig.normalize_s().unwrap_or(device_sig);
 
