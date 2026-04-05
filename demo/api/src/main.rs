@@ -101,21 +101,21 @@ fn predicate_to_attribute(
     claim: &str,
     op: &str,
     cbor_value: &[u8],
-) -> longfellow_sys::mdoc::AttributeRequest {
+) -> Result<longfellow_sys::mdoc::AttributeRequest, (StatusCode, String)> {
     use longfellow_sys::safe::VerifyType;
     let verify_type = match op {
         "gte" => VerifyType::Geq,
         "lte" => VerifyType::Leq,
-        "eq" | "disclosure" => VerifyType::Eq,
+        "eq" | "disclosure" | "set_member" => VerifyType::Eq,
         "neq" => VerifyType::Neq,
-        _ => VerifyType::Eq,
+        other => return Err((StatusCode::BAD_REQUEST, format!("unsupported predicate op: {other}"))),
     };
-    longfellow_sys::mdoc::AttributeRequest {
+    Ok(longfellow_sys::mdoc::AttributeRequest {
         namespace: "org.iso.18013.5.1".into(),
         identifier: claim.into(),
         cbor_value: cbor_value.to_vec(),
         verify_type,
-    }
+    })
 }
 
 fn parse_mdoc_for_longfellow(token: &str) -> Result<(Vec<u8>, String, String), (StatusCode, String)> {
@@ -417,7 +417,7 @@ async fn generate_proof(
     let mut attrs: Vec<longfellow_sys::mdoc::AttributeRequest> = Vec::new();
     for p in &req.predicates {
         let cbor_value = match p.op.as_str() {
-            "eq" | "disclosure" => {
+            "eq" | "disclosure" | "set_member" => {
                 // Use the actual claim value from the credential
                 let cv = claims.get(&p.claim).ok_or_else(|| {
                     (StatusCode::BAD_REQUEST, format!("claim '{}' not found in credential", p.claim))
@@ -433,7 +433,7 @@ async fn generate_proof(
                 claim_to_cbor(&cv)
             }
         };
-        attrs.push(predicate_to_attribute(&p.claim, &p.op, &cbor_value));
+        attrs.push(predicate_to_attribute(&p.claim, &p.op, &cbor_value)?);
     }
 
     // Get or generate the cached circuit for this attribute count
@@ -679,7 +679,7 @@ async fn generate_compound_proof(
             proven_claims.push(p.claim.clone());
         }
         let cbor_value = match p.op.as_str() {
-            "eq" | "disclosure" => {
+            "eq" | "disclosure" | "set_member" => {
                 let cv = claims.get(&p.claim).ok_or_else(|| {
                     (StatusCode::BAD_REQUEST, format!("claim '{}' not found in credential", p.claim))
                 })?;
@@ -693,7 +693,7 @@ async fn generate_compound_proof(
                 claim_to_cbor(&cv)
             }
         };
-        attrs.push(predicate_to_attribute(&p.claim, &p.op, &cbor_value));
+        attrs.push(predicate_to_attribute(&p.claim, &p.op, &cbor_value)?);
     }
 
     // Check proof cache (after building attrs so we know the request is valid)
@@ -924,12 +924,12 @@ async fn prove_binding(
             (StatusCode::BAD_REQUEST, format!("binding claim '{}' not found", binding_claim))
         })?;
         let binding_cbor = claim_to_cbor(binding_cv);
-        attrs.push(predicate_to_attribute(binding_claim, "eq", &binding_cbor));
+        attrs.push(predicate_to_attribute(binding_claim, "eq", &binding_cbor)?);
 
         // 2. Predicate attributes
         for p in predicates {
             let cbor_value = match p.op.as_str() {
-                "eq" | "disclosure" => {
+                "eq" | "disclosure" | "set_member" => {
                     let cv = claims.get(&p.claim).ok_or_else(|| {
                         (StatusCode::BAD_REQUEST, format!("claim '{}' not found", p.claim))
                     })?;
@@ -943,7 +943,7 @@ async fn prove_binding(
                     claim_to_cbor(&cv)
                 }
             };
-            attrs.push(predicate_to_attribute(&p.claim, &p.op, &cbor_value));
+            attrs.push(predicate_to_attribute(&p.claim, &p.op, &cbor_value)?);
         }
 
         // Get circuit
@@ -1066,6 +1066,36 @@ async fn export_proof(
     Query(params): Query<HashMap<String, String>>,
     Json(req): Json<ExportRequest>,
 ) -> Result<Json<ExportResponse>, (StatusCode, String)> {
+    // Try Longfellow format first (proof_bytes field), fall back to old ZkProof
+    let first_proof: serde_json::Value = serde_json::from_str(
+        &req.proofs.first().ok_or((StatusCode::BAD_REQUEST, "no proofs".into()))?.proof_json,
+    )
+    .map_err(|e| (StatusCode::BAD_REQUEST, format!("invalid proof JSON: {e}")))?;
+
+    if first_proof.get("proof_bytes").is_some() {
+        // Longfellow format: serialize proof envelope as JSON bytes for now
+        let envelope = serde_json::json!({
+            "version": "longfellow-1",
+            "proofs": req.proofs.iter().map(|input| {
+                serde_json::json!({
+                    "predicate": input.predicate,
+                    "proof_json": input.proof_json,
+                })
+            }).collect::<Vec<_>>(),
+        });
+        let buf = serde_json::to_vec(&envelope).map_err(|e| {
+            (StatusCode::INTERNAL_SERVER_ERROR, format!("JSON encode: {e}"))
+        })?;
+        use base64::Engine;
+        return Ok(Json(ExportResponse {
+            cbor_base64: base64::engine::general_purpose::STANDARD.encode(&buf),
+            cbor_size_bytes: buf.len(),
+            compressed_cbor_base64: None,
+            compressed_size_bytes: None,
+        }));
+    }
+
+    // Legacy Groth16 format
     let mut zk_proofs = Vec::new();
     let mut descriptions = Vec::new();
     for input in &req.proofs {
@@ -1074,27 +1104,23 @@ async fn export_proof(
         zk_proofs.push(proof);
         descriptions.push(input.predicate.clone());
     }
-
-    let envelope = zk_eidas_types::envelope::ProofEnvelope::from_proofs(&zk_proofs, &descriptions);
-
+    let envelope =
+        zk_eidas_types::envelope::ProofEnvelope::from_proofs(&zk_proofs, &descriptions);
     let cbor_bytes = envelope.to_bytes().map_err(|e| {
         (
             StatusCode::INTERNAL_SERVER_ERROR,
             format!("CBOR encoding failed: {e}"),
         )
     })?;
-    let cbor_size_bytes = cbor_bytes.len();
 
+    let cbor_size_bytes = cbor_bytes.len();
     use base64::Engine;
     let cbor_base64 = base64::engine::general_purpose::STANDARD.encode(&cbor_bytes);
 
     let (compressed_cbor_base64, compressed_size_bytes) =
         if params.get("compress").is_some_and(|v| v == "true") {
             let compressed = envelope.to_compressed_bytes().map_err(|e| {
-                (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    e,
-                )
+                (StatusCode::INTERNAL_SERVER_ERROR, e)
             })?;
             let size = compressed.len();
             (
@@ -1124,6 +1150,27 @@ async fn export_compound_proof(
     Query(params): Query<HashMap<String, String>>,
     Json(req): Json<CompoundExportRequest>,
 ) -> Result<Json<ExportResponse>, (StatusCode, String)> {
+    let parsed: serde_json::Value =
+        serde_json::from_str(&req.compound_proof_json).map_err(|e| {
+            (
+                StatusCode::BAD_REQUEST,
+                format!("invalid compound proof JSON: {e}"),
+            )
+        })?;
+
+    // Longfellow format: compound proof has nullifier_hash field
+    if parsed.get("nullifier_hash").is_some() {
+        let buf = req.compound_proof_json.as_bytes().to_vec();
+        use base64::Engine;
+        return Ok(Json(ExportResponse {
+            cbor_base64: base64::engine::general_purpose::STANDARD.encode(&buf),
+            cbor_size_bytes: buf.len(),
+            compressed_cbor_base64: None,
+            compressed_size_bytes: None,
+        }));
+    }
+
+    // Legacy Groth16 compound format
     let compound: zk_eidas_types::proof::CompoundProof =
         serde_json::from_str(&req.compound_proof_json).map_err(|e| {
             (
@@ -1243,7 +1290,7 @@ async fn contract_prove(
     let mut attrs: Vec<longfellow_sys::mdoc::AttributeRequest> = Vec::new();
     for p in &req.predicates {
         let cbor_value = match p.op.as_str() {
-            "eq" | "disclosure" => {
+            "eq" | "disclosure" | "set_member" => {
                 let cv = claims.get(&p.claim).ok_or_else(|| {
                     (StatusCode::BAD_REQUEST, format!("claim '{}' not found in credential", p.claim))
                 })?;
@@ -1257,7 +1304,7 @@ async fn contract_prove(
                 claim_to_cbor(&cv)
             }
         };
-        attrs.push(predicate_to_attribute(&p.claim, &p.op, &cbor_value));
+        attrs.push(predicate_to_attribute(&p.claim, &p.op, &cbor_value)?);
     }
 
     if attrs.is_empty() {
@@ -1340,6 +1387,10 @@ async fn contract_prove(
         "nullifier_hash": hex::encode(proof.nullifier_hash),
         "contract_hash": hex::encode(&contract_hash_bytes),
         "role": role_str,
+        "contract_nullifiers": [{
+            "nullifier": proof.nullifier_hash.to_vec(),
+            "contract_hash": hex::encode(&contract_hash_bytes),
+        }],
     })
     .to_string();
 
@@ -2548,7 +2599,7 @@ mod tests {
             .unwrap();
         assert_eq!(res.status(), 200);
         let body: serde_json::Value = res.json().await.unwrap();
-        assert_eq!(body["op"], "And");
+        assert_eq!(body["op"], "and");
         assert!(body["sub_proofs_count"].as_u64().unwrap() >= 2);
         let compound_json = body["compound_proof_json"].as_str().unwrap();
         assert!(!compound_json.is_empty());
@@ -2566,7 +2617,7 @@ mod tests {
         assert_eq!(res.status(), 200);
         let verify_body: serde_json::Value = res.json().await.unwrap();
         assert!(verify_body["valid"].as_bool().unwrap());
-        assert_eq!(verify_body["op"], "And");
+        assert_eq!(verify_body["op"], "and");
 
         // Export compound as CBOR
         let res = client
@@ -2608,7 +2659,7 @@ mod tests {
             .json()
             .await
             .unwrap();
-        let pid_sdjwt = pid_res["credential"].as_str().unwrap();
+        let pid_cred = pid_res["credential"].as_str().unwrap();
 
         // Issue a vehicle registration with owner_document_number matching the PID
         let vehicle_res: serde_json::Value = client
@@ -2631,15 +2682,15 @@ mod tests {
             .json()
             .await
             .unwrap();
-        let vehicle_sdjwt = vehicle_res["credential"].as_str().unwrap();
+        let vehicle_cred = vehicle_res["credential"].as_str().unwrap();
 
         // Prove binding with different claim names
         let res = client
             .post(format!("{}/holder/prove-binding", f.base_url))
             .json(&serde_json::json!({
-                "sdjwt_a": pid_sdjwt,
-                "sdjwt_b": vehicle_sdjwt,
-                "binding_claim": "document_number",
+                "credential_a": pid_cred,
+                "credential_b": vehicle_cred,
+                "binding_claim_a": "document_number",
                 "binding_claim_b": "owner_document_number",
                 "predicates_a": [],
                 "predicates_b": []
@@ -2673,14 +2724,14 @@ mod tests {
             .json()
             .await
             .unwrap();
-        let vehicle2_sdjwt = vehicle2_res["credential"].as_str().unwrap();
+        let vehicle2_cred = vehicle2_res["credential"].as_str().unwrap();
 
         let res = client
             .post(format!("{}/holder/prove-binding", f.base_url))
             .json(&serde_json::json!({
-                "sdjwt_a": pid_sdjwt,
-                "sdjwt_b": vehicle2_sdjwt,
-                "binding_claim": "document_number",
+                "credential_a": pid_cred,
+                "credential_b": vehicle2_cred,
+                "binding_claim_a": "document_number",
                 "binding_claim_b": "owner_document_number",
                 "predicates_a": [],
                 "predicates_b": [],
@@ -3036,7 +3087,7 @@ mod tests {
             .json(&serde_json::json!({
                 "credential": cred,
                 "format": "mdoc",
-                "predicates": [{ "claim": "birth_date", "op": "gte", "value": 18 }],
+                "predicates": [{ "claim": "birth_date", "op": "lte", "value": "2008-04-05" }],
                 "contract_terms": "test vehicle sale",
                 "timestamp": "2026-03-22T18:00:00Z",
             }))
@@ -3072,7 +3123,7 @@ mod tests {
             .post(format!("{url}/holder/contract-prove"))
             .json(&serde_json::json!({
                 "credential": cred, "format": "mdoc",
-                "predicates": [{ "claim": "birth_date", "op": "gte", "value": 18 }],
+                "predicates": [{ "claim": "birth_date", "op": "lte", "value": "2008-04-05" }],
                 "contract_terms": "contract A", "timestamp": "2026-03-22T18:00:00Z",
             }))
             .send().await.unwrap().json().await.unwrap();
@@ -3081,7 +3132,7 @@ mod tests {
             .post(format!("{url}/holder/contract-prove"))
             .json(&serde_json::json!({
                 "credential": cred, "format": "mdoc",
-                "predicates": [{ "claim": "birth_date", "op": "gte", "value": 18 }],
+                "predicates": [{ "claim": "birth_date", "op": "lte", "value": "2008-04-05" }],
                 "contract_terms": "contract B", "timestamp": "2026-03-22T19:00:00Z",
             }))
             .send().await.unwrap().json().await.unwrap();
@@ -3105,7 +3156,7 @@ mod tests {
                 "contract_terms": "test", "timestamp": "2026-03-22",
             }))
             .send().await.unwrap();
-        assert_eq!(res.status().as_u16(), 500, "empty predicates should fail");
+        assert_eq!(res.status().as_u16(), 400, "empty predicates should fail");
     }
 
     #[tokio::test]
@@ -3117,7 +3168,7 @@ mod tests {
 
         let body = serde_json::json!({
             "credential": cred, "format": "mdoc",
-            "predicates": [{ "claim": "birth_date", "op": "gte", "value": 18 }],
+            "predicates": [{ "claim": "birth_date", "op": "lte", "value": "2008-04-05" }],
             "contract_terms": "same terms", "timestamp": "2026-03-23T10:00:00Z",
         });
 
@@ -3135,9 +3186,11 @@ mod tests {
         let h2 = res2["contract_hash"].as_str().unwrap();
         assert_eq!(h1, h2, "same (terms, timestamp) must produce same contract_hash");
 
+        // In Longfellow, nullifiers are deterministic: SHA256(e_mso_LE || contract_hash).
+        // Same credential + same contract_hash → same nullifier (no random salt).
         let n1 = res1["nullifier"].as_str().unwrap();
         let n2 = res2["nullifier"].as_str().unwrap();
-        assert_ne!(n1, n2, "different salts must produce different nullifiers");
+        assert_eq!(n1, n2, "same credential + same contract must produce same nullifier");
     }
 
     #[tokio::test]
@@ -3150,7 +3203,7 @@ mod tests {
             .post(format!("{url}/holder/contract-prove"))
             .json(&serde_json::json!({
                 "credential": cred, "format": "mdoc",
-                "predicates": [{ "claim": "birth_date", "op": "gte", "value": 18 }],
+                "predicates": [{ "claim": "birth_date", "op": "lte", "value": "2008-04-05" }],
                 "contract_terms": "test", "timestamp": "2026-03-23T10:00:00Z",
                 "nullifier_field": "document_number",
                 "role": "seller",
@@ -3171,7 +3224,7 @@ mod tests {
             .post(format!("{url}/holder/contract-prove"))
             .json(&serde_json::json!({
                 "credential": cred, "format": "mdoc",
-                "predicates": [{ "claim": "birth_date", "op": "gte", "value": 18 }],
+                "predicates": [{ "claim": "birth_date", "op": "lte", "value": "2008-04-05" }],
                 "contract_terms": "test", "timestamp": "2026-03-23T10:00:00Z",
             }))
             .send().await.unwrap().json().await.unwrap();
