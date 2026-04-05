@@ -396,7 +396,8 @@ fn claim_to_cbor(val: &ClaimValue) -> Value {
         ClaimValue::Integer(i) => Value::Integer((*i).into()),
         ClaimValue::Boolean(b) => Value::Bool(*b),
         ClaimValue::Date { year, month, day } => {
-            Value::Text(format!("{year:04}-{month:02}-{day:02}"))
+            // ISO 18013-5 fulldate: CBOR tag 1004 + text
+            Value::Tag(1004, Box::new(Value::Text(format!("{year:04}-{month:02}-{day:02}"))))
         }
     }
 }

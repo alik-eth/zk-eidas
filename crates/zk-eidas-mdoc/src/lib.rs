@@ -251,11 +251,28 @@ pub(crate) fn find_in_map<'a>(
 
 /// Convert a ciborium Value to a ClaimValue based on the element identifier.
 fn cbor_to_claim_value(identifier: &str, value: &ciborium::Value) -> Result<ClaimValue, MdocError> {
+    // Handle CBOR Tag 1004 (fulldate) — ISO 18013-5 date encoding
+    if let ciborium::Value::Tag(1004, inner) = value {
+        if let Some(text) = inner.as_text() {
+            return parse_date(text);
+        }
+    }
+
+    // birth_date is always a date (strict)
     if identifier == "birth_date" {
         let text = value
             .as_text()
             .ok_or_else(|| MdocError::InvalidStructure("birth_date is not a string".into()))?;
         return parse_date(text);
+    }
+
+    // Other date-like fields: try date parse, fall back to string
+    if identifier.ends_with("_date") || identifier.ends_with("_expiry") {
+        if let Some(text) = value.as_text() {
+            if let Ok(date) = parse_date(text) {
+                return Ok(date);
+            }
+        }
     }
 
     if let Some(s) = value.as_text() {
