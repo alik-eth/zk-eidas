@@ -694,9 +694,9 @@ function VerifierStep({ state, setState, t }: { state: WizardState; setState: Re
       const result = await decryptEscrow(
         escrowData.encrypted_key,
         state.escrowPrivkey,
-        escrowData.ciphertext,
+        escrowData.ciphertexts,
+        escrowData.tags,
         escrowData.field_names,
-        escrowData.credential_hash,
       )
       setDecryptedFields(result)
     } catch (e: any) {
@@ -1264,16 +1264,8 @@ function VerifierStep({ state, setState, t }: { state: WizardState; setState: Re
               <div className="p-5 space-y-3">
                 <div className="grid grid-cols-1 gap-2 text-xs">
                   <div>
-                    <span className="text-slate-500">{t('escrow.credentialHash')}:</span>
-                    <span className="font-mono text-slate-300 ml-2 break-all">{bytesToHex(escrowData.credential_hash).slice(0, 32)}...</span>
-                  </div>
-                  <div>
-                    <span className="text-slate-500">{t('escrow.keyCommitment')}:</span>
-                    <span className="font-mono text-slate-300 ml-2 break-all">{bytesToHex(escrowData.key_commitment).slice(0, 32)}...</span>
-                  </div>
-                  <div>
                     <span className="text-slate-500">{t('escrow.ciphertext')}:</span>
-                    <span className="font-mono text-slate-300 ml-2">{escrowData.ciphertext.length} fields</span>
+                    <span className="font-mono text-slate-300 ml-2">{escrowData.ciphertexts.length} fields</span>
                   </div>
                   <div>
                     <span className="text-slate-500">{t('escrow.authorityPubkey')}:</span>

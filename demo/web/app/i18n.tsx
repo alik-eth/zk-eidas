@@ -449,8 +449,8 @@ const translations: Record<string, Record<Locale, string>> = {
     uk: "Ланцюг комітментів|ECDSA P-256 прив\u2019язка|Poseidon-CTR шифрування|Poseidon(K) комітмент",
   },
   "learn.escrowArchOutputs": {
-    en: "credential_hash|ciphertext[8]|key_commitment",
-    uk: "credential_hash|ciphertext[8]|key_commitment",
+    en: "ciphertexts[]|tags[]|encrypted_key",
+    uk: "ciphertexts[]|tags[]|encrypted_key",
   },
   "learn.escrowArchMlkem": { en: "ML-KEM-768 encrypt(K)", uk: "ML-KEM-768 encrypt(K)" },
 

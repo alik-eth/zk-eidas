@@ -335,9 +335,9 @@ function VerifyPage() {
       const result = await decryptEscrow(
         env.encrypted_key,
         escrowSeedInput.trim(),
-        env.ciphertext,
+        env.ciphertexts,
+        env.tags,
         env.field_names,
-        env.credential_hash,
       )
       setDecryptedEscrow(prev => ({ ...prev, [ci]: result }))
     } catch (e: any) {
@@ -667,8 +667,7 @@ function VerifyPage() {
                       <div className="text-xs text-slate-400 space-y-1">
                         <div><span className="text-slate-500">{t('verify.escrowAuthority')}:</span> <span className="text-amber-300 font-medium">{env.authority_name || '—'}</span></div>
                         <div><span className="text-slate-500">{t('verify.escrowFingerprint')}:</span> <span className="font-mono">{fingerprint}</span></div>
-                        <div><span className="text-slate-500">Credential hash:</span> <span className="font-mono">{formatFieldHash(env.credential_hash)}</span></div>
-                        <div><span className="text-slate-500">Key commitment:</span> <span className="font-mono">{formatFieldHash(env.key_commitment)}</span></div>
+                        <div><span className="text-slate-500">Encrypted fields:</span> <span className="font-mono">{env.ciphertexts?.length ?? '—'}</span></div>
                       </div>
 
                       {!decryptedEscrow[ci] ? (

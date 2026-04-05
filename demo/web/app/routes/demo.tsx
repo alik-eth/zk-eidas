@@ -734,9 +734,8 @@ function ProveStep({ state, setState, t }: { state: ContractWizardState; setStat
           try {
             const envelope: EscrowEnvelopeQr = {
               encrypted_key: cred.escrowData.encrypted_key,
-              credential_hash: cred.escrowData.credential_hash,
-              key_commitment: cred.escrowData.key_commitment,
-              ciphertext: cred.escrowData.ciphertext,
+              ciphertexts: cred.escrowData.ciphertexts,
+              tags: cred.escrowData.tags,
               field_names: cred.escrowData.field_names,
               authority_pubkey: Array.from(ek),
               authority_name: DEMO_AUTHORITY_NAME,
@@ -799,10 +798,12 @@ function ProveStep({ state, setState, t }: { state: ContractWizardState; setStat
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
-                sdjwt_a: credA.credential,
-                sdjwt_b: credB.credential,
-                binding_claim: binding.claimA,
-                binding_claim_b: binding.claimA !== binding.claimB ? binding.claimB : undefined,
+                credential_a: credA.credential,
+                credential_b: credB.credential,
+                format_a: 'mdoc',
+                format_b: 'mdoc',
+                binding_claim_a: binding.claimA,
+                binding_claim_b: binding.claimB,
                 predicates_a: [],
                 predicates_b: [],
               }),
@@ -1098,10 +1099,12 @@ function ProveStep({ state, setState, t }: { state: ContractWizardState; setStat
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
-                sdjwt_a: credA.credential,
-                sdjwt_b: credB.credential,
-                binding_claim: binding.claimA,
-                binding_claim_b: binding.claimA !== binding.claimB ? binding.claimB : undefined,
+                credential_a: credA.credential,
+                credential_b: credB.credential,
+                format_a: 'mdoc',
+                format_b: 'mdoc',
+                binding_claim_a: binding.claimA,
+                binding_claim_b: binding.claimB,
                 predicates_a: [],
                 predicates_b: [],
               }),
@@ -1458,8 +1461,7 @@ function DocumentStep({ state, setState, t }: { state: ContractWizardState; setS
                             <span className="text-[10px] font-semibold text-gray-500 print:text-black/60 uppercase tracking-wider">{t('escrow.qrLabel')}</span>
                           </div>
                           <div className="mb-2 text-[9px] font-mono text-gray-500 print:text-black/60 space-y-0.5">
-                            <div><span className="text-gray-400 print:text-black/40">{t('escrow.credentialHash')}:</span> {formatFieldHash(ed.credential_hash)}</div>
-                            <div><span className="text-gray-400 print:text-black/40">{t('escrow.keyCommitment')}:</span> {formatFieldHash(ed.key_commitment)}</div>
+                            <div><span className="text-gray-400 print:text-black/40">{t('escrow.encryptedFields')}:</span> {ed.ciphertexts?.length ?? '—'}</div>
                           </div>
                           {/* Authority info */}
                           <div className="mb-2 text-[9px] text-gray-500 print:text-black/60">
@@ -1616,9 +1618,9 @@ function VerifyStep({ state, t }: { state: ContractWizardState; t: (key: string)
       const result = await decryptEscrow(
         escrowData.encrypted_key,
         DEMO_AUTHORITY_PRIVKEY,
-        escrowData.ciphertext,
+        escrowData.ciphertexts,
+        escrowData.tags,
         escrowData.field_names,
-        escrowData.credential_hash,
       )
       setDecryptedByRole(prev => ({ ...prev, [role]: result }))
     } catch (e: any) {

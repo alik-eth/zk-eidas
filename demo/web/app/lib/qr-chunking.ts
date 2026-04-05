@@ -35,9 +35,8 @@ export function escrowCredentialIndex(proofId: number): number {
 
 export interface EscrowEnvelopeQr {
   encrypted_key: number[]
-  credential_hash: number[]
-  key_commitment: number[]
-  ciphertext: number[][]
+  ciphertexts: number[][]
+  tags: number[][]
   field_names: string[]
   authority_pubkey: number[]
   authority_name: string
