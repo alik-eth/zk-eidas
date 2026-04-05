@@ -47,14 +47,15 @@ export function resolveVariant(
 
 const EU_COUNTRIES = ['UA','DE','FR','IT','ES','PL','NL','BE','AT','SE','CZ','RO','BG','HR','IE','LT','LV','EE','SK','SI','FI','DK','PT','HU','EL','LU','MT','CY']
 
-function epochDaysToday(): number {
-  return Math.floor(Date.now() / 86400000)
+// Longfellow uses lexicographic CBOR comparison — dates are ISO strings, not epoch days
+function isoDateToday(): string {
+  return new Date().toISOString().slice(0, 10)
 }
 
-function epochDaysYearsAgo(years: number): number {
+function isoDateYearsAgo(years: number): string {
   const now = new Date()
-  const past = Date.UTC(now.getUTCFullYear() - years, now.getUTCMonth(), now.getUTCDate())
-  return Math.floor(past / 86400000)
+  return new Date(Date.UTC(now.getUTCFullYear() - years, now.getUTCMonth(), now.getUTCDate()))
+    .toISOString().slice(0, 10)
 }
 
 export const CREDENTIAL_TYPES: CredentialTypeConfig[] = [
@@ -147,7 +148,7 @@ export const CREDENTIAL_TYPES: CredentialTypeConfig[] = [
       { id: 'issuing_country', labelKey: 'sandbox.predIssuingCountry', descKey: 'sandbox.predIssuingCountryDesc', predicate: { claim: 'issuing_country', op: 'set_member', value: EU_COUNTRIES }, defaultChecked: false },
       { id: 'name', labelKey: 'sandbox.predName', descKey: 'sandbox.predNameDesc', predicate: { claim: 'given_name', op: 'eq', value: '__FROM_FORM__' }, defaultChecked: false },
       { id: 'age_lte', labelKey: 'sandbox.predAgeLte', descKey: 'sandbox.predAgeLteDesc', predicate: { claim: 'birth_date', op: 'lte', value: 65 }, defaultChecked: false },
-      { id: 'doc_valid', labelKey: 'sandbox.predDocValid', descKey: 'sandbox.predDocValidDesc', predicate: { claim: 'expiry_date', op: 'gte', value: epochDaysToday() }, defaultChecked: false },
+      { id: 'doc_valid', labelKey: 'sandbox.predDocValid', descKey: 'sandbox.predDocValidDesc', predicate: { claim: 'expiry_date', op: 'gte', value: isoDateToday() }, defaultChecked: false },
       { id: 'not_revoked', labelKey: 'sandbox.predNotRevoked', descKey: 'sandbox.predNotRevokedDesc', predicate: { claim: 'document_number', op: 'neq', value: 'REVOKED' }, defaultChecked: false },
       { id: 'age_range', labelKey: 'sandbox.predAgeRange', descKey: 'sandbox.predAgeRangeDesc', predicate: { claim: 'birth_date', op: 'range', value: [18, 65] }, defaultChecked: false },
     ],
@@ -192,8 +193,8 @@ export const CREDENTIAL_TYPES: CredentialTypeConfig[] = [
     },
     predicates: [
       { id: 'category_b', labelKey: 'sandbox.predCategoryB', descKey: 'sandbox.predCategoryBDesc', predicate: { claim: 'category', op: 'eq', value: 'A, B, C1' }, defaultChecked: true },
-      { id: 'valid', labelKey: 'sandbox.predValid', descKey: 'sandbox.predValidDesc', predicate: { claim: 'expiry_date', op: 'gte', value: epochDaysToday() }, defaultChecked: true },
-      { id: 'experienced', labelKey: 'sandbox.predExperienced', descKey: 'sandbox.predExperiencedDesc', predicate: { claim: 'issue_date', op: 'lte', value: epochDaysYearsAgo(2) }, defaultChecked: false },
+      { id: 'valid', labelKey: 'sandbox.predValid', descKey: 'sandbox.predValidDesc', predicate: { claim: 'expiry_date', op: 'gte', value: isoDateToday() }, defaultChecked: true },
+      { id: 'experienced', labelKey: 'sandbox.predExperienced', descKey: 'sandbox.predExperiencedDesc', predicate: { claim: 'issue_date', op: 'lte', value: isoDateYearsAgo(2) }, defaultChecked: false },
       { id: 'no_restrictions', labelKey: 'sandbox.predNoRestrictions', descKey: 'sandbox.predNoRestrictionsDesc', predicate: { claim: 'restrictions', op: 'eq', value: 'None' }, defaultChecked: false },
     ],
   },
@@ -283,7 +284,7 @@ export const CREDENTIAL_TYPES: CredentialTypeConfig[] = [
       },
     },
     predicates: [
-      { id: 'active_student', labelKey: 'sandbox.predActiveStudent', descKey: 'sandbox.predActiveStudentDesc', predicate: { claim: 'valid_until', op: 'gte', value: epochDaysToday() }, defaultChecked: true },
+      { id: 'active_student', labelKey: 'sandbox.predActiveStudent', descKey: 'sandbox.predActiveStudentDesc', predicate: { claim: 'valid_until', op: 'gte', value: isoDateToday() }, defaultChecked: true },
       { id: 'enrolled_recently', labelKey: 'sandbox.predEnrolledRecently', descKey: 'sandbox.predEnrolledRecentlyDesc', predicate: { claim: 'enrollment_year', op: 'gte', value: 2020 }, defaultChecked: false },
       { id: 'university_match', labelKey: 'sandbox.predUniversityMatch', descKey: 'sandbox.predUniversityMatchDesc', predicate: { claim: 'university', op: 'eq', value: '__FROM_FORM__' }, defaultChecked: false },
     ],
@@ -329,7 +330,7 @@ export const CREDENTIAL_TYPES: CredentialTypeConfig[] = [
       },
     },
     predicates: [
-      { id: 'insured', labelKey: 'sandbox.predInsured', descKey: 'sandbox.predInsuredDesc', predicate: { claim: 'insurance_expiry', op: 'gte', value: epochDaysToday() }, defaultChecked: true },
+      { id: 'insured', labelKey: 'sandbox.predInsured', descKey: 'sandbox.predInsuredDesc', predicate: { claim: 'insurance_expiry', op: 'gte', value: isoDateToday() }, defaultChecked: true },
       { id: 'eu_type', labelKey: 'sandbox.predEuType', descKey: 'sandbox.predEuTypeDesc', predicate: { claim: 'make_model', op: 'set_member', value: ['Volkswagen Golf', 'BMW 3 Series', 'Toyota Corolla', 'Renault Clio', 'Fiat 500'] }, defaultChecked: true },
       { id: 'vin_active', labelKey: 'sandbox.predVinActive', descKey: 'sandbox.predVinActiveDesc', predicate: { claim: 'vin', op: 'neq', value: 'REVOKED' }, defaultChecked: false },
     ],
