@@ -72,7 +72,7 @@ fn default_issuer() -> String {
 }
 
 fn default_format() -> String {
-    "sdjwt".to_string()
+    "mdoc".to_string()
 }
 
 /// Parse "mdoc:<base64>:<hex_pubx>:<hex_puby>" token into (bytes, pub_key_x, pub_key_y).
@@ -229,51 +229,35 @@ async fn issue_credential(
         })
         .collect();
 
-    let (credential, format) = if req.credential_type == "drivers_license" {
-        use zk_eidas_types::credential::ClaimValue;
-        let claims_vec: Vec<(String, ClaimValue)> = claims_obj
-            .iter()
-            .map(|(k, v)| json_value_to_claim(k, v).map(|cv| (k.clone(), cv)))
-            .collect::<Result<Vec<_>, _>>()
-            .map_err(|e| {
-                (
-                    StatusCode::BAD_REQUEST,
-                    format!("claim conversion error: {e}"),
-                )
-            })?;
+    // Build mdoc credential for all types
+    use zk_eidas_types::credential::ClaimValue;
+    let claims_vec: Vec<(String, ClaimValue)> = claims_obj
+        .iter()
+        .map(|(k, v)| json_value_to_mdoc_claim(k, v).map(|cv| (k.clone(), cv)))
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| {
+            (
+                StatusCode::BAD_REQUEST,
+                format!("claim conversion error: {e}"),
+            )
+        })?;
 
-        let claims_ref: Vec<(&str, ClaimValue)> = claims_vec
-            .iter()
-            .map(|(k, v)| (k.as_str(), v.clone()))
-            .collect();
+    let claims_ref: Vec<(&str, ClaimValue)> = claims_vec
+        .iter()
+        .map(|(k, v)| (k.as_str(), v.clone()))
+        .collect();
 
-        let (mdoc_bytes, pub_key_x, pub_key_y) =
-            zk_eidas_mdoc::test_utils::build_ecdsa_signed_mdoc(claims_ref, &req.issuer);
+    let (mdoc_bytes, pub_key_x, pub_key_y) =
+        zk_eidas_mdoc::test_utils::build_ecdsa_signed_mdoc(claims_ref, &req.issuer);
 
-        use base64::Engine;
-        let token = format!(
-            "mdoc:{}:{}:{}",
-            base64::engine::general_purpose::STANDARD.encode(&mdoc_bytes),
-            hex::encode(pub_key_x),
-            hex::encode(pub_key_y),
-        );
-        (token, "mdoc".to_string())
-    } else {
-        // Normalize string claim values before embedding in the SD-JWT so the
-        // parser stores them with the right type:
-        //   - numeric strings → integers (needed for gte/lte/range)
-        //   - date strings (except birthdate) → epoch-day integers
-        //   - birthdate stays as a string so the parser creates ClaimValue::Date
-        let normalized: serde_json::Map<String, serde_json::Value> = claims_obj
-            .iter()
-            .map(|(k, v)| (k.clone(), normalize_claim_for_sdjwt(k, v)))
-            .collect();
-        let (sdjwt, _key) = zk_eidas_parser::test_utils::build_ecdsa_signed_sdjwt(
-            serde_json::Value::Object(normalized),
-            &req.issuer,
-        );
-        (sdjwt, "sdjwt".to_string())
-    };
+    use base64::Engine;
+    let credential = format!(
+        "mdoc:{}:{}:{}",
+        base64::engine::general_purpose::STANDARD.encode(&mdoc_bytes),
+        hex::encode(pub_key_x),
+        hex::encode(pub_key_y),
+    );
+    let format = "mdoc".to_string();
 
     Ok(Json(IssueResponse {
         credential,
@@ -286,6 +270,7 @@ async fn issue_credential(
 /// Normalize a claim value for SD-JWT embedding.
 /// Numeric strings become JSON numbers; non-birthdate date strings become
 /// epoch-day integers so the parser won't misinterpret them as Date claims.
+#[allow(dead_code)]
 fn normalize_claim_for_sdjwt(name: &str, value: &serde_json::Value) -> serde_json::Value {
     let s = match value.as_str() {
         Some(s) => s,
@@ -317,6 +302,7 @@ fn parse_date_claim(s: &str) -> Result<zk_eidas_types::credential::ClaimValue, S
         .map_err(|e| e.to_string())
 }
 
+#[allow(dead_code)]
 fn json_value_to_claim(
     name: &str,
     value: &serde_json::Value,
@@ -335,6 +321,31 @@ fn json_value_to_claim(
                 let ClaimValue::Date { year, month, day } = cv else { unreachable!() };
                 let epoch_days = zk_eidas_utils::date_to_epoch_days(year as u32, month as u32, day as u32);
                 Ok(ClaimValue::Integer(epoch_days))
+            } else {
+                Ok(ClaimValue::String(s.clone()))
+            }
+        }
+        serde_json::Value::Bool(b) => Ok(ClaimValue::Boolean(*b)),
+        _ => Err(format!("unsupported claim value type: {value}")),
+    }
+}
+
+/// Convert a JSON value to a ClaimValue for mdoc credentials.
+/// Unlike `json_value_to_claim`, dates are kept as `ClaimValue::Date` (not epoch days)
+/// since the mdoc CBOR format preserves date types natively.
+fn json_value_to_mdoc_claim(
+    name: &str,
+    value: &serde_json::Value,
+) -> Result<zk_eidas_types::credential::ClaimValue, String> {
+    use zk_eidas_types::credential::ClaimValue;
+    match value {
+        serde_json::Value::Number(n) => {
+            Ok(ClaimValue::Integer(n.as_i64().ok_or("not an integer")?))
+        }
+        serde_json::Value::String(s) => {
+            // Heuristic: if it matches YYYY-MM-DD or field name ends with _date, parse as Date
+            if looks_like_date(s) || name.ends_with("_date") || name == "birthdate" {
+                parse_date_claim(s)
             } else {
                 Ok(ClaimValue::String(s.clone()))
             }
@@ -2226,9 +2237,9 @@ mod tests {
             .post(format!("{base_url}/holder/prove"))
             .json(&serde_json::json!({
                 "credential": credential,
-                "format": "sdjwt",
+                "format": "mdoc",
                 "predicates": [
-                    { "claim": "birth_date", "op": "gte", "value": 18 }
+                    { "claim": "age_over_18", "op": "eq", "value": true }
                 ]
             }))
             .send()
@@ -2279,8 +2290,9 @@ mod tests {
             .unwrap();
         assert_eq!(res.status(), 200);
         let body: serde_json::Value = res.json().await.unwrap();
-        assert!(!body["credential"].as_str().unwrap().is_empty());
-        assert_eq!(body["format"], "sdjwt");
+        let cred = body["credential"].as_str().unwrap();
+        assert!(cred.starts_with("mdoc:"), "credential should be mdoc token");
+        assert_eq!(body["format"], "mdoc");
         assert_eq!(body["credential_type"], "pid");
     }
 
@@ -2349,7 +2361,7 @@ mod tests {
             .post(format!("{}/holder/prove", f.base_url))
             .json(&serde_json::json!({
                 "credential": f.credential,
-                "format": "sdjwt",
+                "format": "mdoc",
                 "predicates": [
                     { "claim": "nonexistent_field", "op": "gte", "value": 18 }
                 ]
@@ -2368,7 +2380,7 @@ mod tests {
             .post(format!("{}/holder/prove", f.base_url))
             .json(&serde_json::json!({
                 "credential": f.credential,
-                "format": "sdjwt",
+                "format": "mdoc",
                 "predicates": [
                     { "claim": "birth_date", "op": "regex", "value": ".*" }
                 ]
@@ -2475,9 +2487,9 @@ mod tests {
             .post(format!("{}/holder/prove-compound", f.base_url))
             .json(&serde_json::json!({
                 "credential": f.credential,
-                "format": "sdjwt",
+                "format": "mdoc",
                 "predicates": [
-                    { "claim": "birth_date", "op": "gte", "value": 18 },
+                    { "claim": "age_over_18", "op": "eq", "value": true },
                     { "claim": "nationality", "op": "set_member", "value": ["UA", "DE", "FR"] }
                 ],
                 "op": "and"
@@ -2643,9 +2655,9 @@ mod tests {
             .post(format!("{}/holder/prove-compound", f.base_url))
             .json(&serde_json::json!({
                 "credential": f.credential,
-                "format": "sdjwt",
+                "format": "mdoc",
                 "predicates": [
-                    { "claim": "birth_date", "op": "gte", "value": 18 }
+                    { "claim": "age_over_18", "op": "eq", "value": true }
                 ],
                 "op": "and",
                 "skip_cache": true
@@ -2668,9 +2680,9 @@ mod tests {
             .post(format!("{}/holder/prove-compound", f.base_url))
             .json(&serde_json::json!({
                 "credential": f.credential,
-                "format": "sdjwt",
+                "format": "mdoc",
                 "predicates": [
-                    { "claim": "birth_date", "op": "gte", "value": 18 }
+                    { "claim": "age_over_18", "op": "eq", "value": true }
                 ],
                 "op": "and",
                 "skip_cache": true
@@ -2804,7 +2816,7 @@ mod tests {
             .post(format!("{base_url}/holder/prepare-inputs"))
             .json(&serde_json::json!({
                 "credential": credential,
-                "format": "sdjwt",
+                "format": "mdoc",
                 "predicates": predicates,
             }))
             .send().await.unwrap();
@@ -2938,7 +2950,7 @@ mod tests {
             .post(format!("{url}/holder/prepare-inputs"))
             .json(&serde_json::json!({
                 "credential": cred,
-                "format": "sdjwt",
+                "format": "mdoc",
                 "predicates": [{ "claim": "nonexistent", "op": "gte", "value": 18 }],
             }))
             .send().await.unwrap();
@@ -2955,7 +2967,7 @@ mod tests {
             .post(format!("{url}/holder/prepare-inputs"))
             .json(&serde_json::json!({
                 "credential": cred,
-                "format": "sdjwt",
+                "format": "mdoc",
                 "predicates": [],
             }))
             .send().await.unwrap();
@@ -2974,7 +2986,7 @@ mod tests {
             .post(format!("{url}/holder/contract-prove"))
             .json(&serde_json::json!({
                 "credential": cred,
-                "format": "sdjwt",
+                "format": "mdoc",
                 "predicates": [{ "claim": "birth_date", "op": "gte", "value": 18 }],
                 "contract_terms": "test vehicle sale",
                 "timestamp": "2026-03-22T18:00:00Z",
@@ -3010,7 +3022,7 @@ mod tests {
         let res1: serde_json::Value = client
             .post(format!("{url}/holder/contract-prove"))
             .json(&serde_json::json!({
-                "credential": cred, "format": "sdjwt",
+                "credential": cred, "format": "mdoc",
                 "predicates": [{ "claim": "birth_date", "op": "gte", "value": 18 }],
                 "contract_terms": "contract A", "timestamp": "2026-03-22T18:00:00Z",
             }))
@@ -3019,7 +3031,7 @@ mod tests {
         let res2: serde_json::Value = client
             .post(format!("{url}/holder/contract-prove"))
             .json(&serde_json::json!({
-                "credential": cred, "format": "sdjwt",
+                "credential": cred, "format": "mdoc",
                 "predicates": [{ "claim": "birth_date", "op": "gte", "value": 18 }],
                 "contract_terms": "contract B", "timestamp": "2026-03-22T19:00:00Z",
             }))
@@ -3039,7 +3051,7 @@ mod tests {
         let res = client
             .post(format!("{url}/holder/contract-prove"))
             .json(&serde_json::json!({
-                "credential": cred, "format": "sdjwt",
+                "credential": cred, "format": "mdoc",
                 "predicates": [],
                 "contract_terms": "test", "timestamp": "2026-03-22",
             }))
@@ -3055,7 +3067,7 @@ mod tests {
         let client = reqwest::Client::new();
 
         let body = serde_json::json!({
-            "credential": cred, "format": "sdjwt",
+            "credential": cred, "format": "mdoc",
             "predicates": [{ "claim": "birth_date", "op": "gte", "value": 18 }],
             "contract_terms": "same terms", "timestamp": "2026-03-23T10:00:00Z",
         });
@@ -3088,7 +3100,7 @@ mod tests {
         let res: serde_json::Value = client
             .post(format!("{url}/holder/contract-prove"))
             .json(&serde_json::json!({
-                "credential": cred, "format": "sdjwt",
+                "credential": cred, "format": "mdoc",
                 "predicates": [{ "claim": "birth_date", "op": "gte", "value": 18 }],
                 "contract_terms": "test", "timestamp": "2026-03-23T10:00:00Z",
                 "nullifier_field": "document_number",
@@ -3109,7 +3121,7 @@ mod tests {
         let res: serde_json::Value = client
             .post(format!("{url}/holder/contract-prove"))
             .json(&serde_json::json!({
-                "credential": cred, "format": "sdjwt",
+                "credential": cred, "format": "mdoc",
                 "predicates": [{ "claim": "birth_date", "op": "gte", "value": 18 }],
                 "contract_terms": "test", "timestamp": "2026-03-23T10:00:00Z",
             }))
@@ -3127,7 +3139,7 @@ mod tests {
             .post(format!("{url}/holder/contract-prove"))
             .json(&serde_json::json!({
                 "credential": "invalid",
-                "format": "sdjwt",
+                "format": "mdoc",
                 "predicates": [{ "claim": "x", "op": "gte", "value": 1 }],
                 "contract_terms": "t",
                 "timestamp": "2026-03-22",
@@ -3185,5 +3197,75 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(missing_res.status().as_u16(), 404, "missing CID should return 404");
+    }
+
+    // === Longfellow integration: issue → prove → verify ===
+
+    #[test]
+    fn longfellow_issue_prove_verify_round_trip() {
+        use longfellow_sys::mdoc::{AttributeRequest, MdocCircuit};
+        use longfellow_sys::safe::VerifyType;
+        use zk_eidas_types::credential::ClaimValue;
+
+        // Step 1: Issue an mdoc credential
+        let (mdoc_bytes, pub_key_x, pub_key_y) =
+            zk_eidas_mdoc::test_utils::build_ecdsa_signed_mdoc(
+                vec![
+                    ("given_name", ClaimValue::String("Alice".into())),
+                    ("age_over_18", ClaimValue::Boolean(true)),
+                ],
+                "https://test.example.com",
+            );
+
+        // Step 2: Parse claims back via MdocParser
+        let cred = zk_eidas_mdoc::MdocParser::parse_with_issuer_key(
+            &mdoc_bytes, pub_key_x, pub_key_y,
+        ).expect("mdoc parse failed");
+        assert_eq!(
+            cred.claims().get("age_over_18"),
+            Some(&ClaimValue::Boolean(true)),
+        );
+
+        // Step 3: Build AttributeRequest for age_over_18 = true (CBOR: 0xf5)
+        let attributes = vec![AttributeRequest {
+            namespace: "org.iso.18013.5.1".to_string(),
+            identifier: "age_over_18".to_string(),
+            cbor_value: vec![0xf5], // CBOR true
+            verify_type: VerifyType::Eq,
+        }];
+
+        // Step 4: Generate circuit for 1 attribute
+        let circuit = MdocCircuit::generate(1).expect("circuit generation failed");
+
+        // Step 5: Build public key strings in "0x<hex>" format
+        let pkx_hex = format!("0x{}", hex::encode(pub_key_x));
+        let pky_hex = format!("0x{}", hex::encode(pub_key_y));
+
+        // Step 6: Prove
+        let proof = longfellow_sys::mdoc::prove(
+            &circuit,
+            &mdoc_bytes,
+            &pkx_hex,
+            &pky_hex,
+            b"zk-eidas-demo",
+            &attributes,
+            "2026-01-01T00:00:00Z",
+            &[0u8; 8],
+        ).expect("prove failed");
+
+        assert!(!proof.proof_bytes.is_empty(), "proof should not be empty");
+
+        // Step 7: Verify
+        longfellow_sys::mdoc::verify(
+            &circuit,
+            &proof,
+            &pkx_hex,
+            &pky_hex,
+            b"zk-eidas-demo",
+            &attributes,
+            "2026-01-01T00:00:00Z",
+            "org.iso.18013.5.1.mDL",
+            &[0u8; 8],
+        ).expect("verify failed");
     }
 }
