@@ -731,12 +731,16 @@ async fn generate_compound_proof(
     if !req.skip_cache {
         if let Some(cached) = state.proof_cache.get(&cache_key) {
             eprintln!("[prove-compound] CACHE HIT for key {cache_key}");
-            // TODO(task-8): escrow handling deferred to Task 8
-            if req.identity_escrow.is_some() {
-                eprintln!("[prove-compound] WARNING: identity_escrow requested but not yet supported on Longfellow branch");
+            let mut compound_json = cached.compound_proof_json.clone();
+            if let Some(ref escrow_req) = req.identity_escrow {
+                let escrow_data = generate_escrow_data(&claims, escrow_req)?;
+                let mut compound: serde_json::Value = serde_json::from_str(&compound_json)
+                    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("cache parse: {e}")))?;
+                compound["identity_escrow"] = escrow_data;
+                compound_json = compound.to_string();
             }
             return Ok(Json(CompoundProveResponse {
-                compound_proof_json: cached.compound_proof_json.clone(),
+                compound_proof_json: compound_json,
                 op: cached.op.clone(),
                 sub_proofs_count: cached.sub_proofs_count,
                 hidden_fields: cached.hidden_fields.clone(),
@@ -836,9 +840,20 @@ async fn generate_compound_proof(
         .cloned()
         .collect();
 
-    // TODO(task-8): escrow handling deferred to Task 8
-    if req.identity_escrow.is_some() {
-        eprintln!("[prove-compound] WARNING: identity_escrow requested but not yet supported on Longfellow branch");
+    // Identity escrow: encrypt credential fields with AES-256-GCM
+    if let Some(ref escrow_req) = req.identity_escrow {
+        let escrow_data = generate_escrow_data(&claims, escrow_req)?;
+        let mut compound: serde_json::Value = serde_json::from_str(&compound_proof_json)
+            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("compound parse: {e}")))?;
+        compound["identity_escrow"] = escrow_data;
+        let compound_proof_json = compound.to_string();
+        return Ok(Json(CompoundProveResponse {
+            compound_proof_json,
+            op: op_label,
+            sub_proofs_count,
+            hidden_fields,
+            cached: false,
+        }));
     }
 
     Ok(Json(CompoundProveResponse {
@@ -1456,7 +1471,7 @@ async fn contract_prove(
         })
     }).collect();
 
-    let compound_proof_json = serde_json::json!({
+    let mut compound = serde_json::json!({
         "op": "AND",
         "sub_proofs": sub_results,
         "nullifier_hash": hex::encode(proof.nullifier_hash),
@@ -1466,8 +1481,15 @@ async fn contract_prove(
             "nullifier": proof.nullifier_hash.to_vec(),
             "contract_hash": hex::encode(&contract_hash_bytes),
         }],
-    })
-    .to_string();
+    });
+
+    // Identity escrow: encrypt credential fields with AES-256-GCM
+    if let Some(ref escrow_req) = req.identity_escrow {
+        let escrow_data = generate_escrow_data(&claims, escrow_req)?;
+        compound["identity_escrow"] = escrow_data;
+    }
+
+    let compound_proof_json = compound.to_string();
 
     let hidden_fields: Vec<String> = req.predicates.iter()
         .filter(|p| p.op == "eq" || p.op == "disclosure")
@@ -1591,6 +1613,98 @@ fn compute_cache_key(req: &CompoundProveRequest) -> String {
     }).collect();
     let key_material = format!("{}|{}", req.format, serde_json::to_string(&preds).unwrap());
     format!("{:016x}", fnv_hash(key_material.as_bytes()))
+}
+
+/// Encrypt credential field values with AES-256-GCM.
+fn escrow_encrypt_fields(
+    fields: &[(&str, &[u8])],
+    key: &[u8; 32],
+) -> Result<(Vec<Vec<u8>>, Vec<Vec<u8>>), String> {
+    use aes_gcm::{Aes256Gcm, KeyInit, Nonce, aead::Aead};
+    let cipher = Aes256Gcm::new(key.into());
+    let mut ciphertexts = Vec::new();
+    let mut tags = Vec::new();
+    for (i, (_name, value)) in fields.iter().enumerate() {
+        let mut nonce_bytes = [0u8; 12];
+        nonce_bytes[8..12].copy_from_slice(&(i as u32).to_be_bytes());
+        let nonce = Nonce::from_slice(&nonce_bytes);
+        let ct = cipher.encrypt(nonce, value.as_ref())
+            .map_err(|e| format!("AES-GCM encrypt: {e}"))?;
+        let (ct_only, tag) = ct.split_at(ct.len() - 16);
+        ciphertexts.push(ct_only.to_vec());
+        tags.push(tag.to_vec());
+    }
+    Ok((ciphertexts, tags))
+}
+
+/// Derive a deterministic symmetric key from field data and authority pubkey.
+fn escrow_derive_key(field_values: &[Vec<u8>], authority_pubkey: &[u8]) -> [u8; 32] {
+    use sha2::{Sha256, Digest};
+    let mut hasher = Sha256::new();
+    for v in field_values {
+        hasher.update(v);
+    }
+    hasher.update(authority_pubkey);
+    let hash: [u8; 32] = hasher.finalize().into();
+    let mut key = [0u8; 32];
+    key[1..].copy_from_slice(&hash[..31]);
+    key
+}
+
+/// Encrypt the symmetric key to the escrow authority's ML-KEM-768 public key.
+fn escrow_encrypt_key(key: &[u8; 32], authority_pubkey: &[u8]) -> Result<Vec<u8>, String> {
+    use ml_kem::kem::Encapsulate;
+    let seed: [u8; 64] = authority_pubkey.try_into()
+        .map_err(|_| format!("ML-KEM-768 authority key must be 64-byte seed, got {} bytes", authority_pubkey.len()))?;
+    let dk = ml_kem::ml_kem_768::DecapsulationKey::from_seed(seed.into());
+    let ek = dk.encapsulation_key().clone();
+    let (ct, ss) = ek.encapsulate();
+    use sha2::{Sha256, Digest};
+    let ss_bytes: &[u8] = ss.as_ref();
+    let mask: [u8; 32] = Sha256::digest(ss_bytes).into();
+    let mut encrypted_k = [0u8; 32];
+    for i in 0..32 { encrypted_k[i] = key[i] ^ mask[i]; }
+    let ct_ref: &[u8] = ct.as_ref();
+    let mut result = Vec::with_capacity(ct_ref.len() + 32);
+    result.extend_from_slice(ct_ref);
+    result.extend_from_slice(&encrypted_k);
+    Ok(result)
+}
+
+/// Generate identity escrow data for the given credential claims and escrow request.
+fn generate_escrow_data(
+    claims: &std::collections::BTreeMap<String, zk_eidas_types::credential::ClaimValue>,
+    escrow_req: &EscrowRequest,
+) -> Result<serde_json::Value, (StatusCode, String)> {
+    let authority_pubkey = hex::decode(&escrow_req.authority_pubkey)
+        .map_err(|e| (StatusCode::BAD_REQUEST, format!("invalid authority_pubkey hex: {e}")))?;
+    let mut field_pairs: Vec<(&str, Vec<u8>)> = Vec::new();
+    for name in &escrow_req.field_names {
+        let cv = claims.get(name).ok_or_else(|| {
+            (StatusCode::BAD_REQUEST, format!("escrow field '{}' not found in credential", name))
+        })?;
+        let value_str = match cv {
+            zk_eidas_types::credential::ClaimValue::String(s) => s.clone(),
+            zk_eidas_types::credential::ClaimValue::Integer(n) => n.to_string(),
+            zk_eidas_types::credential::ClaimValue::Boolean(b) => b.to_string(),
+            zk_eidas_types::credential::ClaimValue::Date { year, month, day } => format!("{year:04}-{month:02}-{day:02}"),
+        };
+        field_pairs.push((name.as_str(), value_str.into_bytes()));
+    }
+    let field_value_bytes: Vec<Vec<u8>> = field_pairs.iter().map(|(_, v)| v.clone()).collect();
+    let key = escrow_derive_key(&field_value_bytes, &authority_pubkey);
+    let field_refs: Vec<(&str, &[u8])> = field_pairs.iter().map(|(n, v)| (*n, v.as_slice())).collect();
+    let (ciphertexts, tags) = escrow_encrypt_fields(&field_refs, &key)
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("escrow encrypt: {e}")))?;
+    let encrypted_key = escrow_encrypt_key(&key, &authority_pubkey)
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("escrow key encrypt: {e}")))?;
+    Ok(serde_json::json!({
+        "ciphertexts": ciphertexts,
+        "tags": tags,
+        "encrypted_key": encrypted_key,
+        "authority_pubkey": authority_pubkey,
+        "field_names": escrow_req.field_names,
+    }))
 }
 
 fn fnv_hash(data: &[u8]) -> u64 {
