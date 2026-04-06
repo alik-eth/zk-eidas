@@ -2279,6 +2279,24 @@ pub fn build_app(circuits_path: &str) -> (Router, Arc<AppState>) {
 
 #[tokio::main]
 async fn main() {
+    // --generate-circuits <dir>: generate circuit cache files and exit
+    let args: Vec<String> = std::env::args().collect();
+    if args.len() >= 3 && args[1] == "--generate-circuits" {
+        let dir = std::path::PathBuf::from(&args[2]);
+        std::fs::create_dir_all(&dir).unwrap();
+        for n in 1..=4usize {
+            let path = dir.join(format!("mdoc-{n}attr.bin"));
+            eprint!("[generate] Circuit {n}-attr... ");
+            let t0 = std::time::Instant::now();
+            let circuit = longfellow_sys::mdoc::MdocCircuit::generate(n)
+                .unwrap_or_else(|e| panic!("circuit {n} failed: {e}"));
+            circuit.save(&path).unwrap();
+            eprintln!("done in {:.1}s ({} bytes)", t0.elapsed().as_secs_f64(), std::fs::metadata(&path).unwrap().len());
+        }
+        eprintln!("[generate] All circuits saved to {}", dir.display());
+        return;
+    }
+
     let circuits_path = std::env::var("CIRCUITS_PATH").unwrap_or_else(|_| {
         let manifest = env!("CARGO_MANIFEST_DIR");
         let resolved = std::path::PathBuf::from(manifest)
@@ -2295,14 +2313,49 @@ async fn main() {
 
     let (app, state) = build_app(&circuits_path);
 
-    // Eagerly compile Longfellow circuits at startup (sequentially to stay within RAM)
-    eprintln!("[startup] Pre-compiling Longfellow circuits (1-4 attrs)...");
+    // Load or generate Longfellow circuits at startup.
+    // If cached circuit files exist on disk, loading is instant (~100ms).
+    // Otherwise, generate from scratch (~30s each) and save for next startup.
+    let cache_dir = std::env::var("CIRCUIT_CACHE_PATH")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|_| std::path::PathBuf::from("circuit-cache"));
+    std::fs::create_dir_all(&cache_dir).ok();
+    eprintln!("[startup] Loading Longfellow circuits (1-4 attrs)...");
     for n in 1..=4usize {
         let t0 = std::time::Instant::now();
-        match get_circuit(&state, n).await {
-            Ok(_) => eprintln!("[startup] Circuit {n}-attr ready in {:.1}s", t0.elapsed().as_secs_f64()),
-            Err((_, e)) => eprintln!("[startup] Circuit {n}-attr FAILED: {e}"),
-        }
+        let cache_path = cache_dir.join(format!("mdoc-{n}attr.bin"));
+        let circuit = if cache_path.exists() {
+            match longfellow_sys::mdoc::MdocCircuit::load(&cache_path, n) {
+                Ok(c) => {
+                    eprintln!("[startup] Circuit {n}-attr loaded from cache in {:.0}ms", t0.elapsed().as_millis());
+                    c
+                }
+                Err(e) => {
+                    eprintln!("[startup] Circuit {n}-attr cache load failed ({e}), regenerating...");
+                    let c = longfellow_sys::mdoc::MdocCircuit::generate(n)
+                        .map_err(|e| eprintln!("[startup] Circuit {n}-attr FAILED: {e}")).ok();
+                    if let Some(ref c) = c {
+                        c.save(&cache_path).ok();
+                    }
+                    match c { Some(c) => c, None => continue }
+                }
+            }
+        } else {
+            eprintln!("[startup] Circuit {n}-attr not cached, generating...");
+            let c = tokio::task::spawn_blocking(move || {
+                longfellow_sys::mdoc::MdocCircuit::generate(n)
+            }).await.ok().and_then(|r| r.ok());
+            if let Some(ref c) = c {
+                c.save(&cache_path).ok();
+                eprintln!("[startup] Circuit {n}-attr generated and saved in {:.1}s", t0.elapsed().as_secs_f64());
+            } else {
+                eprintln!("[startup] Circuit {n}-attr generation FAILED");
+                continue;
+            }
+            c.unwrap()
+        };
+        // Store in the OnceCell
+        state.longfellow_circuits[n - 1].set(circuit).ok();
     }
     eprintln!("[startup] All circuits ready.");
 

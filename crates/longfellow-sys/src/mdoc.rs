@@ -64,6 +64,18 @@ impl MdocCircuit {
     pub fn num_attributes(&self) -> usize {
         self.num_attributes
     }
+
+    /// Save the serialized circuit bytes to a file.
+    pub fn save(&self, path: &std::path::Path) -> std::io::Result<()> {
+        std::fs::write(path, &self.bytes)
+    }
+
+    /// Load a previously saved circuit from a file.
+    pub fn load(path: &std::path::Path, num_attributes: usize) -> std::io::Result<Self> {
+        let bytes = std::fs::read(path)?;
+        let spec_index = num_attributes - 1;
+        Ok(Self { bytes, spec_index, num_attributes })
+    }
 }
 
 /// Prove selective disclosure + predicates on an mdoc credential.

@@ -48,6 +48,11 @@ WORKDIR /app
 COPY --from=rust-builder /app/target/release/zk-eidas-demo-api /app/api-server
 COPY --from=rust-builder /app/target/release/pre-warm /app/pre-warm
 
+# Pre-generate Longfellow circuit cache (deterministic, ~100MB total)
+# This avoids 2+ min startup delay and 1.6GB RAM spike at runtime.
+RUN mkdir -p /app/circuit-cache && \
+    /app/api-server --generate-circuits /app/circuit-cache
+
 # Copy pre-built proof cache
 COPY demo/api/proof-cache/ /app/proof-cache/
 
