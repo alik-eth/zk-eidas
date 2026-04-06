@@ -46,11 +46,8 @@ function ProposalPage() {
             </div>
           </Link>
           <nav className="flex items-center gap-2 sm:gap-4 flex-wrap justify-end">
-            <Link to="/learn" className="text-xs text-slate-400 hover:text-slate-200 transition-colors font-medium">
-              {t("nav.learn")}
-            </Link>
-            <Link to="/sandbox" className="text-xs text-slate-400 hover:text-slate-200 transition-colors font-medium">
-              {t("nav.demo")}
+            <Link to="/demo" className="text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 px-3.5 py-1.5 rounded-lg transition-colors">
+              {t("nav.contracts")}
             </Link>
             <button
               onClick={() => setLocale(locale === 'en' ? 'uk' : 'en')}
@@ -58,6 +55,15 @@ function ProposalPage() {
             >
               {locale === 'en' ? 'UA' : 'EN'}
             </button>
+            <Link to="/learn" className="text-xs text-slate-400 hover:text-slate-200 transition-colors font-medium">
+              {t("nav.learn")}
+            </Link>
+            <Link to="/verify" className="hidden sm:inline text-xs text-slate-400 hover:text-slate-200 transition-colors font-medium">
+              {t("nav.verify")}
+            </Link>
+            <Link to="/sandbox" className="text-xs text-slate-400 hover:text-slate-200 transition-colors font-medium">
+              {t("nav.demo")}
+            </Link>
           </nav>
         </div>
       </header>

@@ -13,3 +13,7 @@ bindgen = "0.71"
 [dependencies]
 libc = "0.2"
 thiserror = "2"
+
+[[bin]]
+name = "generate-circuits"
+path = "src/bin/generate_circuits.rs"

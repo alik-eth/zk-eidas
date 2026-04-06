@@ -544,6 +544,9 @@ function Landing() {
             <Link to="/learn" className="hover:text-slate-300 transition-colors">
               {t("nav.learn")}
             </Link>
+            <Link to="/proposal" className="hover:text-slate-300 transition-colors">
+              {t("nav.proposal")}
+            </Link>
             <a
               href="https://github.com/alik-eth/zk-eidas"
               target="_blank"
