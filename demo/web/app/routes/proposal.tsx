@@ -23,7 +23,6 @@ function ProposalPage() {
   }, [])
 
   const complianceItems = t("proposal.complianceItems").split('|')
-  const cryptoItems = t("proposal.cryptoItems").split('|')
 
   return (
     <div className="min-h-screen bg-slate-900 text-white">
@@ -103,18 +102,18 @@ function ProposalPage() {
           <div className="bg-slate-800/50 rounded-xl border border-emerald-500/20 p-6 space-y-4">
             <h3 className="text-lg font-semibold text-emerald-400">{t("proposal.service1Title")}</h3>
             <p className="text-sm text-slate-400 leading-relaxed">{t("proposal.service1Desc")}</p>
-            <code className="block bg-slate-900/80 rounded-lg px-4 py-3 text-xs font-mono text-emerald-400">
+            <div className="bg-slate-900/80 rounded-lg px-4 py-3 text-xs text-emerald-400/80">
               {t("proposal.service1Endpoint")}
-            </code>
+            </div>
           </div>
 
           {/* Service 2 */}
           <div className="bg-slate-800/50 rounded-xl border border-blue-500/20 p-6 space-y-4">
             <h3 className="text-lg font-semibold text-blue-400">{t("proposal.service2Title")}</h3>
             <p className="text-sm text-slate-400 leading-relaxed">{t("proposal.service2Desc")}</p>
-            <code className="block bg-slate-900/80 rounded-lg px-4 py-3 text-xs font-mono text-blue-400">
+            <div className="bg-slate-900/80 rounded-lg px-4 py-3 text-xs text-blue-400/80">
               {t("proposal.service2Endpoint")}
-            </code>
+            </div>
           </div>
         </div>
       </section>
@@ -138,13 +137,12 @@ function ProposalPage() {
         <p className="text-sm text-slate-400 leading-relaxed max-w-3xl mb-8">{t("proposal.comparisonSubtitle")}</p>
 
         <div className="overflow-x-auto -mx-4 sm:mx-0">
-          <table className="w-full text-xs sm:text-sm border-collapse min-w-[640px]">
+          <table className="w-full text-xs sm:text-sm border-collapse min-w-[540px]">
             <thead>
               <tr className="border-b border-slate-700">
-                <th className="text-left py-3 px-3 text-slate-500 font-medium w-[180px]"></th>
+                <th className="text-left py-3 px-3 text-slate-500 font-medium w-[200px]"></th>
                 <th className="text-left py-3 px-3 text-slate-400 font-semibold">{t("proposal.col.batch")}</th>
                 <th className="text-left py-3 px-3 text-slate-400 font-semibold">{t("proposal.col.bbs")}</th>
-                <th className="text-left py-3 px-3 text-slate-400 font-semibold">{t("proposal.col.longfellow")}</th>
                 <th className="text-left py-3 px-3 text-emerald-400 font-semibold">{t("proposal.col.zkeidas")}</th>
               </tr>
             </thead>
@@ -162,30 +160,18 @@ function ProposalPage() {
                 ["holderStorage", "storage"],
                 ["revocation", "revocation"],
                 ["proofSize", "size"],
-                ["onchain", "onchain"],
+                ["crossBorder", "crossBorder"],
+                ["auditTrail", "auditTrail"],
               ] as const).map(([rowKey, cellKey]) => (
                 <tr key={rowKey} className="border-b border-slate-800/60 hover:bg-slate-800/30">
                   <td className="py-2.5 px-3 text-slate-400 font-medium">{t(`proposal.row.${rowKey}`)}</td>
                   <td className="py-2.5 px-3 text-slate-500">{t(`proposal.cell.batch.${cellKey}`)}</td>
                   <td className="py-2.5 px-3 text-slate-500">{t(`proposal.cell.bbs.${cellKey}`)}</td>
-                  <td className="py-2.5 px-3 text-slate-500">{t(`proposal.cell.lf.${cellKey}`)}</td>
                   <td className="py-2.5 px-3 text-emerald-400/90">{t(`proposal.cell.zk.${cellKey}`)}</td>
                 </tr>
               ))}
             </tbody>
           </table>
-        </div>
-      </section>
-
-      {/* Cryptographic Primitives */}
-      <section className="max-w-5xl mx-auto px-4 sm:px-8 py-12 border-t border-slate-800">
-        <h2 className="text-2xl sm:text-3xl font-bold mb-6">{t("proposal.cryptoTitle")}</h2>
-        <div className="grid gap-3">
-          {cryptoItems.map((item: string, i: number) => (
-            <div key={i} className="bg-slate-800/50 rounded-xl border border-slate-700/40 px-5 py-3">
-              <span className="text-sm text-slate-400">{item}</span>
-            </div>
-          ))}
         </div>
       </section>
 
