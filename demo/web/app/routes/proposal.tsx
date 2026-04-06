@@ -162,6 +162,7 @@ function ProposalPage() {
                 ["holderStorage", "storage"],
                 ["revocation", "revocation"],
                 ["proofSize", "size"],
+                ["onchain", "onchain"],
               ] as const).map(([rowKey, cellKey]) => (
                 <tr key={rowKey} className="border-b border-slate-800/60 hover:bg-slate-800/30">
                   <td className="py-2.5 px-3 text-slate-400 font-medium">{t(`proposal.row.${rowKey}`)}</td>

@@ -1299,6 +1299,11 @@ const translations: Record<string, Record<Locale, string>> = {
   "proposal.cell.zk.storage": { en: "1 credential", uk: "1 облікові дані" },
   "proposal.cell.zk.revocation": { en: "Revoke 1", uk: "Відкликати 1" },
   "proposal.cell.zk.size": { en: "~360 KB proof + ~1-2 KB QEAA", uk: "~360 КБ доказ + ~1-2 КБ QEAA" },
+  "proposal.row.onchain": { en: "On-chain / smart contract", uk: "On-chain / смарт-контракт" },
+  "proposal.cell.batch.onchain": { en: "Signature check only", uk: "Лише перевірка підпису" },
+  "proposal.cell.bbs.onchain": { en: "Expensive (pairings)", uk: "Дорого (спарювання)" },
+  "proposal.cell.lf.onchain": { en: "Proof blob + off-chain verify", uk: "Блоб доказу + позамережна верифікація" },
+  "proposal.cell.zk.onchain": { en: "QEAA attestation + decentralized arbiter (e.g. Kleros)", uk: "Атестація QEAA + децентралізований арбітр (напр. Kleros)" },
   "proposal.tryDemo": { en: "Try the Live Demo", uk: "Спробувати демо" },
 };
 
