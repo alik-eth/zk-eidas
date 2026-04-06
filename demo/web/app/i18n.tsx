@@ -115,44 +115,6 @@ const translations: Record<string, Record<Locale, string>> = {
   "problem.row5": { en: "Prove facts without raw data (e.g. age \u2265 18)", uk: "Доведення фактів без сирих даних (напр. вік \u2265 18)" },
   "problem.row6": { en: "No changes to existing systems", uk: "Без змін існуючих систем" },
 
-  // ── Solution ─────────────────────────────────────────────────────────
-  "solution.title": {
-    en: "How it works",
-    uk: "Як це працює",
-  },
-  "solution.subtitle": {
-    en: "A privacy layer on top of existing EU credentials. Nothing changes for governments or businesses — only the citizen gets new superpowers.",
-    uk: "Шар приватності поверх існуючих посвідчень ЄС. Нічого не змінюється для урядів чи бізнесу — лише громадянин отримує нові суперсили.",
-  },
-  "solution.step1Title": {
-    en: "Government issues credential",
-    uk: "Держава видає посвідчення",
-  },
-  "solution.step1Desc": {
-    en: "Exactly as today. Standard digital ID, signed the usual way. No changes needed.",
-    uk: "Як і сьогодні. Стандартний цифровий ID, підписаний звичайним чином. Без змін.",
-  },
-  "solution.step1Label": {
-    en: "nothing changes",
-    uk: "нічого не змінюється",
-  },
-  "solution.step2Title": {
-    en: "You create a proof",
-    uk: "Ви створюєте доказ",
-  },
-  "solution.step2Desc": {
-    en: "Your phone wraps the credential in a ZK proof. Only the answer leaves — \"yes, I'm 18+\" — never the actual birthdate.",
-    uk: "Ваш телефон загортає посвідчення в ZK-доказ. Виходить лише відповідь — «так, мені є 18» — ніколи справжня дата народження.",
-  },
-  "solution.step3Title": {
-    en: "Anyone can verify",
-    uk: "Будь-хто може перевірити",
-  },
-  "solution.step3Desc": {
-    en: "Verification takes milliseconds, works offline, and reveals zero personal data. A QR code on paper is enough.",
-    uk: "Верифікація за мілісекунди, працює офлайн і не розкриває жодних персональних даних. QR-коду на папері достатньо.",
-  },
-
   // ── Ukraine ──────────────────────────────────────────────────────────
   "ukraine.title": {
     en: "Built for scale. Proven by Diia.",
@@ -176,76 +138,8 @@ const translations: Record<string, Record<Locale, string>> = {
   "learn.cta": { en: "Try the Playground", uk: "Спробувати пісочницю" },
 
   // TOC
-  "learn.tocProblem": { en: "The Problem", uk: "Проблема" },
-  "learn.tocWhyZk": { en: "Why ZK", uk: "Чому ZK" },
   "learn.tocComparison": { en: "Comparison", uk: "Порівняння" },
-  "learn.tocTrustGap": { en: "Trust Gap", uk: "Прогалина довіри" },
-  "learn.tocHowItWorks": { en: "How It Works", uk: "Як це працює" },
-  "learn.tocCapabilities": { en: "Capabilities", uk: "Можливості" },
-  "learn.tocEscrow": { en: "Escrow", uk: "Ескроу" },
-  "learn.tocAttestation": { en: "Attestation", uk: "Атестація" },
   "learn.tocStandards": { en: "Standards", uk: "Стандарти" },
-  "learn.tocPrivacy": { en: "GDPR", uk: "GDPR" },
-
-  // 1. The eIDAS 2.0 Unlinkability Problem
-  "learn.problemTitle": { en: "The eIDAS 2.0 Unlinkability Problem", uk: "Проблема незв'язуваності eIDAS 2.0" },
-  "learn.problemSubtitle": {
-    en: "Article 5a(16) of the eIDAS 2.0 regulation requires that relying parties cannot link presentations of attributes from the same or different attestations. This is not optional — it is law.",
-    uk: "Стаття 5a(16) регламенту eIDAS 2.0 вимагає, щоб сторони, які покладаються, не могли пов'язувати пред'явлення атрибутів з одних і тих самих або різних атестацій. Це не опція — це закон.",
-  },
-  "learn.problemSubtitleAfterLink": {
-    en: "of the eIDAS 2.0 regulation (EU 2024/1183) requires that relying parties cannot link presentations of attributes from the same or different attestations. This is not optional — it is law.",
-    uk: "регламенту eIDAS 2.0 (EU 2024/1183) вимагає, щоб сторони, які покладаються, не могли пов'язувати пред'явлення атрибутів з одних і тих самих або різних атестацій. Це не опція — це закон.",
-  },
-  "learn.problemSdjwtLabel": { en: "SD-JWT VC Presentation", uk: "Пред'явлення SD-JWT VC" },
-  "learn.problemSdjwtSees": { en: "// every verifier sees:", uk: "// кожен верифікатор бачить:" },
-  "learn.problemSdjwtSig": { en: "same every time", uk: "однаковий кожного разу" },
-  "learn.problemSdjwtCnf": { en: "same every time", uk: "однаковий кожного разу" },
-  "learn.problemSdjwtClaim": { en: "disclosed claim", uk: "розкрите поле" },
-  "learn.problemSdjwtHidden": { en: "hidden claim", uk: "приховане поле" },
-  "learn.problemZkLabel": { en: "zk-eidas Presentation", uk: "Пред'явлення zk-eidas" },
-  "learn.problemZkSees": { en: "// verifier sees:", uk: "// верифікатор бачить:" },
-  "learn.problemZkResult": { en: "boolean result only", uk: "лише булевий результат" },
-  "learn.problemZkSigValid": { en: "verified inside circuit", uk: "перевірено в схемі" },
-  "learn.problemZkNullifier": { en: "unique per service", uk: "унікальний для сервісу" },
-  "learn.problemZkHidden": { en: "never transmitted", uk: "ніколи не передається" },
-  "learn.problemZkSigHidden": { en: "never revealed", uk: "ніколи не розкривається" },
-  "learn.problemSdjwtTitle": { en: "SD-JWT VC Linkability", uk: "Зв'язуваність SD-JWT VC" },
-  "learn.problemSdjwtDesc": {
-    en: "The issuer's ECDSA signature and the cnf (confirmation) key are identical in every presentation. Any two verifiers comparing notes can trivially correlate them to the same holder.",
-    uk: "ECDSA підпис видавця та cnf (підтверджувальний) ключ ідентичні у кожному пред'явленні. Будь-які два верифікатори можуть тривіально скорелювати їх з одним власником.",
-  },
-  "learn.problemBbsTitle": { en: "BBS+ Not SOG-IS Compliant", uk: "BBS+ не відповідає SOG-IS" },
-  "learn.problemBbsDesc": {
-    en: "BBS+ signatures solve unlinkability mathematically. However, BBS+ relies on bilinear pairings — not on the SOG-IS approved algorithms list. The European Commission rejected BBS+ for EUDI Wallets on these grounds.",
-    uk: "Підписи BBS+ вирішують незв'язуваність математично. Проте BBS+ використовує білінійні спарювання — відсутні у переліку схвалених алгоритмів SOG-IS. Європейська Комісія відхилила BBS+ для EUDI Wallets саме з цих підстав.",
-  },
-  "learn.problemBatchTitle": { en: "Batch Issuance Impractical", uk: "Пакетна видача непрактична" },
-  "learn.problemBatchDesc": {
-    en: "Issuing N credential copies with different keys: N-fold storage, per-copy revocation, no selective disclosure, N must be estimated in advance.",
-    uk: "Видача N копій посвідчень з різними ключами: N-кратне зберігання, відкликання по-копійно, без селективного розкриття, N треба оцінити заздалегідь.",
-  },
-  "learn.problemClosing": {
-    en: "The regulation demands unlinkability. The approved formats cannot provide it. This is a structural gap.",
-    uk: "Регламент вимагає незв'язуваності. Затверджені формати не можуть її забезпечити. Це структурна прогалина.",
-  },
-
-  // 2. Why Only ZK Works
-  "learn.whyZkTitle": { en: "Why Only Zero-Knowledge Works", uk: "Чому тільки Zero-Knowledge працює" },
-  "learn.whyZkDesc": {
-    en: "Instead of presenting a credential to a verifier, the holder proves its validity inside a cryptographic circuit. The issuer's signature is verified but never revealed. Each presentation is mathematically unique — unlinkability is a property of the proof system, not an organizational policy.",
-    uk: "Замість пред'явлення посвідчення верифікатору, власник доводить його дійсність всередині криптографічної схеми. Підпис видавця перевіряється, але ніколи не розкривається. Кожне пред'явлення математично унікальне — незв'язуваність є властивістю системи доведення, а не організаційною політикою.",
-  },
-  "learn.whyZkCompleteness": { en: "Completeness", uk: "Повнота" },
-  "learn.whyZkCompletenessDesc": { en: "Valid credentials always produce valid proofs. A legitimate holder is never rejected.", uk: "Дійсні посвідчення завжди створюють дійсні докази. Легітимний власник ніколи не відхиляється." },
-  "learn.whyZkSoundness": { en: "Soundness", uk: "Надійність" },
-  "learn.whyZkSoundnessDesc": { en: "Invalid credentials cannot produce valid proofs. Fabrication is computationally infeasible under standard cryptographic assumptions.", uk: "Недійсні посвідчення не можуть створити дійсні докази. Фабрикація обчислювально нездійсненна за стандартних криптографічних припущень." },
-  "learn.whyZkZeroKnowledge": { en: "Zero Knowledge", uk: "Нуль знань" },
-  "learn.whyZkZeroKnowledgeDesc": { en: "The verifier learns only the boolean predicate result. No claim values, no signature, no metadata.", uk: "Верифікатор дізнається лише булевий результат предиката. Жодних значень полів, підписів, метаданих." },
-  "learn.whyZkClosing": {
-    en: "ZK is the only primitive that provides unlinkability, selective disclosure, and SOG-IS-approved cryptography simultaneously.",
-    uk: "ZK — єдиний примітив, що забезпечує незв'язуваність, селективне розкриття та схвалену SOG-IS криптографію одночасно.",
-  },
 
   // 3. Comparison Table
   "learn.comparisonTitle": { en: "Approach Comparison", uk: "Порівняння підходів" },
@@ -297,252 +191,6 @@ const translations: Record<string, Record<Locale, string>> = {
   "learn.compFootBatch": {
     en: "Batch Issuance: Multiple credential copies with rotating keys. Storage scales linearly with N, revocation becomes per-copy, and N must be predetermined.",
     uk: "Пакетна видача: кілька копій посвідчень з ротацією ключів. Зберігання масштабується лінійно з N, відкликання стає по-копійним, N треба визначити заздалегідь.",
-  },
-
-  // 4. The Trust Gap
-  "learn.trustGapTitle": { en: "The Trust Gap", uk: "Прогалина довіри" },
-  "learn.trustGapSubtitle": {
-    en: "Why zk-eidas is different from other ZK credential systems: ECDSA signature verification happens inside the circuit, not outside.",
-    uk: "Чому zk-eidas відрізняється від інших ZK систем для посвідчень: перевірка підпису ECDSA відбувається всередині схеми, а не ззовні.",
-  },
-  "learn.trustGapTypical": { en: "Most ZK Implementations", uk: "Більшість ZK реалізацій" },
-  "learn.trustGapTyp1": { en: "The issuer's signature is verified externally — outside the ZK circuit.", uk: "Підпис видавця перевіряється зовні — поза ZK схемою." },
-  "learn.trustGapTyp2": { en: "The predicate is proved inside the circuit using self-supplied data.", uk: "Предикат доводиться всередині схеми з використанням самостійно наданих даних." },
-  "learn.trustGapTyp3": { en: "Nothing cryptographically binds the verified signature to the data inside the circuit.", uk: "Ніщо криптографічно не зв'язує перевірений підпис з даними всередині схеми." },
-  "learn.trustGapTyp4": { en: "A holder could fabricate claim values fed into the predicate circuit.", uk: "Власник може сфабрикувати значення полів, подані в схему предиката." },
-  "learn.trustGapTyp5": { en: "\"The proof says age ≥ 18, but from which credential?\"", uk: "\"Доказ каже вік ≥ 18, але з якого посвідчення?\"" },
-  "learn.trustGapZkTitle": { en: "zk-eidas: Full-Chain Verification", uk: "zk-eidas: повноланцюгова верифікація" },
-  "learn.trustGapZk1": { en: "COSE signature verification runs natively inside the Longfellow proving system alongside the predicate.", uk: "Перевірка підпису COSE відбувається нативно всередині системи доведення Longfellow разом з предикатом." },
-  "learn.trustGapZk2": { en: "The prover re-derives the credential digest and checks it against the issuer's COSE_Sign1 payload.", uk: "Довідник повторно обчислює дайджест посвідчення та перевіряє його проти COSE_Sign1 payload видавця." },
-  "learn.trustGapZk3": { en: "Fabrication is computationally infeasible — the proof covers the entire chain:", uk: "Фабрикація обчислювально нездійсненна — доказ покриває весь ланцюг:" },
-  "learn.trustGapChain": { en: "Issuer Signature → Claim Binding → Predicate Logic", uk: "Підпис видавця → Прив'язка поля → Логіка предиката" },
-  "learn.trustGapClosing": {
-    en: "Other ZK systems prove predicates. zk-eidas proves the predicate AND that the data is authentic.",
-    uk: "Інші ZK системи доводять предикати. zk-eidas доводить предикат І те, що дані автентичні.",
-  },
-
-  // 5. How It Works
-  "learn.howTitle": { en: "How It Works", uk: "Як це працює" },
-  "learn.howSubtitle": {
-    en: "From credential to proof in five steps.",
-    uk: "Від посвідчення до доказу за п'ять кроків.",
-  },
-  "learn.howInputLabel": { en: "mdoc", uk: "mdoc" },
-  "learn.howCredential": { en: "Credential", uk: "Посвідчення" },
-  "learn.howParser": { en: "Parser", uk: "Парсер" },
-  "learn.howParserSub": { en: "Claims + Key", uk: "Поля + Ключ" },
-  "learn.howWitness": { en: "Witness", uk: "Свідок" },
-  "learn.howWitnessSub": { en: "Circuit Inputs", uk: "Входи схеми" },
-  "learn.howCircuit": { en: "Circuit", uk: "Схема" },
-  "learn.howCircuitSub": { en: "COSE + Predicate", uk: "COSE + Предикат" },
-  "learn.howProof": { en: "Proof", uk: "Доказ" },
-  "learn.howProofSub": { en: "Sumcheck + Ligero", uk: "Sumcheck + Ligero" },
-  "learn.howVerifier": { en: "Verifier", uk: "Верифікатор" },
-  "learn.howVerifierSub": { en: "Pass / Fail", uk: "Так / Ні" },
-  "learn.howStep1Title": { en: "Parse", uk: "Розбір" },
-  "learn.howStep1Desc": { en: "Extract individual claims and the issuer's public key from the mdoc credential (ISO 18013-5). SD-JWT is not currently supported by Longfellow.", uk: "Витягнути окремі поля та публічний ключ видавця з посвідчення mdoc (ISO 18013-5). SD-JWT наразі не підтримується Longfellow." },
-  "learn.howStep2Title": { en: "Witness", uk: "Свідок" },
-  "learn.howStep2Desc": { en: "Convert claim values to circuit inputs: dates become integers, strings become hashes.", uk: "Конвертувати значення полів у входи схеми: дати стають цілими числами, рядки — хешами." },
-  "learn.howStep3Title": { en: "Circuit", uk: "Схема" },
-  "learn.howStep3Desc": { en: "Verify the COSE signature and evaluate the predicate in a single Longfellow execution.", uk: "Перевірити підпис COSE та обчислити предикат за одне виконання Longfellow." },
-  "learn.howStep4Title": { en: "Prove", uk: "Доведення" },
-  "learn.howStep4Desc": { en: "Generate a Sumcheck+Ligero proof (~3 seconds on server). No trusted setup required.", uk: "Згенерувати Sumcheck+Ligero доказ (~3 секунди на сервері). Довірена ініціалізація не потрібна." },
-  "learn.howStep5Title": { en: "Verify", uk: "Верифікація" },
-  "learn.howStep5Desc": { en: "Check the proof on server (<100ms), or verify the QEAA attestation offline via TSP signature.", uk: "Перевірити доказ на сервері (<100мс), або верифікувати QEAA атестацію офлайн через підпис TSP." },
-  "learn.howMetricSize": { en: "proof size", uk: "розмір доказу" },
-  "learn.howMetricVerify": { en: "verification", uk: "верифікація" },
-  "learn.howMetricOffline": { en: "Offline", uk: "Офлайн" },
-  "learn.howMetricOfflineDesc": { en: "via QEAA attestation", uk: "через QEAA атестацію" },
-  "learn.howMetricDevice": { en: "Server-side", uk: "Серверне" },
-  "learn.howMetricDeviceDesc": { en: "C++ prover, no WASM", uk: "C++ довідник, без WASM" },
-
-  // 6. Capabilities
-  "learn.capabilitiesTitle": { en: "Capabilities", uk: "Можливості" },
-  "learn.capabilitiesSubtitle": {
-    en: "Seven predicate types and four advanced features — all with in-circuit ECDSA signature verification.",
-    uk: "Сім типів предикатів та чотири розширені можливості — всі з перевіркою підпису ECDSA всередині схеми.",
-  },
-  "learn.capType": { en: "Type", uk: "Тип" },
-  "learn.capDescription": { en: "Description", uk: "Опис" },
-  "learn.capExample": { en: "Example", uk: "Приклад" },
-  "learn.capGteDesc": { en: "Greater than or equal", uk: "Більше або дорівнює" },
-  "learn.capLteDesc": { en: "Less than or equal", uk: "Менше або дорівнює" },
-  "learn.capEqDesc": { en: "Equality (hash-based)", uk: "Рівність (на основі хешу)" },
-  "learn.capNeqDesc": { en: "Not equal", uk: "Не дорівнює" },
-  "learn.capRangeDesc": { en: "Value within bounds", uk: "Значення в межах" },
-  "learn.capSetDesc": { en: "One of up to 16 values", uk: "Одне з до 16 значень" },
-  "learn.capNullDesc": { en: "Scoped replay prevention", uk: "Скопована протидія повтору" },
-  "learn.capCompoundTitle": { en: "Compound Predicates", uk: "Складені предикати" },
-  "learn.capCompoundDesc": {
-    en: "Combine multiple predicates with AND/OR logic. Each sub-proof independently verifies its own ECDSA signature.",
-    uk: "Поєднуйте кілька предикатів за допомогою логіки AND/OR. Кожен під-доказ незалежно перевіряє свій ECDSA підпис.",
-  },
-  "learn.capNullifierTitle": { en: "Scoped Nullifiers", uk: "Скоповані нуліфікатори" },
-  "learn.capNullifierDesc": {
-    en: "Deterministic per-service tokens derived from the holder's secret and the verifier's scope. Same credential, different service = different nullifier. Cross-service linking is impossible.",
-    uk: "Детерміновані токени для кожного сервісу, отримані з секрету власника та скопу верифікатора. Одне посвідчення, різні сервіси = різні нуліфікатори. Міжсервісне зв'язування неможливе.",
-  },
-  "learn.capRevocationTitle": { en: "Credential Revocation", uk: "Відкликання посвідчень" },
-  "learn.capRevocationDesc": {
-    en: "Sparse Merkle Tree non-membership proof, verified inside the circuit. The issuer publishes the tree root; the holder proves their credential is not in the revocation set.",
-    uk: "Доказ невключення через розріджене дерево Меркла, перевірений всередині схеми. Видавець публікує корінь дерева; власник доводить, що його посвідчення не у множині відкликаних.",
-  },
-  "learn.capBindingTitle": { en: "Holder Binding", uk: "Прив'язка власника" },
-  "learn.capBindingDesc": {
-    en: "Prove that two credentials (e.g., national ID and driver's license) belong to the same person, without revealing the shared identifier.",
-    uk: "Доведіть, що два посвідчення (напр., національний ID та водійські права) належать одній особі, не розкриваючи спільний ідентифікатор.",
-  },
-  "learn.capNote": {
-    en: "Every predicate circuit includes full ECDSA P-256 signature verification. All proofs are cryptographically bound to authentic credentials.",
-    uk: "Кожна схема предиката включає повну перевірку підпису ECDSA P-256. Всі докази криптографічно прив'язані до автентичних посвідчень.",
-  },
-
-  // 6b. Identity Escrow
-  "learn.escrowTitle": { en: "Identity Escrow for Persistent Documents", uk: "Ідентіті ескроу для постійних документів" },
-  "learn.escrowSubtitle": {
-    en: "ZK proofs remove personal data from documents. But if parties are anonymous \u2014 how do you protect your rights in court? Identity escrow solves this: data is encrypted in the proof, decryption is only possible by a chosen escrow authority per established procedure.",
-    uk: "ZK-докази видаляють персональні дані з документів. Але якщо сторони анонімні \u2014 як захистити свої права в суді? Ідентіті ескроу вирішує це: дані зашифровані в доказі, розшифровка можлива тільки обраним ескроу-органом за встановленою процедурою.",
-  },
-  "learn.escrowHowTitle": { en: "How it works", uk: "Як це працює" },
-  "learn.escrowHowIntro": {
-    en: "At signing, each party:",
-    uk: "При підписанні кожна сторона:",
-  },
-  "learn.escrowStep1": {
-    en: "Packs their data (name, address, document number) into field elements",
-    uk: "Пакує свої дані (ім\u2019я, адреса, номер документа) в елементи поля",
-  },
-  "learn.escrowStep2": {
-    en: "Derives a symmetric key K deterministically from wallet secret and contract hash",
-    uk: "Виводить симетричний ключ K детерміновано з секрету гаманця та хешу контракту",
-  },
-  "learn.escrowStep3": {
-    en: "Generates a single ZK proof that simultaneously: verifies the government credential signature (ECDSA P-256 in-circuit), computes a nullifier binding identity to contract, encrypts credential data with symmetric cipher inside the circuit, commits to key K via hash commitment",
-    uk: "Генерує єдиний ZK-доказ, який одночасно: верифікує підпис державного посвідчення (ECDSA P-256 в схемі), обчислює нуліфікатор, що прив\u2019язує особу до контракту, шифрує дані посвідчення симетричним шифром всередині схеми, комітить ключ K через хеш-комітмент",
-  },
-  "learn.escrowStep4": {
-    en: "Encrypts K under the escrow authority\u2019s ML-KEM-768 key (post-quantum safe, NIST FIPS 203)",
-    uk: "Шифрує K під ML-KEM-768 ключем ескроу-органу (постквантово стійкий, NIST FIPS 203)",
-  },
-  "learn.escrowStep5": {
-    en: "Counterparty verifies the proof and confirms key commitment before co-signing",
-    uk: "Контрагент верифікує доказ і підтверджує комітмент ключа перед підписанням",
-  },
-  "learn.escrowHonestTitle": { en: "Why encryption is honest", uk: "Чому шифрування чесне" },
-  "learn.escrowHonestDesc": {
-    en: "Encryption happens inside the ZK circuit \u2014 the same one that verifies the issuer\u2019s signature. A party cannot encrypt garbage because the proof binds ciphertext to government-signed data. After decryption, the data hash must match the proof\u2019s public output.",
-    uk: "Шифрування відбувається всередині ZK-схеми \u2014 тієї самої, що верифікує підпис видавця. Сторона не може зашифрувати сміття, бо доказ прив\u2019язує шифротекст до даних, підписаних державою. Після розшифровки хеш даних повинен збігатися з публічним виходом доказу.",
-  },
-  "learn.escrowPluggableTitle": { en: "Pluggable escrow authority", uk: "Підключаємий ескроу-орган" },
-  "learn.escrowPluggableDesc": {
-    en: "The escrow authority is a contract parameter \u2014 like jurisdiction or arbitration clause. Both parties agree at signing. In production, the authority\u2019s ML-KEM seed is stored in an HSM with key rotation policy.",
-    uk: "Ескроу-орган \u2014 це параметр контракту, як юрисдикція чи арбітражне застереження. Обидві сторони домовляються при підписанні. У продакшні ML-KEM seed органу зберігається в HSM з політикою ротації ключів.",
-  },
-  "learn.escrowAuthorityCol": { en: "Escrow authority", uk: "Ескроу-орган" },
-  "learn.escrowTriggerCol": { en: "Trigger", uk: "Тригер" },
-  "learn.escrowTrustCol": { en: "Trust model", uk: "Модель довіри" },
-  "learn.escrowNotary": { en: "Notary", uk: "Нотаріус" },
-  "learn.escrowNotaryTrigger": { en: "Court order", uk: "Ухвала суду" },
-  "learn.escrowNotaryTrust": { en: "Notary already stores originals", uk: "Нотаріус вже зберігає оригінали" },
-  "learn.escrowArbitration": { en: "Arbitration (ICC, LCIA)", uk: "Арбітраж (ICC, LCIA)" },
-  "learn.escrowArbitrationTrigger": { en: "Arbitration award", uk: "Арбітражне рішення" },
-  "learn.escrowArbitrationTrust": { en: "Standard commercial practice", uk: "Стандартна комерційна практика" },
-  "learn.escrowRegistry": { en: "State registry (Diia)", uk: "Держреєстр (Дія)" },
-  "learn.escrowRegistryTrigger": { en: "Court order", uk: "Ухвала суду" },
-  "learn.escrowRegistryTrust": { en: "Issuer already has the data \u2014 zero new trust", uk: "Видавець вже має дані \u2014 нуль нової довіри" },
-  "learn.escrowSmartContract": { en: "Smart contract", uk: "Смарт-контракт" },
-  "learn.escrowSmartContractTrigger": { en: "On-chain ruling", uk: "Он-чейн рішення" },
-  "learn.escrowSmartContractTrust": { en: "Decentralized fallback", uk: "Децентралізований фолбек" },
-  "learn.escrowOverhead": {
-    en: "In-circuit encryption adds ~2,500 constraints \u2014 +0.13% over the ~2M base ECDSA constraints. Effectively free.",
-    uk: "Шифрування всередині схеми додає ~2,500 обмежень \u2014 +0.13% до ~2M базових обмежень ECDSA. Фактично безкоштовно.",
-  },
-
-  // Escrow — Offline vs On-Chain
-  "learn.escrowModesTitle": { en: "Offline & On-Chain", uk: "Офлайн та он-чейн" },
-  "learn.escrowOfflineTitle": { en: "Offline (Paper Contracts)", uk: "Офлайн (паперові договори)" },
-  "learn.escrowOffline1": {
-    en: "Proof QR codes printed on paper \u2014 publicly verifiable by any scanner",
-    uk: "QR-коди доказів друкуються на папері \u2014 публічно верифіковані будь-яким сканером",
-  },
-  "learn.escrowOffline2": {
-    en: "Escrow QR stored separately by the escrow authority",
-    uk: "Ескроу QR зберігається окремо ескроу-органом",
-  },
-  "learn.escrowOffline3": {
-    en: "Court order \u2192 authority decrypts \u2192 reveals identity",
-    uk: "Ухвала суду \u2192 орган розшифровує \u2192 розкриває особу",
-  },
-  "learn.escrowOffline4": {
-    en: "The proof and the envelope never travel together",
-    uk: "Доказ і конверт ніколи не подорожують разом",
-  },
-  "learn.escrowOnchainTitle": { en: "On-Chain (Smart Contracts)", uk: "Он-чейн (смарт-контракти)" },
-  "learn.escrowOnchain1": {
-    en: "Full envelope on-chain \u2014 ciphertext + encrypted key published in the transaction",
-    uk: "Повний конверт в ланцюгу \u2014 шифротекст + зашифрований ключ публікуються в транзакції",
-  },
-  "learn.escrowOnchain2": {
-    en: "No dependency on authority storage \u2014 the contract is fully self-contained",
-    uk: "Жодної залежності від сховища органу \u2014 контракт повністю самодостатній",
-  },
-  "learn.escrowOnchain3": {
-    en: "Authority needs only their ML-KEM seed to decrypt \u2014 nothing to store",
-    uk: "Органу потрібен лише ML-KEM seed для розшифровки \u2014 нічого зберігати",
-  },
-  "learn.escrowOnchain4": {
-    en: "Quantum-safe: ML-KEM-768 (NIST FIPS 203) \u2014 no known quantum attack",
-    uk: "Квантово-стійкий: ML-KEM-768 (NIST FIPS 203) \u2014 жодної відомої квантової атаки",
-  },
-
-  // Escrow — Quantum Safety
-  "learn.escrowQuantumTitle": { en: "Post-Quantum Escrow Envelope", uk: "Постквантовий ескроу-конверт" },
-  "learn.escrowQuantumDesc": {
-    en: "The escrow envelope is encrypted with ML-KEM-768 (NIST FIPS 203) \u2014 a lattice-based key encapsulation mechanism resistant to quantum attacks. ECIES on secp256k1 would let a future quantum computer decrypt every published contract retroactively. ML-KEM ensures contracts signed today stay sealed against tomorrow\u2019s quantum computers.",
-    uk: "Ескроу-конверт зашифрований ML-KEM-768 (NIST FIPS 203) \u2014 решітковий механізм інкапсуляції ключів, стійкий до квантових атак. ECIES на secp256k1 дозволив би майбутньому квантовому комп\u2019ютеру розшифрувати кожен опублікований контракт ретроактивно. ML-KEM гарантує, що контракти підписані сьогодні залишаться запечатаними проти квантових комп\u2019ютерів завтрашнього дня.",
-  },
-
-  // Escrow — Architecture
-  "learn.escrowArchTitle": { en: "Architecture", uk: "Архітектура" },
-  "learn.escrowArchCircuit": { en: "Inside ZK Circuit", uk: "Всередині ZK-схеми" },
-  "learn.escrowArchOutside": { en: "Outside Circuit", uk: "Поза схемою" },
-  "learn.escrowArchCircuitItems": {
-    en: "Commitment chain|ECDSA P-256 binding|Poseidon-CTR encrypt|Poseidon(K) commitment",
-    uk: "Ланцюг комітментів|ECDSA P-256 прив\u2019язка|Poseidon-CTR шифрування|Poseidon(K) комітмент",
-  },
-  "learn.escrowArchOutputs": {
-    en: "ciphertexts[]|tags[]|encrypted_key",
-    uk: "ciphertexts[]|tags[]|encrypted_key",
-  },
-  "learn.escrowArchMlkem": { en: "ML-KEM-768 encrypt(K)", uk: "ML-KEM-768 encrypt(K)" },
-
-  // 7b. Proof Attestation
-  "learn.attestTitle": { en: "Proof Attestation (QEAA)", uk: "Атестація доказу (QEAA)" },
-  "learn.attestSubtitle": {
-    en: "A Qualified Trust Service Provider verifies your ZK proof and issues a signed attestation.",
-    uk: "Кваліфікований довірений постачальник перевіряє ваш ZK доказ і видає підписану атестацію.",
-  },
-  "learn.attestWhy": {
-    en: "Longfellow proofs are ~350 KB — too large for a QR code. Instead, a qualified TSP verifies the proof and issues a Qualified Electronic Attestation of Attributes (QEAA). The attestation is ~1-2 KB, fits in a single QR code, and is legally meaningful under eIDAS 2.0.",
-    uk: "Докази Longfellow мають розмір ~350 КБ — занадто великі для QR-коду. Натомість кваліфікований TSP перевіряє доказ і видає Кваліфіковану Електронну Атестацію Атрибутів (QEAA). Атестація має розмір ~1-2 КБ, поміщається в один QR-код і є юридично значущою за eIDAS 2.0.",
-  },
-  "learn.attestFlow": {
-    en: "Holder proves → TSP verifies → TSP signs attestation → QR code with attestation",
-    uk: "Власник доводить → TSP перевіряє → TSP підписує атестацію → QR-код з атестацією",
-  },
-  "learn.attestOffline": {
-    en: "Offline verification works by checking the TSP's signature on the attestation — no need to re-run the ZK proof.",
-    uk: "Офлайн верифікація працює через перевірку підпису TSP на атестації — не потрібно повторно запускати ZK доказ.",
-  },
-  "learn.attestAdvantage": {
-    en: "This is actually stronger than raw proof verification: the attestation carries legal weight as a qualified electronic statement under eIDAS 2.0 Article 45d.",
-    uk: "Це насправді сильніше за перевірку сирого доказу: атестація має юридичну вагу як кваліфіковане електронне твердження за статтею 45d eIDAS 2.0.",
-  },
-
-  // Landing page — quantum callout
-  "paperContracts.quantumSafe": {
-    en: "Quantum-proof encryption: the identity envelope can't be cracked even by future quantum computers (ML-KEM-768, NIST standard).",
-    uk: "Квантовостійке шифрування: конверт особи неможливо зламати навіть майбутніми квантовими комп\u2019ютерами (ML-KEM-768, стандарт NIST).",
   },
 
   // Escrow UI (shared between sandbox and contracts)
@@ -627,190 +275,6 @@ const translations: Record<string, Record<Locale, string>> = {
   "learn.privacyLimitationDesc": { en: "Each proof is scoped to a specific predicate. A verifier cannot repurpose it for other checks.", uk: "Кожен доказ прив'язаний до конкретного предиката. Верифікатор не може використати його для інших перевірок." },
   "learn.privacyStorage": { en: "Zero Storage", uk: "Нуль зберігання" },
   "learn.privacyStorageDesc": { en: "The library stores no personal data. Proofs are transient. Nothing to breach.", uk: "Бібліотека не зберігає персональних даних. Докази тимчасові. Нічого для витоку." },
-
-  // ── Live Proof ─────────────────────────────────────────────────────────
-  "liveProof.title": {
-    en: "Try it right now",
-    uk: "Спробуйте прямо зараз",
-  },
-  "liveProof.subtitle": {
-    en: "Real proof, real verification — running in your browser. Press the button, prove you're 18+, and verify the result. No personal data ever leaves this page.",
-    uk: "Справжній доказ, справжня верифікація — прямо у вашому браузері. Натисніть кнопку, доведіть, що вам є 18, і перевірте результат. Жодних персональних даних.",
-  },
-  "liveProof.scenario": {
-    en: "Prove: age \u2265 18 (from a national ID credential)",
-    uk: "Довести: вік \u2265 18 (з національного ID)",
-  },
-  "liveProof.generate": {
-    en: "Generate ZK Proof",
-    uk: "Згенерувати ZK-доказ",
-  },
-  "liveProof.generating": {
-    en: "Generating proof...",
-    uk: "Генерація доказу...",
-  },
-  "liveProof.verify": {
-    en: "Verify in Your Browser",
-    uk: "Перевірити у вашому браузері",
-  },
-  "liveProof.verifying": {
-    en: "Verifying...",
-    uk: "Перевірка...",
-  },
-  "liveProof.proofGenerated": {
-    en: "Proof generated",
-    uk: "Доказ згенеровано",
-  },
-  "liveProof.verified": {
-    en: "Verified",
-    uk: "Підтверджено",
-  },
-  "liveProof.proveTime": {
-    en: "Prove time",
-    uk: "Час генерації",
-  },
-  "liveProof.verifyTime": {
-    en: "Verify time",
-    uk: "Час перевірки",
-  },
-  "liveProof.proofSize": {
-    en: "Proof size",
-    uk: "Розмір доказу",
-  },
-  "liveProof.serverSide": {
-    en: "server-side",
-    uk: "на сервері",
-  },
-  "liveProof.clientSide": {
-    en: "in your browser",
-    uk: "у вашому браузері",
-  },
-  "liveProof.failed": {
-    en: "Verification failed",
-    uk: "Перевірка не пройшла",
-  },
-  "liveProof.scenario.label": {
-    en: "Scenario",
-    uk: "Сценарій",
-  },
-  "liveProof.reset": {
-    en: "Reset",
-    uk: "Скинути",
-  },
-  "liveProof.transportSize": {
-    en: "Transport",
-    uk: "Транспорт",
-  },
-  "liveProof.printQr": {
-    en: "Print QR",
-    uk: "Друк QR",
-  },
-  "liveProof.sizeComparison": {
-    en: "Your proof compared to:",
-    uk: "Ваш доказ порівняно з:",
-  },
-  "liveProof.yourProof": {
-    en: "Your proof",
-    uk: "Ваш доказ",
-  },
-  "liveProof.sizeNote": {
-    en: "Cryptographic proof of age — smaller than a tweet, scannable from paper",
-    uk: "Криптографічний доказ віку — менший за твіт, зчитується з паперу",
-  },
-
-  // ── Paper Contracts ───────────────────────────────────────────────────
-  "paperContracts.title": {
-    en: "Contracts without personal data",
-    uk: "Контракти без персональних даних",
-  },
-  "paperContracts.subtitle": {
-    en: "Selling a car today means handing your passport data to a stranger. With ZK proofs, the contract proves every condition — age, insurance, ownership — without revealing a single personal detail.",
-    uk: "Продаж авто сьогодні означає передачу паспортних даних незнайомцю. З ZK-доказами контракт доводить кожну умову — вік, страховку, власність — не розкриваючи жодної персональної деталі.",
-  },
-  "paperContracts.todayLabel": {
-    en: "Today's paper contract",
-    uk: "Сьогоднішній паперовий контракт",
-  },
-  "paperContracts.todayItems": {
-    en: "Your full name, address, birthdate — printed for anyone to see|Passport number shared with a stranger|No way to check if claims are true without calling authorities|Your personal data stored in filing cabinets forever",
-    uk: "Ваше ПІБ, адреса, дата народження — надруковані для всіх|Номер паспорта передано незнайомцю|Неможливо перевірити дані без дзвінка в органи|Ваші персональні дані зберігаються у шафах назавжди",
-  },
-  "paperContracts.zkLabel": {
-    en: "With ZK proofs",
-    uk: "З ZK-доказами",
-  },
-  "paperContracts.sellerProved": {
-    en: "Seller is 18+, and is the actual vehicle owner",
-    uk: "Продавець має 18+, і є фактичним власником ТЗ",
-  },
-  "paperContracts.vehicleProved": {
-    en: "Vehicle is insured, VIN is clean",
-    uk: "ТЗ застраховано, VIN чистий",
-  },
-  "paperContracts.buyerProved": {
-    en: "Buyer is 18+",
-    uk: "Покупець має 18+",
-  },
-  "paperContracts.noNames": {
-    en: "All proven. No names, no addresses, no birthdates shared.",
-    uk: "Все доведено. Жодних імен, адрес чи дат народження.",
-  },
-  "paperContracts.escrowLine": {
-    en: "Identity encrypted inside the proof \u2014 only a trusted authority (notary, court, arbitrator) can unlock it",
-    uk: "Особу зашифровано в доказі \u2014 розшифрувати може лише довірений орган (нотаріус, суд, арбітр)",
-  },
-  "paperContracts.courtResolution": {
-    en: "Dispute? Each party's identity is encrypted inside their proof.\nA chosen authority (notary, arbitrator, or court) holds the decryption key.\nOn court order, the authority decrypts \u2014 the claimant learns who the other party is.\nAnonymity is the default. Identification only happens through due process.",
-    uk: "Спір? Особу кожної сторони зашифровано в їхньому доказі.\nОбраний орган (нотаріус, арбітр чи суд) тримає ключ розшифровки.\nЗа рішенням суду орган розшифровує \u2014 позивач дізнається, хто інша сторона.\nАнонімність за замовчуванням. Ідентифікація \u2014 лише за процедурою.",
-  },
-  "paperContracts.qrLabel": {
-    en: "Real QR codes embedding compressed ZK proofs — scannable and verifiable offline",
-    uk: "Справжні QR-коди з компресованими ZK-доказами — скануються та перевіряються офлайн",
-  },
-  "paperContracts.generating": {
-    en: "Generating real proofs for vehicle sale contract...",
-    uk: "Генерація реальних доказів для контракту купівлі-продажу ТЗ...",
-  },
-  "paperContracts.contractType": {
-    en: "Vehicle Sale Contract",
-    uk: "Договір купівлі-продажу ТЗ",
-  },
-  "paperContracts.zkAgreement": {
-    en: "ZK-Verified Agreement",
-    uk: "ZK-верифікований договір",
-  },
-  "paperContracts.cta": {
-    en: "Try the Demo",
-    uk: "Спробувати демо",
-  },
-  "paperContracts.isolationTitle": {
-    en: "Works across all of Europe",
-    uk: "Працює по всій Європі",
-  },
-  "paperContracts.isolationDesc1": {
-    en: "One set of circuits works with every registry in the EU \u2014 civil, vehicle, university, insurance. They don't need to talk to each other. The citizen carries the proof.",
-    uk: "Один набір схем працює з кожним реєстром ЄС \u2014 цивільним, транспортним, університетським, страховим. Їм не потрібно спілкуватися між собою. Громадянин несе доказ.",
-  },
-  "paperContracts.isolationDesc2": {
-    en: "27 countries, 27 IT systems, zero integrations needed. A French citizen proves age to a German authority \u2014 France and Germany exchange nothing.",
-    uk: "27 країн, 27 ІТ-систем, нуль інтеграцій. Французький громадянин доводить вік німецькому відомству \u2014 Франція і Німеччина не обмінюються нічим.",
-  },
-  "paperContracts.isolationRegistry1": {
-    en: "Civil Registry",
-    uk: "Цивільний реєстр",
-  },
-  "paperContracts.isolationCitizen": {
-    en: "Citizen",
-    uk: "Громадянин",
-  },
-  "paperContracts.isolationRegistry2": {
-    en: "Vehicle Registry",
-    uk: "Реєстр ТЗ",
-  },
-  "paperContracts.isolationProofOnly": {
-    en: "only proofs cross",
-    uk: "лише докази",
-  },
 
   // ── Ukraine page ────────────────────────────────────────────────────
   "ua.title": {
@@ -1250,16 +714,6 @@ const translations: Record<string, Record<Locale, string>> = {
     en: "Generate ZK Proof",
     uk: "Згенерувати доказ з НР",
   },
-  // TODO v2: remove after WASM code cleanup
-  "sandbox.generateBrowserBtn": {
-    en: "Prove in Browser (snarkjs)",
-    uk: "Довести у браузері (snarkjs)",
-  },
-  // TODO v2: remove after WASM code cleanup
-  "sandbox.browserHint": {
-    en: "Browser proving requires a lightweight witness endpoint (coming soon). ECDSA signature verification (~2M constraints) runs server-side; only predicate circuits (~300 constraints) can prove in-browser.",
-    uk: "Доведення у браузері потребує легковагий ендпоінт для свідка (незабаром). Верифікація підпису ECDSA (~2M обмежень) виконується на сервері; лише предикатні схеми (~300 обмежень) можуть працювати у браузері.",
-  },
   "sandbox.verifierTitle": {
     en: "Service Provider \u2014 Verification Portal",
     uk: "Постачальник послуг \u2014 Портал верифікації",
@@ -1284,15 +738,7 @@ const translations: Record<string, Record<Locale, string>> = {
     en: "or verify on server, if you\u2019re old school",
     uk: "або перевірити на сервері, якщо ви старої школи",
   },
-  // TODO v2: remove after WASM code cleanup
-  "sandbox.verifyWasm": {
-    en: "Verify right here, in your browser",
-    uk: "Перевірити прямо тут, у вашому браузері",
-  },
-  // TODO v2: remove after WASM code cleanup
-  "sandbox.wasmUnavailable": { en: "WASM Unavailable", uk: "WASM недоступний" },
   "sandbox.verifyingShort": { en: "Verifying...", uk: "Перевірка..." },
-  // TODO v2: remove after WASM code cleanup
   "sandbox.autoVerifying": { en: "Verifying proof...", uk: "Верифікація доказу..." },
   "sandbox.verificationResults": {
     en: "Verification Results",
@@ -1305,16 +751,6 @@ const translations: Record<string, Record<Locale, string>> = {
   "sandbox.verifiedServerTooltip": {
     en: "Proof verified on the server using Longfellow (Sumcheck+Ligero). No trusted setup required.",
     uk: "Доказ перевірено на сервері за допомогою Longfellow (Sumcheck+Ligero). Довірена ініціалізація не потрібна.",
-  },
-  // TODO v2: remove after WASM code cleanup
-  "sandbox.verifiedWasm": {
-    en: "Verified client-side (WASM)",
-    uk: "Перевірено на клієнті (WASM)",
-  },
-  // TODO v2: remove after WASM code cleanup
-  "sandbox.verifiedWasmTooltip": {
-    en: "Proof verified entirely in your browser using WebAssembly. No data sent to any server.",
-    uk: "Доказ перевірено повністю у вашому браузері за допомогою WebAssembly. Дані не відправлено на жоден сервер.",
   },
   "sandbox.verified": { en: "Verified", uk: "Перевірено" },
   "sandbox.notDisclosed": { en: "Not Disclosed", uk: "Не розкрито" },
@@ -1373,20 +809,6 @@ const translations: Record<string, Record<Locale, string>> = {
     en: "Only the proven facts. Everything else is invisible.",
     uk: "Лише доведені факти. Все інше невидиме.",
   },
-  // TODO v2: remove after WASM code cleanup
-  "sandbox.zkProfileToggle": {
-    en: "\u25B6 Show WASM execution profile",
-    uk: "\u25B6 Показати профіль виконання WASM",
-  },
-  "sandbox.zkProfileVk": { en: "VK decode", uk: "Декодування VK" },
-  "sandbox.zkProfileParse": { en: "Proof parse", uk: "Парсинг доказу" },
-  "sandbox.zkProfileInit": { en: "WASM engine", uk: "рушій WASM" },
-  "sandbox.zkProfileVerify": { en: "Pairing check", uk: "Перевірка пейрингу" },
-  "sandbox.zkProfileTotal": { en: "Total", uk: "Загалом" },
-  "sandbox.zkProfileProof": { en: "Proof", uk: "Доказ" },
-  "sandbox.zkProfileWasmInit": { en: "WASM initialization (once per page load)", uk: "Ініціалізація WASM (раз за завантаження сторінки)" },
-  "sandbox.zkProfileJsImport": { en: "JS module load", uk: "Завантаження JS" },
-  "sandbox.zkProfileWasmBoot": { en: "WASM + CRS init", uk: "WASM + CRS ініц." },
   "sandbox.proofExport": { en: "Proof Export", uk: "Експорт доказу" },
   "sandbox.cborTooltip": {
     en: "Concise Binary Object Representation. A compact binary format for portable proof envelopes.",
@@ -1460,19 +882,6 @@ const translations: Record<string, Record<Locale, string>> = {
   "sandbox.presReqValue": { en: "Value", uk: "Значення" },
   "sandbox.presReqEmpty": { en: "Add at least one requirement", uk: "Додайте хоча б одну вимогу" },
   "sandbox.startOver": { en: "Start Over", uk: "Почати спочатку" },
-
-  // TODO v2: remove entire on-device proving section after WASM code cleanup
-  "prove.cachingZkey": { en: "Caching zkey sections...", uk: "Кешування секцій zkey..." },
-  "prove.downloadingChunk": { en: "Downloading chunk", uk: "Завантаження фрагменту" },
-  "prove.cachedChunk": { en: "Cached", uk: "Збережено" },
-  "prove.loadingWasm": { en: "Loading WASM module...", uk: "Завантаження WASM модуля..." },
-  "prove.parsingClaim": { en: "Parsing claim on device...", uk: "Обробка атрибуту на пристрої..." },
-  "prove.ecdsaProof": { en: "ECDSA proof (1.2 GB download on first run)...", uk: "ECDSA доказ (1.2 ГБ завантаження при першому запуску)..." },
-  "prove.downloadingWasm": { en: "Downloading WASM...", uk: "Завантаження WASM..." },
-  "prove.generatingProof": { en: "Generating proof...", uk: "Генерація доказу..." },
-  "prove.verifyingProof": { en: "Verifying proof...", uk: "Верифікація доказу..." },
-  "prove.predicate": { en: "Predicate", uk: "Предикат" },
-  "prove.allDone": { en: "All proofs generated in", uk: "Усі докази згенеровано за" },
 
   // ── Credential showcase (landing) ────────────────────────────────────────
   "cred.pid": { en: "Personal Identification Data", uk: "Персональні ідентифікаційні дані" },
@@ -1551,17 +960,10 @@ const translations: Record<string, Record<Locale, string>> = {
     uk: "або натисніть для вибору",
   },
   "verify.proofEnvelope": { en: "Proof Envelope", uk: "Конверт доказу" },
-  // TODO v2: remove after WASM code cleanup
   "verify.verifyAllWasm": {
     en: "Verify All",
     uk: "Перевірити все",
   },
-  // TODO v2: remove after WASM code cleanup
-  "verify.initWasm": {
-    en: "Initializing...",
-    uk: "Ініціалізація...",
-  },
-  // TODO v2: remove after WASM code cleanup
   "verify.verifyingBrowser": {
     en: "Verifying...",
     uk: "Перевірка...",
