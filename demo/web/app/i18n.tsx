@@ -793,7 +793,7 @@ const translations: Record<string, Record<Locale, string>> = {
   },
   "ua.wartime1": { en: "Paper backward compatibility — QR code on A4, works without internet", uk: "Зворотна сумісність з папером — QR-код на А4, працює без інтернету" },
   "ua.wartime2": { en: "Infrastructure resilience — documents work when registries are offline", uk: "Стійкість інфраструктури — документи працюють коли реєстри офлайн" },
-  "ua.wartime3": { en: "No server dependency — proof generated and verified on device", uk: "Без залежності від сервера — доказ генерується та перевіряється на пристрої" },
+  "ua.wartime3": { en: "Proof attestation works offline — QEAA verified by checking the TSP signature", uk: "Атестація доказу працює офлайн — QEAA перевіряється перевіркою підпису TSP" },
   "ua.back": { en: "\u2190 Back", uk: "\u2190 Назад" },
   "nav.ukraine": { en: "Ukraine", uk: "Україна" },
 
@@ -1130,10 +1130,12 @@ const translations: Record<string, Record<Locale, string>> = {
     en: "Generate ZK Proof",
     uk: "Згенерувати доказ з НР",
   },
+  // TODO v2: remove after WASM code cleanup
   "sandbox.generateBrowserBtn": {
     en: "Prove in Browser (snarkjs)",
     uk: "Довести у браузері (snarkjs)",
   },
+  // TODO v2: remove after WASM code cleanup
   "sandbox.browserHint": {
     en: "Browser proving requires a lightweight witness endpoint (coming soon). ECDSA signature verification (~2M constraints) runs server-side; only predicate circuits (~300 constraints) can prove in-browser.",
     uk: "Доведення у браузері потребує легковагий ендпоінт для свідка (незабаром). Верифікація підпису ECDSA (~2M обмежень) виконується на сервері; лише предикатні схеми (~300 обмежень) можуть працювати у браузері.",
@@ -1162,12 +1164,15 @@ const translations: Record<string, Record<Locale, string>> = {
     en: "or verify on server, if you\u2019re old school",
     uk: "або перевірити на сервері, якщо ви старої школи",
   },
+  // TODO v2: remove after WASM code cleanup
   "sandbox.verifyWasm": {
     en: "Verify right here, in your browser",
     uk: "Перевірити прямо тут, у вашому браузері",
   },
+  // TODO v2: remove after WASM code cleanup
   "sandbox.wasmUnavailable": { en: "WASM Unavailable", uk: "WASM недоступний" },
   "sandbox.verifyingShort": { en: "Verifying...", uk: "Перевірка..." },
+  // TODO v2: remove after WASM code cleanup
   "sandbox.autoVerifying": { en: "Verifying proof in your browser...", uk: "Верифікація доказу у вашому браузері..." },
   "sandbox.verificationResults": {
     en: "Verification Results",
@@ -1181,10 +1186,12 @@ const translations: Record<string, Record<Locale, string>> = {
     en: "Proof verified on the server using Longfellow (Sumcheck+Ligero). No trusted setup required.",
     uk: "Доказ перевірено на сервері за допомогою Longfellow (Sumcheck+Ligero). Довірена ініціалізація не потрібна.",
   },
+  // TODO v2: remove after WASM code cleanup
   "sandbox.verifiedWasm": {
     en: "Verified client-side (WASM)",
     uk: "Перевірено на клієнті (WASM)",
   },
+  // TODO v2: remove after WASM code cleanup
   "sandbox.verifiedWasmTooltip": {
     en: "Proof verified entirely in your browser using WebAssembly. No data sent to any server.",
     uk: "Доказ перевірено повністю у вашому браузері за допомогою WebAssembly. Дані не відправлено на жоден сервер.",
@@ -1246,6 +1253,7 @@ const translations: Record<string, Record<Locale, string>> = {
     en: "Only the proven facts. Everything else is invisible.",
     uk: "Лише доведені факти. Все інше невидиме.",
   },
+  // TODO v2: remove after WASM code cleanup
   "sandbox.zkProfileToggle": {
     en: "\u25B6 Show WASM execution profile",
     uk: "\u25B6 Показати профіль виконання WASM",
@@ -1333,7 +1341,7 @@ const translations: Record<string, Record<Locale, string>> = {
   "sandbox.presReqEmpty": { en: "Add at least one requirement", uk: "Додайте хоча б одну вимогу" },
   "sandbox.startOver": { en: "Start Over", uk: "Почати спочатку" },
 
-  // ── On-device proving progress ──────────────────────────────────────────
+  // TODO v2: remove entire on-device proving section after WASM code cleanup
   "prove.cachingZkey": { en: "Caching zkey sections...", uk: "Кешування секцій zkey..." },
   "prove.downloadingChunk": { en: "Downloading chunk", uk: "Завантаження фрагменту" },
   "prove.cachedChunk": { en: "Cached", uk: "Збережено" },
