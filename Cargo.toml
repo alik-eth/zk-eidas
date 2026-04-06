@@ -2,32 +2,24 @@
 resolver = "2"
 members = [
     "crates/zk-eidas-types",
-    "crates/zk-eidas-parser",
     "crates/zk-eidas-mdoc",
-    "crates/zk-eidas-prover",
-    "crates/zk-eidas-verifier",
     "crates/zk-eidas-utils",
     "crates/zk-eidas",
-    "crates/zk-eidas-wasm",
+    "crates/longfellow-sys",
     "crates/cbor-print",
     "demo/api",
-    "tools/vk-extract",
 ]
 
 [workspace.package]
-version = "0.1.0"
+version = "2.0.0"
 edition = "2021"
 license = "Apache-2.0"
 repository = "https://github.com/alik-eth/zk-eidas"
 
 [workspace.dependencies]
 zk-eidas-types = { path = "crates/zk-eidas-types" }
-zk-eidas-parser = { path = "crates/zk-eidas-parser" }
-zk-eidas-prover = { path = "crates/zk-eidas-prover" }
-zk-eidas-verifier = { path = "crates/zk-eidas-verifier" }
 zk-eidas-mdoc = { path = "crates/zk-eidas-mdoc" }
 zk-eidas-utils = { path = "crates/zk-eidas-utils" }
-zk-eidas-wasm = { path = "crates/zk-eidas-wasm" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 thiserror = "2"

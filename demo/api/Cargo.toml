@@ -4,12 +4,12 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-zk-eidas = { path = "../../crates/zk-eidas" }
-zk-eidas-parser = { path = "../../crates/zk-eidas-parser" }
+# zk-eidas facade removed on longfellow branch (pulls in rapidsnark via prover)
 zk-eidas-types = { path = "../../crates/zk-eidas-types" }
 zk-eidas-mdoc = { path = "../../crates/zk-eidas-mdoc" }
 zk-eidas-utils = { path = "../../crates/zk-eidas-utils" }
-zk-eidas-prover = { path = "../../crates/zk-eidas-prover" }
+# zk-eidas-prover removed on longfellow branch (replaced by longfellow-sys)
+longfellow-sys = { path = "../../crates/longfellow-sys" }
 axum = "0.8"
 tokio = { version = "1", features = ["full"] }
 serde = { version = "1", features = ["derive"] }
@@ -20,7 +20,12 @@ base64 = "0.22"
 reqwest = { version = "0.12", features = ["json"] }
 libc = "0.2"
 sha2 = "0.10"
+aes-gcm = "0.10"
 rand = "0.8"
+num-bigint = "0.4"
+ml-kem = { version = "0.3.0-rc.1", features = ["getrandom"] }
+p256 = { version = "0.13", features = ["ecdsa", "ecdsa-core"] }
+chrono = "0.4"
 
 [[bin]]
 name = "pre-warm"

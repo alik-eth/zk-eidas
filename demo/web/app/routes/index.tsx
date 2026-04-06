@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useT, useLocale } from "../i18n";
 
 export const Route = createFileRoute("/")({
@@ -44,7 +44,7 @@ const PROFILES: Profile[] = [
   {
     country: "Ukraine",
     docTypeKey: "cred.pid",
-    format: "SD-JWT VC",
+    format: "mdoc",
     flag: ["#005BBB", "#FFD500"],
     flagDir: "col",
     fields: [
@@ -72,7 +72,7 @@ const PROFILES: Profile[] = [
   {
     country: "France",
     docTypeKey: "cred.diploma",
-    format: "SD-JWT VC",
+    format: "mdoc",
     flag: ["#002395", "#FFFFFF", "#ED2939"],
     flagDir: "row",
     fields: [
@@ -347,817 +347,61 @@ function CredentialShowcase() {
   );
 }
 
-/* === Section: The Unlinkability Gap === */
+/* === Section: Dilemma === */
 
-type CellVal = boolean | "partial";
-const COMPARISON_DATA: { rowKey: string; sdjwt: CellVal; bbs: CellVal; batch: CellVal; zk: CellVal }[] = [
-  { rowKey: "problem.row1", sdjwt: true, bbs: false, batch: true, zk: true },
-  { rowKey: "problem.row2", sdjwt: true, bbs: false, batch: true, zk: "partial" },
-  { rowKey: "problem.row3", sdjwt: false, bbs: true, batch: false, zk: true },
-  { rowKey: "problem.row4", sdjwt: true, bbs: true, batch: "partial", zk: true },
-  { rowKey: "problem.row5", sdjwt: false, bbs: false, batch: false, zk: true },
-  { rowKey: "problem.row6", sdjwt: true, bbs: false, batch: false, zk: "partial" },
-];
-
-function CheckIcon() {
-  return (
-    <svg className="w-4 h-4 text-emerald-400 mx-auto" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round">
-      <polyline points="20 6 9 17 4 12" />
-    </svg>
-  );
-}
-
-function CrossIcon() {
-  return (
-    <svg className="w-4 h-4 text-red-400/70 mx-auto" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
-      <line x1="18" y1="6" x2="6" y2="18" />
-      <line x1="6" y1="6" x2="18" y2="18" />
-    </svg>
-  );
-}
-
-function CellValue({ value }: { value: boolean | "partial" }) {
-  if (value === "partial") return <span className="text-[10px] text-yellow-500/70 font-medium">partial</span>;
-  return value ? <CheckIcon /> : <CrossIcon />;
-}
-
-function ProblemSection() {
+function DilemmaSection() {
   const t = useT();
-  const headers = ["problem.sdjwt", "problem.bbs", "problem.batch", "problem.zk"] as const;
+  const cards = [
+    { title: t("dilemma.gapTitle"), desc: t("dilemma.gapDesc"), color: "text-amber-400", border: "border-amber-500/20" },
+    { title: t("dilemma.promiseTitle"), desc: t("dilemma.promiseDesc"), color: "text-blue-400", border: "border-blue-500/20" },
+    { title: t("dilemma.centralTitle"), desc: t("dilemma.centralDesc"), color: "text-red-400", border: "border-red-500/20" },
+    { title: t("dilemma.web3Title"), desc: t("dilemma.web3Desc"), color: "text-purple-400", border: "border-purple-500/20" },
+  ];
 
   return (
     <section className="max-w-5xl mx-auto px-4 sm:px-8 py-16 sm:py-20 border-t border-slate-800">
-      <h3 className="text-2xl sm:text-3xl font-bold text-center mb-3">
-        {t("problem.title")}
-      </h3>
-      <p className="text-sm text-slate-400 text-center mb-12 max-w-3xl mx-auto leading-relaxed">
-        {t("problem.subtitle")}
-      </p>
-
-      <div className="max-w-4xl mx-auto overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-slate-700/40">
-              <th className="text-left py-3 px-3 text-xs text-slate-500 font-medium uppercase tracking-wider">
-                {t("problem.criterion")}
-              </th>
-              {headers.map((h) => (
-                <th
-                  key={h}
-                  className={`py-3 px-3 text-xs font-medium uppercase tracking-wider text-center ${
-                    h === "problem.zk"
-                      ? "text-emerald-400 bg-emerald-950/20 border-x border-emerald-500/30"
-                      : "text-slate-500"
-                  }`}
-                >
-                  {t(h)}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {COMPARISON_DATA.map((row, i) => (
-              <tr key={row.rowKey} className={i < COMPARISON_DATA.length - 1 ? "border-b border-slate-800/60" : ""}>
-                <td className="py-3 px-3 text-slate-300 text-xs sm:text-sm">{t(row.rowKey)}</td>
-                <td className="py-3 px-3 text-center"><CellValue value={row.sdjwt} /></td>
-                <td className="py-3 px-3 text-center"><CellValue value={row.bbs} /></td>
-                <td className="py-3 px-3 text-center"><CellValue value={row.batch} /></td>
-                <td className="py-3 px-3 text-center bg-emerald-950/20 border-x border-emerald-500/30">
-                  <CellValue value={row.zk} />
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+      <h2 className="text-2xl sm:text-3xl font-bold mb-8">{t("dilemma.title")}</h2>
+      <div className="grid md:grid-cols-2 gap-6">
+        {cards.map((card, i) => (
+          <div key={i} className={`bg-slate-800/50 rounded-xl border ${card.border} p-6 space-y-3`}>
+            <h3 className={`text-lg font-semibold ${card.color}`}>{card.title}</h3>
+            <p className="text-sm text-slate-400 leading-relaxed">{card.desc}</p>
+          </div>
+        ))}
       </div>
     </section>
   );
 }
 
-/* === Section: Solution Pipeline === */
+/* === Section: Proposal Brief === */
 
-function SolutionSteps() {
+function ProposalBrief() {
   const t = useT();
-
   return (
     <section className="max-w-5xl mx-auto px-4 sm:px-8 py-16 sm:py-20 border-t border-slate-800">
-      <h3 className="text-2xl sm:text-3xl font-bold text-center mb-3">
-        {t("solution.title")}
-      </h3>
-      <p className="text-sm text-slate-400 text-center mb-14 max-w-2xl mx-auto">
-        {t("solution.subtitle")}
-      </p>
-
-      {/* Pipeline: three nodes connected by dashed lines */}
-      <div className="max-w-4xl mx-auto">
-        {/* Desktop: horizontal pipeline */}
-        <div className="hidden md:grid grid-cols-[1fr_auto_1fr_auto_1fr] items-center gap-0">
-          {/* Node 1: Issuer */}
-          <div className="relative group">
-            <div className="absolute -inset-px rounded-xl bg-gradient-to-b from-blue-500/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
-            <div className="relative bg-slate-900/80 rounded-xl border border-slate-700/40 p-5">
-              <div className="flex items-center gap-3 mb-3">
-                <div className="w-8 h-8 rounded-lg bg-blue-500/10 border border-blue-500/30 flex items-center justify-center shrink-0">
-                  <span className="text-[10px] font-bold text-blue-400 tracking-wider">ES256</span>
-                </div>
-                <div>
-                  <p className="text-sm font-semibold text-white leading-tight">{t("solution.step1Title")}</p>
-                  <p className="text-[10px] text-slate-500 uppercase tracking-widest">{t("solution.step1Label")}</p>
-                </div>
-              </div>
-              <p className="text-xs text-slate-400 leading-relaxed">{t("solution.step1Desc")}</p>
-            </div>
-          </div>
-
-          {/* Connector 1→2 */}
-          <div className="flex items-center px-1">
-            <div className="w-8 border-t border-dashed border-slate-600" />
-            <svg className="w-3 h-3 text-slate-600 -ml-0.5 shrink-0" viewBox="0 0 12 12" fill="currentColor">
-              <path d="M2 1l8 5-8 5z" />
-            </svg>
-          </div>
-
-          {/* Node 2: Prover */}
-          <div className="relative group">
-            <div className="absolute -inset-px rounded-xl bg-gradient-to-b from-yellow-500/15 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
-            <div className="relative bg-slate-900/80 rounded-xl border border-slate-700/40 p-5">
-              <div className="flex items-center gap-3 mb-3">
-                <div className="w-8 h-8 rounded-lg bg-yellow-500/10 border border-yellow-500/30 flex items-center justify-center shrink-0">
-                  <svg className="w-4 h-4 text-yellow-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-                    <rect x="3" y="11" width="18" height="11" rx="2" />
-                    <path d="M7 11V7a5 5 0 0 1 10 0v4" />
-                  </svg>
-                </div>
-                <p className="text-sm font-semibold text-white leading-tight">{t("solution.step2Title")}</p>
-              </div>
-              <p className="text-xs text-slate-400 leading-relaxed">{t("solution.step2Desc")}</p>
-              <div className="mt-3 flex items-center gap-1.5">
-                <div className="w-1.5 h-1.5 rounded-full bg-yellow-500/50" />
-                <span className="text-[10px] font-mono text-slate-500">ECDSA P-256 in-circuit</span>
-              </div>
-            </div>
-          </div>
-
-          {/* Connector 2→3 */}
-          <div className="flex items-center px-1">
-            <div className="w-8 border-t border-dashed border-slate-600" />
-            <svg className="w-3 h-3 text-slate-600 -ml-0.5 shrink-0" viewBox="0 0 12 12" fill="currentColor">
-              <path d="M2 1l8 5-8 5z" />
-            </svg>
-          </div>
-
-          {/* Node 3: Verifier */}
-          <div className="relative group">
-            <div className="absolute -inset-px rounded-xl bg-gradient-to-b from-emerald-500/15 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
-            <div className="relative bg-slate-900/80 rounded-xl border border-emerald-500/20 p-5">
-              <div className="flex items-center gap-3 mb-3">
-                <div className="w-8 h-8 rounded-lg bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center shrink-0">
-                  <svg className="w-4 h-4 text-emerald-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
-                    <polyline points="20 6 9 17 4 12" />
-                  </svg>
-                </div>
-                <p className="text-sm font-semibold text-white leading-tight">{t("solution.step3Title")}</p>
-              </div>
-              <p className="text-xs text-slate-400 leading-relaxed">{t("solution.step3Desc")}</p>
-              <div className="mt-3 flex items-center gap-1.5">
-                <div className="w-1.5 h-1.5 rounded-full bg-emerald-500/50" />
-                <span className="text-[10px] font-mono text-emerald-400/60">Groth16 · WASM · offline</span>
-              </div>
-            </div>
-          </div>
+      <h2 className="text-2xl sm:text-3xl font-bold mb-8">{t("rootProposal.title")}</h2>
+      <div className="grid md:grid-cols-2 gap-6">
+        <div className="bg-slate-800/50 rounded-xl border border-emerald-500/20 p-6 space-y-3">
+          <h3 className="text-lg font-semibold text-emerald-400">{t("proposal.service1Title")}</h3>
+          <p className="text-sm text-slate-400 leading-relaxed">{t("rootProposal.attestDesc")}</p>
         </div>
-
-        {/* Mobile: vertical pipeline */}
-        <div className="md:hidden space-y-0">
-          {/* Node 1 */}
-          <div className="bg-slate-900/80 rounded-t-xl border border-slate-700/40 p-5">
-            <div className="flex items-center gap-3 mb-2">
-              <div className="w-7 h-7 rounded-lg bg-blue-500/10 border border-blue-500/30 flex items-center justify-center shrink-0">
-                <span className="text-[8px] font-bold text-blue-400">ES256</span>
-              </div>
-              <div>
-                <p className="text-sm font-semibold text-white">{t("solution.step1Title")}</p>
-                <p className="text-[10px] text-slate-500 uppercase tracking-widest">{t("solution.step1Label")}</p>
-              </div>
-            </div>
-            <p className="text-xs text-slate-400 leading-relaxed">{t("solution.step1Desc")}</p>
-          </div>
-          {/* Vertical connector */}
-          <div className="flex justify-center">
-            <div className="h-5 border-l border-dashed border-slate-600" />
-          </div>
-          {/* Node 2 */}
-          <div className="bg-slate-900/80 border border-slate-700/40 p-5">
-            <div className="flex items-center gap-3 mb-2">
-              <div className="w-7 h-7 rounded-lg bg-yellow-500/10 border border-yellow-500/30 flex items-center justify-center shrink-0">
-                <svg className="w-3.5 h-3.5 text-yellow-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-                  <rect x="3" y="11" width="18" height="11" rx="2" />
-                  <path d="M7 11V7a5 5 0 0 1 10 0v4" />
-                </svg>
-              </div>
-              <p className="text-sm font-semibold text-white">{t("solution.step2Title")}</p>
-            </div>
-            <p className="text-xs text-slate-400 leading-relaxed">{t("solution.step2Desc")}</p>
-          </div>
-          {/* Vertical connector */}
-          <div className="flex justify-center">
-            <div className="h-5 border-l border-dashed border-slate-600" />
-          </div>
-          {/* Node 3 */}
-          <div className="bg-slate-900/80 rounded-b-xl border border-emerald-500/20 p-5">
-            <div className="flex items-center gap-3 mb-2">
-              <div className="w-7 h-7 rounded-lg bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center shrink-0">
-                <svg className="w-3.5 h-3.5 text-emerald-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
-                  <polyline points="20 6 9 17 4 12" />
-                </svg>
-              </div>
-              <p className="text-sm font-semibold text-white">{t("solution.step3Title")}</p>
-            </div>
-            <p className="text-xs text-slate-400 leading-relaxed">{t("solution.step3Desc")}</p>
-          </div>
+        <div className="bg-slate-800/50 rounded-xl border border-blue-500/20 p-6 space-y-3">
+          <h3 className="text-lg font-semibold text-blue-400">{t("proposal.service2Title")}</h3>
+          <p className="text-sm text-slate-400 leading-relaxed">{t("rootProposal.escrowDesc")}</p>
         </div>
       </div>
-    </section>
-  );
-}
-
-/* === Section 3: Live Proof === */
-
-const API_URL =
-  typeof window !== "undefined" && window.location.hostname === "localhost"
-    ? "http://localhost:3001"
-    : "";
-
-type LiveProofPhase = "idle" | "proving" | "proved" | "verifying" | "verified" | "error";
-
-function ProofQrComparison({
-  compressedCborRef,
-  compressedSizeBytes,
-  qrDataUrl,
-  setQrDataUrl,
-  t,
-}: {
-  compressedCborRef: React.RefObject<string | null>;
-  compressedSizeBytes: number;
-  qrDataUrl: string | null;
-  setQrDataUrl: (url: string | null) => void;
-  t: (key: string) => string;
-}) {
-  useEffect(() => {
-    if (!compressedCborRef.current) return;
-    (async () => {
-      try {
-        const { encodeProofChunks, LogicalOpFlag } = await import("../lib/qr-chunking");
-        const QRCode = (await import("qrcode")).default;
-        const compressed = Uint8Array.from(
-          atob(compressedCborRef.current!),
-          (c) => c.charCodeAt(0),
-        );
-        const chunks = encodeProofChunks(compressed, 1, 0, 1, LogicalOpFlag.Single);
-        const url = await QRCode.toDataURL(
-          [{ data: chunks[0], mode: "byte" as const }],
-          { errorCorrectionLevel: "L", margin: 1, width: 120 },
-        );
-        setQrDataUrl(url);
-      } catch {
-        // silently fail
-      }
-    })();
-  }, [compressedCborRef, setQrDataUrl]);
-
-  const sms = 160;
-  const tweet = 280;
-
-  return (
-    <div className="bg-slate-900/50 rounded-lg p-4 space-y-3">
-      <div className="flex items-start gap-4">
-        {/* QR code */}
-        <div className="flex-shrink-0">
-          {qrDataUrl ? (
-            <img src={qrDataUrl} alt="Proof QR" className="w-[80px] h-[80px] rounded" />
-          ) : (
-            <div className="w-[80px] h-[80px] bg-slate-800 rounded animate-pulse" />
-          )}
-        </div>
-        {/* Size comparisons */}
-        <div className="flex-1 space-y-2">
-          <p className="text-xs text-slate-400 font-medium">{t("liveProof.sizeComparison")}</p>
-          {/* SMS bar */}
-          <div className="space-y-1">
-            <div className="flex items-center justify-between text-[10px]">
-              <span className="text-slate-500">SMS</span>
-              <span className="text-slate-500 font-mono">{sms} B</span>
-            </div>
-            <div className="h-1.5 bg-slate-800 rounded-full overflow-hidden">
-              <div className="h-full bg-slate-600 rounded-full" style={{ width: `${Math.min(100, (sms / compressedSizeBytes) * 100)}%` }} />
-            </div>
-          </div>
-          {/* Tweet bar */}
-          <div className="space-y-1">
-            <div className="flex items-center justify-between text-[10px]">
-              <span className="text-slate-500">Tweet</span>
-              <span className="text-slate-500 font-mono">{tweet} B</span>
-            </div>
-            <div className="h-1.5 bg-slate-800 rounded-full overflow-hidden">
-              <div className="h-full bg-slate-600 rounded-full" style={{ width: `${Math.min(100, (tweet / compressedSizeBytes) * 100)}%` }} />
-            </div>
-          </div>
-          {/* Proof bar */}
-          <div className="space-y-1">
-            <div className="flex items-center justify-between text-[10px]">
-              <span className="text-emerald-400 font-medium">{t("liveProof.yourProof")}</span>
-              <span className="text-emerald-400 font-mono font-bold">
-                {compressedSizeBytes > 1024
-                  ? `${(compressedSizeBytes / 1024).toFixed(1)} KB`
-                  : `${compressedSizeBytes} B`}
-              </span>
-            </div>
-            <div className="h-1.5 bg-slate-800 rounded-full overflow-hidden">
-              <div className="h-full bg-emerald-500 rounded-full" style={{ width: "100%" }} />
-            </div>
-          </div>
-        </div>
-      </div>
-      <p className="text-[10px] text-slate-600 text-center">
-        {t("liveProof.sizeNote")}
-      </p>
-    </div>
-  );
-}
-
-function LiveProofSection() {
-  const t = useT();
-  const [phase, setPhase] = useState<LiveProofPhase>("idle");
-  const [verifyTimeMs, setVerifyTimeMs] = useState(0);
-  const [proofSizeBytes, setProofSizeBytes] = useState(0);
-  const [compressedSizeBytes, setCompressedSizeBytes] = useState(0);
-  const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const proofRef = useRef<{
-    compound_proof_json: string;
-    op: string;
-    credential: string;
-    format: string;
-  } | null>(null);
-  const compressedCborRef = useRef<string | null>(null);
-  const wasmReadyRef = useRef(false);
-  const sdkRef = useRef<Awaited<typeof import("@zk-eidas/verifier-sdk")> | null>(null);
-  const vksRef = useRef<any>(null);
-
-  // Pre-load WASM when section mounts
-  useEffect(() => {
-    (async () => {
-      try {
-        const sdk = await import("@zk-eidas/verifier-sdk");
-        const vks = await sdk.loadTrustedVks("/trusted-vks.json");
-        await sdk.initVerifier();
-        sdkRef.current = sdk;
-        vksRef.current = vks;
-        wasmReadyRef.current = true;
-      } catch {
-        // Will fall through to lazy init in handleVerify
-      }
-    })();
-  }, []);
-
-  const handleGenerate = useCallback(async () => {
-    setPhase("proving");
-    setError(null);
-    try {
-      // 1. Issue a PID credential
-      const issueRes = await fetch(`${API_URL}/issuer/issue`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          credential_type: "pid",
-          claims: {
-            given_name: "Олександр",
-            family_name: "Петренко",
-            birth_date: "1998-05-14",
-            age_over_18: "true",
-            nationality: "UA",
-            issuing_country: "UA",
-            resident_country: "UA",
-            resident_city: "Київ",
-            gender: "M",
-            document_number: "UA-1234567890",
-            expiry_date: "2035-05-14",
-            issuing_authority: "Міністерство цифрової трансформації",
-          },
-          issuer: "https://diia.gov.ua",
-        }),
-      });
-      if (!issueRes.ok) throw new Error(await issueRes.text());
-      const { credential, format } = await issueRes.json();
-
-      // 2. Generate proof: age >= 18
-      const proveRes = await fetch(`${API_URL}/holder/prove-compound`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          credential,
-          format,
-          predicates: [{ claim: "birth_date", op: "gte", value: 18 }],
-          op: "single",
-        }),
-      });
-      if (!proveRes.ok) throw new Error(await proveRes.text());
-      const proveData = await proveRes.json();
-      // Measure raw proof size
-      const jsonStr = proveData.compound_proof_json;
-      const parsed = JSON.parse(jsonStr);
-      const subProofs = parsed.sub_proofs || parsed.proofs || [parsed];
-      const rawBytes = subProofs.reduce(
-        (sum: number, sp: { proof_bytes?: number[] }) =>
-          sum + (sp.proof_bytes?.length ?? 0),
-        0,
-      );
-      setProofSizeBytes(rawBytes);
-
-      // Measure compressed transport size
-      const exportRes = await fetch(`${API_URL}/holder/proof-export-compound?compress=true`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ compound_proof_json: jsonStr }),
-      });
-      if (exportRes.ok) {
-        const exportData = await exportRes.json();
-        compressedCborRef.current = exportData.compressed_cbor_base64;
-        setCompressedSizeBytes(atob(exportData.compressed_cbor_base64).length);
-      }
-
-      proofRef.current = {
-        compound_proof_json: jsonStr,
-        op: proveData.op,
-        credential,
-        format,
-      };
-      setPhase("proved");
-    } catch (e: any) {
-      setError(e.message);
-      setPhase("error");
-    }
-  }, []);
-
-  const handleVerify = useCallback(async () => {
-    if (!proofRef.current) return;
-    setPhase("verifying");
-    setError(null);
-    try {
-      const t0 = performance.now();
-      // Use pre-loaded SDK if available, otherwise lazy-load
-      let sdk = sdkRef.current;
-      let trustedVks = vksRef.current;
-      if (!sdk || !trustedVks) {
-        sdk = await import("@zk-eidas/verifier-sdk");
-        trustedVks = await sdk.loadTrustedVks("/trusted-vks.json");
-        await sdk.initVerifier();
-        sdkRef.current = sdk;
-        vksRef.current = trustedVks;
-        wasmReadyRef.current = true;
-      }
-
-      const envelope = JSON.parse(proofRef.current.compound_proof_json);
-      const chainResult = await sdk.verifyCompoundProof(envelope, trustedVks);
-      setVerifyTimeMs(Math.round(performance.now() - t0));
-      if (!chainResult.valid) throw new Error("Proof invalid");
-      setPhase("verified");
-    } catch (e: any) {
-      setError(e.message);
-      setPhase("error");
-    }
-  }, []);
-
-  const reset = useCallback(() => {
-    setPhase("idle");
-    setError(null);
-    setVerifyTimeMs(0);
-    setProofSizeBytes(0);
-    setCompressedSizeBytes(0);
-    compressedCborRef.current = null;
-    setQrDataUrl(null);
-    proofRef.current = null;
-  }, []);
-
-  return (
-    <section className="max-w-5xl mx-auto px-4 sm:px-8 py-16 sm:py-20">
-      <h3 className="text-2xl sm:text-3xl font-bold text-center mb-3">
-        {t("liveProof.title")}
-      </h3>
-      <p className="text-sm text-slate-400 text-center mb-10 max-w-2xl mx-auto">
-        {t("liveProof.subtitle")}
-      </p>
-
-      <div className="max-w-lg mx-auto">
-        {/* Scenario label */}
-        <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-6">
-          <p className="text-xs text-slate-500 uppercase tracking-wider mb-3 font-medium">
-            {t("liveProof.scenario.label")}
-          </p>
-          <p className="text-sm text-slate-300 mb-6 font-medium">
-            {t("liveProof.scenario")}
-          </p>
-
-          {/* Phase 1: Generate */}
-          <div className="space-y-4">
-            {phase === "idle" && (
-              <button
-                onClick={handleGenerate}
-                className="w-full px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg transition-colors text-sm"
-              >
-                {t("liveProof.generate")}
-              </button>
-            )}
-
-            {phase === "proving" && (
-              <div className="flex items-center justify-center gap-3 py-3">
-                <div className="w-4 h-4 border-2 border-blue-400 border-t-transparent rounded-full animate-spin" />
-                <span className="text-sm text-slate-300">
-                  {t("liveProof.generating")}
-                </span>
-              </div>
-            )}
-
-            {/* Phase 2: Proof generated — show stats + verify button */}
-            {(phase === "proved" || phase === "verifying" || phase === "verified") && (
-              <div className="space-y-4">
-                <div className="flex items-center gap-2 text-emerald-400 text-sm font-medium">
-                  <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                    <polyline points="20 6 9 17 4 12" />
-                  </svg>
-                  {t("liveProof.proofGenerated")}
-                </div>
-
-                <div className="grid grid-cols-2 gap-3 text-xs">
-                  <div className="bg-slate-900/50 rounded-lg p-3">
-                    <span className="text-slate-500">{t("liveProof.proofSize")}</span>
-                    <p className="text-white font-mono font-bold mt-1">
-                      {proofSizeBytes > 1024
-                        ? `${(proofSizeBytes / 1024).toFixed(1)} KB`
-                        : `${proofSizeBytes} B`}
-                    </p>
-                    <span className="text-[10px] text-slate-600">raw</span>
-                  </div>
-                  <div className="bg-slate-900/50 rounded-lg p-3">
-                    <span className="text-slate-500">{t("liveProof.transportSize")}</span>
-                    <p className="text-white font-mono font-bold mt-1">
-                      {compressedSizeBytes > 1024
-                        ? `${(compressedSizeBytes / 1024).toFixed(1)} KB`
-                        : `${compressedSizeBytes} B`}
-                    </p>
-                    <span className="text-[10px] text-slate-600">CBOR + zstd</span>
-                  </div>
-                </div>
-
-                {phase === "proved" && (
-                  <button
-                    onClick={handleVerify}
-                    className="w-full px-6 py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-lg transition-colors text-sm"
-                  >
-                    {t("liveProof.verify")}
-                  </button>
-                )}
-
-                {phase === "verifying" && (
-                  <div className="flex items-center justify-center gap-3 py-3">
-                    <div className="w-4 h-4 border-2 border-emerald-400 border-t-transparent rounded-full animate-spin" />
-                    <span className="text-sm text-slate-300">
-                      {t("liveProof.verifying")}
-                    </span>
-                  </div>
-                )}
-
-                {phase === "verified" && (
-                  <>
-                    <div className="bg-emerald-900/30 border border-emerald-700/50 rounded-lg p-4">
-                      <div className="flex items-center gap-2 text-emerald-400 font-medium text-sm mb-2">
-                        <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                          <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
-                          <polyline points="22 4 12 14.01 9 11.01" />
-                        </svg>
-                        {t("liveProof.verified")}
-                      </div>
-                      <div className="text-xs text-slate-400">
-                        <span className="text-slate-500">{t("liveProof.verifyTime")}:</span>{" "}
-                        <span className="text-white font-mono font-bold">
-                          {verifyTimeMs < 1000
-                            ? `${verifyTimeMs} ms`
-                            : `${(verifyTimeMs / 1000).toFixed(1)} s`}
-                        </span>{" "}
-                        <span className="text-emerald-500/70 text-[10px]">
-                          {t("liveProof.clientSide")}
-                        </span>
-                      </div>
-                    </div>
-                    {/* Proof QR + size comparison */}
-                    <ProofQrComparison
-                      compressedCborRef={compressedCborRef}
-                      compressedSizeBytes={compressedSizeBytes}
-                      qrDataUrl={qrDataUrl}
-                      setQrDataUrl={setQrDataUrl}
-                      t={t}
-                    />
-                    {/* Print + Reset */}
-                    <div className="grid grid-cols-2 gap-2">
-                      <button
-                        onClick={() => {
-                          if (!compressedCborRef.current) return;
-                          const printState = {
-                            proofs: [{ predicate: "age \u2265 18", op: "and", compressedCbor: compressedCborRef.current }],
-                            predicates: [{ claim: "birth_date", op: "\u2265", publicValue: "18", disclosed: false }],
-                            logicalOp: "single",
-                            credentialLabel: "Personal Identification Data (PID)",
-                          };
-                          sessionStorage.setItem("zk-eidas-print-data", JSON.stringify(printState));
-                          window.location.href = "/print";
-                        }}
-                        className="px-4 py-2 bg-slate-800 hover:bg-slate-700 border border-slate-600 text-slate-300 hover:text-white rounded-lg transition-colors text-xs flex items-center justify-center gap-1.5"
-                      >
-                        <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                          <polyline points="6 9 6 2 18 2 18 9" /><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2" /><rect x="6" y="14" width="12" height="8" />
-                        </svg>
-                        {t("liveProof.printQr")}
-                      </button>
-                      <button
-                        onClick={reset}
-                        className="px-4 py-2 border border-slate-700 text-slate-400 hover:text-white hover:border-slate-500 rounded-lg transition-colors text-xs"
-                      >
-                        {t("liveProof.reset")}
-                      </button>
-                    </div>
-                  </>
-                )}
-              </div>
-            )}
-
-            {phase === "error" && (
-              <div className="space-y-3">
-                <div className="bg-red-900/30 border border-red-700/50 rounded-lg p-4 text-sm text-red-400">
-                  {t("liveProof.failed")}: {error}
-                </div>
-                <button
-                  onClick={reset}
-                  className="w-full px-4 py-2 border border-slate-700 text-slate-400 hover:text-white hover:border-slate-500 rounded-lg transition-colors text-xs"
-                >
-                  Reset
-                </button>
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
-    </section>
-  );
-}
-
-/* === Section 4: Paper Contracts === */
-
-function PaperContractsSection() {
-  const t = useT();
-  const todayItems = (t("paperContracts.todayItems") ?? "").split("|");
-
-  return (
-    <section
-      className="max-w-5xl mx-auto px-4 sm:px-8 py-16 sm:py-20 border-t border-slate-800"
-    >
-      <h3 className="text-2xl sm:text-3xl font-bold text-center mb-3">
-        {t("paperContracts.title")}
-      </h3>
-      <p className="text-sm text-slate-400 text-center mb-12 max-w-2xl mx-auto leading-relaxed">
-        {t("paperContracts.subtitle")}
-      </p>
-
-      {/* Before / After comparison */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-3xl mx-auto mb-10">
-        {/* Today */}
-        <div className="bg-red-950/20 border border-red-900/30 rounded-xl p-5">
-          <p className="text-xs text-red-400/80 uppercase tracking-wider font-medium mb-4">
-            {t("paperContracts.todayLabel")}
-          </p>
-          <div className="space-y-2.5">
-            {todayItems.map((item, i) => (
-              <div key={i} className="flex items-start gap-2.5">
-                <span className="text-red-500/60 mt-0.5 shrink-0 text-xs">✕</span>
-                <p className="text-xs text-slate-400 leading-relaxed">{item}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* With ZK */}
-        <div className="bg-emerald-950/20 border border-emerald-900/30 rounded-xl p-5">
-          <p className="text-xs text-emerald-400/80 uppercase tracking-wider font-medium mb-4">
-            {t("paperContracts.zkLabel")}
-          </p>
-          <div className="space-y-2.5">
-            {(
-              [
-                { key: "paperContracts.sellerProved", icon: "user" },
-                { key: "paperContracts.vehicleProved", icon: "car" },
-                { key: "paperContracts.buyerProved", icon: "user" },
-              ] as const
-            ).map(({ key, icon }) => (
-              <div key={key} className="flex items-start gap-2.5">
-                <div className="w-4 h-4 rounded-full bg-emerald-500/20 flex items-center justify-center shrink-0 mt-0.5">
-                  {icon === "car" ? (
-                    <svg className="w-2.5 h-2.5 text-emerald-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M14 16H9m10 0h3v-3.15a1 1 0 0 0-.84-.99L16 11l-2.7-3.6a1 1 0 0 0-.8-.4H5.24a2 2 0 0 0-1.8 1.1l-.8 1.63A6 6 0 0 0 2 12.42V16h2" />
-                      <circle cx="6.5" cy="16.5" r="2.5" />
-                      <circle cx="16.5" cy="16.5" r="2.5" />
-                    </svg>
-                  ) : (
-                    <svg className="w-2.5 h-2.5 text-emerald-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
-                      <circle cx="12" cy="7" r="4" />
-                    </svg>
-                  )}
-                </div>
-                <p className="text-xs text-slate-300 leading-relaxed">{t(key)}</p>
-              </div>
-            ))}
-            <div className="flex items-start gap-2.5">
-              <div className="w-4 h-4 rounded-full bg-emerald-500/20 flex items-center justify-center shrink-0 mt-0.5">
-                <svg className="w-2.5 h-2.5 text-emerald-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                  <rect width="18" height="11" x="3" y="11" rx="2" ry="2" />
-                  <path d="M7 11V7a5 5 0 0 1 10 0v4" />
-                </svg>
-              </div>
-              <p className="text-xs text-slate-300 leading-relaxed">{t("paperContracts.escrowLine")}</p>
-            </div>
-            <div className="pt-1">
-              <p className="text-[11px] text-emerald-500/60 italic">
-                {t("paperContracts.noNames")}
-              </p>
-            </div>
-            <div className="pt-2 border-t border-emerald-900/30 mt-2">
-              {t("paperContracts.courtResolution").split("\n").map((line, i) => (
-                <p key={i} className="text-[10px] text-slate-400 leading-relaxed">
-                  {line}
-                </p>
-              ))}
-            </div>
-            <div className="pt-2 mt-2 border-t border-emerald-900/30">
-              <p className="text-[10px] text-emerald-400/70 leading-relaxed">
-                {t("paperContracts.quantumSafe")}
-              </p>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Registry isolation callout */}
-      <div className="max-w-3xl mx-auto mb-10 bg-slate-800/30 border border-slate-700/40 rounded-xl p-5 sm:p-6">
-        <h4 className="text-sm font-semibold mb-3" style={{ color: "#FFD500" }}>
-          {t("paperContracts.isolationTitle")}
-        </h4>
-        <p className="text-xs sm:text-sm text-slate-400 leading-relaxed mb-3">
-          {t("paperContracts.isolationDesc1")}
-        </p>
-        <p className="text-xs sm:text-sm text-slate-300 leading-relaxed mb-4 font-medium">
-          {t("paperContracts.isolationDesc2")}
-        </p>
-        <div className="grid grid-cols-3 gap-3 text-center">
-          {[
-            { icon: "registry", label: t("paperContracts.isolationRegistry1") },
-            { icon: "citizen", label: t("paperContracts.isolationCitizen") },
-            { icon: "registry", label: t("paperContracts.isolationRegistry2") },
-          ].map((item, i) => (
-            <div key={item.label} className="flex flex-col items-center gap-1.5">
-              {item.icon === "citizen" ? (
-                <div className="relative flex items-center">
-                  <svg className="w-3 h-3 text-slate-600 -mr-1" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="15 18 9 12 15 6" /></svg>
-                  <div className="w-8 h-8 rounded-full bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center">
-                    <svg className="w-4 h-4 text-emerald-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
-                      <circle cx="12" cy="7" r="4" />
-                    </svg>
-                  </div>
-                  <svg className="w-3 h-3 text-slate-600 -ml-1" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="9 18 15 12 9 6" /></svg>
-                </div>
-              ) : (
-                <div className="w-8 h-8 rounded-lg bg-slate-700/50 border border-slate-600/50 flex items-center justify-center">
-                  <svg className="w-4 h-4 text-slate-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <rect x="2" y="3" width="20" height="14" rx="2" />
-                    <path d="M8 21h8" /><path d="M12 17v4" />
-                  </svg>
-                </div>
-              )}
-              <span className="text-[10px] sm:text-xs text-slate-500">{item.label}</span>
-              {i === 1 && (
-                <span className="text-[9px] text-emerald-500/60 font-mono">{t("paperContracts.isolationProofOnly")}</span>
-              )}
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* CTA */}
-      <div className="text-center mt-8">
+      <div className="mt-8 flex flex-col sm:flex-row items-start sm:items-center gap-4">
         <Link
-          to="/demo"
-          className="inline-flex px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg transition-colors text-sm"
+          to="/proposal"
+          className="px-6 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-semibold rounded-lg transition-colors text-sm"
         >
-          {t("paperContracts.cta")}
+          {t("rootProposal.cta")}
+        </Link>
+        <Link
+          to="/learn"
+          className="text-sm text-slate-400 hover:text-white transition-colors underline underline-offset-4"
+        >
+          {t("rootProposal.learnMore")}
         </Link>
       </div>
     </section>
@@ -1221,10 +465,10 @@ function Landing() {
               {locale === "uk" ? "EN" : "UA"}
             </button>
             <Link
-              to="/ukraine"
-              className="hidden sm:inline text-xs text-slate-400 hover:text-slate-200 transition-colors font-medium"
+              to="/proposal"
+              className="text-xs text-slate-400 hover:text-slate-200 transition-colors font-medium"
             >
-              {t("nav.ukraine")}
+              {t("nav.proposal")}
             </Link>
             <Link
               to="/verify"
@@ -1288,13 +532,9 @@ function Landing() {
         </div>
       </section>
 
-      <ProblemSection />
+      <DilemmaSection />
 
-      <SolutionSteps />
-
-      <LiveProofSection />
-
-      <PaperContractsSection />
+      <ProposalBrief />
 
       {/* Footer */}
       <footer className="border-t border-slate-800 px-4 sm:px-8 py-8">
@@ -1303,6 +543,9 @@ function Landing() {
           <div className="flex items-center gap-6">
             <Link to="/learn" className="hover:text-slate-300 transition-colors">
               {t("nav.learn")}
+            </Link>
+            <Link to="/proposal" className="hover:text-slate-300 transition-colors">
+              {t("nav.proposal")}
             </Link>
             <a
               href="https://github.com/alik-eth/zk-eidas"

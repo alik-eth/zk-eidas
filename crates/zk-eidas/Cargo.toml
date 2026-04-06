@@ -6,10 +6,8 @@ license.workspace = true
 
 [dependencies]
 zk-eidas-types = { workspace = true }
-zk-eidas-parser = { workspace = true }
-zk-eidas-prover = { workspace = true }
-zk-eidas-verifier = { workspace = true }
 zk-eidas-utils = { workspace = true }
+zk-eidas-mdoc = { workspace = true }
 thiserror = { workspace = true }
 serde = { workspace = true }
 sha2 = "0.10"
@@ -17,14 +15,7 @@ serde_json = { workspace = true }
 num-bigint = "0.4"
 ml-kem = { version = "0.3.0-rc.1", features = ["getrandom"] }
 rand = "0.8"
+aes-gcm = "0.10"
 
 [dev-dependencies]
 serde_json = { workspace = true }
-zk-eidas-parser = { workspace = true, features = ["test-utils"] }
-zk-eidas-mdoc = { workspace = true }
-criterion = { version = "0.5", features = ["html_reports"] }
-tokio = { version = "1", features = ["rt", "macros"] }
-
-[[bench]]
-name = "prove_verify"
-harness = false

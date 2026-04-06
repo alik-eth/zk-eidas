@@ -69,15 +69,13 @@ export function EscrowPanel({
   }, [enabled]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const generateKeypair = useCallback(async () => {
-    const secp = await import('@noble/secp256k1')
-    const priv = secp.utils.randomSecretKey()
-    const pub = secp.getPublicKey(priv, true)
-    const privHex = Array.from(priv).map((b: number) => b.toString(16).padStart(2, '0')).join('')
-    const pubHex = Array.from(pub).map((b: number) => b.toString(16).padStart(2, '0')).join('')
-    setPubkey(pubHex)
-    setPrivkey(privHex)
+    // Generate a random 64-byte ML-KEM-768 seed (used for both encrypt and decrypt)
+    const seed = crypto.getRandomValues(new Uint8Array(64))
+    const seedHex = Array.from(seed).map((b: number) => b.toString(16).padStart(2, '0')).join('')
+    setPubkey(seedHex)
+    setPrivkey(seedHex)
     setKeypairGenerated(true)
-    onPrivkeyGenerated?.(privHex)
+    onPrivkeyGenerated?.(seedHex)
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const ecdsaClaim = selectedFields.find(f => predicateFields.includes(f)) ?? selectedFields[0] ?? ''

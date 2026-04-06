@@ -99,7 +99,8 @@ self.addEventListener('fetch', (event) => {
   // Skip API calls
   if (url.pathname.startsWith('/issuer/') ||
       url.pathname.startsWith('/holder/') ||
-      url.pathname.startsWith('/verifier/')) {
+      url.pathname.startsWith('/verifier/') ||
+      url.pathname.startsWith('/proofs')) {
     return
   }
 

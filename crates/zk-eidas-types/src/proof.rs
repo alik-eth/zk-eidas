@@ -136,33 +136,26 @@ fn default_role() -> String {
     "holder".to_string()
 }
 
-/// Identity escrow data: encrypted credential fields with a pluggable escrow authority.
+/// Identity escrow data: AES-256-GCM encrypted credential fields with a pluggable escrow authority.
 ///
-/// The ZK proof guarantees that `ciphertext` contains the same credential data that was
-/// verified by the ECDSA signature (honest encryption). The symmetric key K is encrypted
-/// to the escrow authority's public key — only released on court order or arbitration ruling.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+/// The symmetric key K is encrypted to the escrow authority's ML-KEM-768 public key —
+/// only released on court order or arbitration ruling.
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct IdentityEscrowData {
-    /// Poseidon hash of all 8 credential data fields (proof public output).
-    pub credential_hash: Vec<u8>,
-    /// 8 Poseidon-CTR encrypted field elements (each as decimal string bytes).
-    pub ciphertext: Vec<Vec<u8>>,
-    /// Poseidon(K) — binds the proof to the symmetric key (proof public output).
-    pub key_commitment: Vec<u8>,
-    /// K encrypted to the escrow authority via ECIES.
+    /// AES-256-GCM encrypted field values (one per field).
+    pub ciphertexts: Vec<Vec<u8>>,
+    /// AES-256-GCM authentication tags (one per field, 16 bytes each).
+    pub tags: Vec<Vec<u8>>,
+    /// K encrypted to the escrow authority via ML-KEM-768.
     pub encrypted_key: Vec<u8>,
-    /// Escrow authority's public key (secp256k1, 33 or 65 bytes).
+    /// Escrow authority's ML-KEM-768 seed (64 bytes).
     pub authority_pubkey: Vec<u8>,
-    /// Names of the credential fields packed into the 8 slots.
+    /// Names of the encrypted credential fields.
     pub field_names: Vec<String>,
-    /// Which slot (0–7) contains the ECDSA-committed claim value.
-    pub claim_index: u8,
-    /// Groth16 proof for the identity_escrow circuit.
-    pub proof: ZkProof,
 }
 
 /// A compound proof wrapping multiple sub-proofs with a logical operator.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone)]
 pub struct CompoundProof {
     proofs: Vec<ZkProof>,
     op: LogicalOp,
@@ -472,34 +465,27 @@ mod tests {
     #[test]
     fn identity_escrow_data_serde_roundtrip() {
         let escrow = IdentityEscrowData {
-            credential_hash: vec![1, 2, 3],
-            ciphertext: vec![vec![10], vec![20], vec![30]],
-            key_commitment: vec![4, 5, 6],
+            ciphertexts: vec![vec![10], vec![20], vec![30]],
+            tags: vec![vec![0u8; 16], vec![1u8; 16], vec![2u8; 16]],
             encrypted_key: vec![7, 8, 9],
-            authority_pubkey: vec![0x02; 33],
+            authority_pubkey: vec![0x02; 64],
             field_names: vec!["name".into(), "address".into()],
-            claim_index: 0,
-            proof: ZkProof::new(vec![], vec![], vec![], PredicateOp::IdentityEscrow),
         };
         let json = serde_json::to_string(&escrow).unwrap();
         let decoded: IdentityEscrowData = serde_json::from_str(&json).unwrap();
-        assert_eq!(decoded.credential_hash, vec![1, 2, 3]);
-        assert_eq!(decoded.ciphertext.len(), 3);
-        assert_eq!(decoded.claim_index, 0);
+        assert_eq!(decoded.ciphertexts.len(), 3);
+        assert_eq!(decoded.tags.len(), 3);
         assert_eq!(decoded.field_names, vec!["name", "address"]);
     }
 
     #[test]
     fn compound_proof_with_identity_escrow_serde() {
         let escrow = IdentityEscrowData {
-            credential_hash: vec![1],
-            ciphertext: vec![vec![2]],
-            key_commitment: vec![3],
+            ciphertexts: vec![vec![2]],
+            tags: vec![vec![0u8; 16]],
             encrypted_key: vec![4],
-            authority_pubkey: vec![5],
+            authority_pubkey: vec![5u8; 64],
             field_names: vec!["name".into()],
-            claim_index: 0,
-            proof: ZkProof::new(vec![], vec![], vec![], PredicateOp::IdentityEscrow),
         };
         let compound = CompoundProof::new(vec![], LogicalOp::And)
             .with_identity_escrow(escrow);
@@ -509,7 +495,7 @@ mod tests {
         assert!(json.contains("identity_escrow"));
         let decoded: CompoundProof = serde_json::from_str(&json).unwrap();
         assert!(decoded.identity_escrow().is_some());
-        assert_eq!(decoded.identity_escrow().unwrap().credential_hash, vec![1]);
+        assert_eq!(decoded.identity_escrow().unwrap().ciphertexts, vec![vec![2u8]]);
     }
 
     #[test]

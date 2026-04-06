@@ -1,0 +1,28 @@
+[package]
+name = "longfellow-sys"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "FFI bindings to Google's Longfellow ZK proving system"
+links = "mdoc_static"
+
+[build-dependencies]
+cmake = "0.1"
+bindgen = "0.71"
+
+[dependencies]
+libc = "0.2"
+thiserror = "2"
+zk-eidas-mdoc = { path = "../zk-eidas-mdoc" }
+zk-eidas = { path = "../zk-eidas" }
+zk-eidas-types = { path = "../zk-eidas-types" }
+serde_json = "1"
+hex = "0.4"
+
+[[bin]]
+name = "generate-circuits"
+path = "src/bin/generate_circuits.rs"
+
+[[bin]]
+name = "benchmark"
+path = "src/bin/benchmark.rs"

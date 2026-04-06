@@ -2,20 +2,24 @@
 
 Zero-knowledge selective disclosure for eIDAS 2.0 credentials.
 
-An open-source circuit library that takes any eIDAS 2.0 credential (SD-JWT VC or mdoc/mDL) and lets the holder prove predicates about their claims — without revealing the underlying values. A citizen proves "I am over 18" and the verifier learns nothing else. ECDSA P-256 signature verification happens inside the ZK circuit, cryptographically binding proofs to authentic, already-issued government credentials.
+An open-source proving system that takes any eIDAS 2.0 credential (mdoc/mDL) and lets the holder prove predicates about their claims — without revealing the underlying values. A citizen proves "I am over 18" and the verifier learns nothing else. Credential authenticity is verified inside the ZK circuit via SHA-256 commitment chains, cryptographically binding proofs to authentic, already-issued government credentials.
 
-**[Live Demo](https://zk-eidas.com)**
+Built on [Longfellow](https://github.com/nicoleelias/longfellow), Google's Sumcheck + Ligero proving system with SHA-256 hash circuits. No trusted setup. No ceremony files. Sub-second proving. Instant startup from serialized circuits.
+
+**[Live Demo](https://eidas-longfellow.fly.dev)**
 
 ## How It Works
 
 ```
-Credential (SD-JWT VC or mdoc) → Parser → Witness → Circom Circuit → Groth16 Proof → Verifier
+mdoc Credential → Parser → Witness → Longfellow Hash Circuit → Sumcheck+Ligero Proof → Verifier
 ```
 
-Two-stage proving architecture:
+Single-stage proving architecture:
 
-1. **Stage 1 — ECDSA verification.** The issuer's P-256 signature is verified inside a Circom circuit (~2M constraints). Outputs a Poseidon commitment binding the claim value to the authenticated credential.
-2. **Stage 2 — Predicate evaluation.** A lightweight predicate circuit (gte, lte, eq, neq, range, set_member) consumes the commitment and proves the predicate holds, without revealing the claim value.
+1. **Credential issuance.** The issuer signs an mdoc credential containing claims (name, birthdate, nationality, etc.) and CBOR-encodes it per ISO 18013-5.
+2. **Witness generation.** The prover extracts requested attributes from the credential and builds a witness for the Longfellow hash circuit. Predicates (gte, lte, eq, etc.) are encoded as circuit constraints with SHA-256 commitment chains binding claim values to the issuer's signature.
+3. **Proof generation.** Longfellow's Sumcheck + Ligero protocol produces a proof. No trusted setup — the proof system is transparent.
+4. **Verification.** The verifier checks the proof against the circuit specification and public inputs. Learns nothing except that the predicate holds.
 
 One proof covers the full chain: **issuer → credential → claim → predicate**.
 
@@ -35,149 +39,122 @@ One proof covers the full chain: **issuer → credential → claim → predicate
 
 ## Identity Escrow
 
-ZK proofs remove personal data from documents. But if parties are anonymous, how do you protect rights in court? Identity escrow solves this: credential data is encrypted inside the ZK proof, decryption is only possible by a chosen escrow authority per established procedure.
+ZK proofs remove personal data from documents. But if parties are anonymous, how do you protect rights in court? Identity escrow solves this: credential fields are encrypted alongside the ZK proof, decryption is only possible by a chosen escrow authority per established procedure.
 
 ```
-                    INSIDE ZK CIRCUIT                         OUTSIDE CIRCUIT
-               ┌─────────────────────────┐
-               │                         │
-credential[8] ─│  Commitment chain       │
-claim_value ──▶│  ECDSA P-256 binding    │──▶ credential_hash  (public)
-K ─────────────│  Poseidon-CTR encrypt   │──▶ ciphertext[8]    (public)
-               │  Poseidon(K)            │──▶ key_commitment    (public)
-               │                         │
-               └─────────────────────────┘
-                                                     │
-                                                     ▼
-                                            ML-KEM-768 encrypt(K, authority_key)
-                                                     │
-                                                     ▼
-                                               encrypted_key (1120 bytes)
-                                                     │
-                               ┌─────────────────────┼──────────────────────┐
-                               │                     │                      │
-                         ON-CHAIN PROOF        ESCROW ENVELOPE         AUTHORITY
-                         ──────────────       ────────────────        ─────────
-                         credential_hash       ciphertext[8]          seed (64B)
-                         key_commitment        encrypted_key               │
-                         Groth16 proof         field_names            court order
-                         (nothing to           (post-quantum              │
-                          decrypt)              safe: ML-KEM)             ▼
-                                                                    decrypt K
-                                                                    Poseidon-CTR decrypt
-                                                                    recover identity
-                                                                    verify hash
+              ZK PROOF (Longfellow)                    ESCROW ENVELOPE
+         ┌─────────────────────────┐
+         │                         │
+  mdoc ──│  SHA-256 commitment     │──▶ proof_bytes        field_names
+ claims  │  chain + predicate      │    nullifier_hash     ciphertexts (AES-256-GCM)
+         │  evaluation             │    binding_hash       encrypted_key (ML-KEM-768)
+         │                         │
+         └─────────────────────────┘
+                                                │
+                                                ▼
+                                      AES-256-GCM encrypt(fields, K)
+                                      ML-KEM-768 encrypt(K, authority_key)
+                                                │
+                              ┌─────────────────┼─────────────────┐
+                              │                 │                 │
+                        ZK PROOF          ESCROW ENVELOPE     AUTHORITY
+                        ────────         ────────────────    ─────────
+                        proof_bytes       ciphertexts        seed (64B)
+                        nullifier         encrypted_key           │
+                        binding           field_names        court order
+                        (nothing to       (post-quantum          │
+                         decrypt)          safe: ML-KEM)         ▼
+                                                           ML-KEM decapsulate
+                                                           AES-256-GCM decrypt
+                                                           recover identity
 ```
 
 **Key properties:**
 
-- **Honest encryption** — Poseidon-CTR runs inside the same circuit that verifies the ECDSA signature. A party cannot encrypt garbage because the proof binds ciphertext to government-signed data.
 - **Pluggable authority** — the escrow authority is a contract parameter: notary, arbitrator, state registry, or smart contract. Both parties agree at signing.
-- **Quantum-safe envelope** — ML-KEM-768 (NIST FIPS 203) replaces ECIES. The escrow blob can be published without fear of future quantum decryption. The ZK proof itself contains no ciphertext — only Poseidon hashes.
-- **Minimal overhead** — encryption adds ~2,500 constraints (+0.13% over the ~2M base ECDSA circuit).
+- **Quantum-safe envelope** — ML-KEM-768 (NIST FIPS 203) protects the symmetric key. The escrow blob can be published without fear of future quantum decryption.
+- **Standard encryption** — AES-256-GCM (NIST) encrypts credential fields outside the circuit. Each field gets a unique deterministic nonce (counter mode).
 
-## Quick Start
+## TSP Attestation
 
-```rust
-use zk_eidas::{ZkCredential, Predicate, ZkVerifier};
+A Trust Service Provider (TSP) co-signs proofs with an ECDSA P-256 DataIntegrityProof, producing a Qualified Electronic Attestation of Attributes (QEAA) per eIDAS 2.0. The TSP keypair lives on the server; the `/tsp/attest` endpoint wraps any proof envelope in a W3C Verifiable Credential with the TSP's signature.
 
-// Prove age >= 18 with ECDSA signature verified in-circuit
-let proof = ZkCredential::from_sdjwt(&sdjwt, "circuits/predicates")?
-    .predicate("birthdate", Predicate::gte(18))
-    .prove()?;
-
-// Verifier learns nothing except that the predicate holds
-let valid = ZkVerifier::new("circuits/predicates").verify(&proof)?;
-```
+The verify page detects QEAA attestations and verifies the ECDSA P-256 signature offline using the Web Crypto API.
 
 ## Paper Proofs
 
-Groth16 proofs are ~128 bytes. zk-eidas encodes them as QR codes with a chunked binary protocol, so proofs can be printed on paper and verified offline with a phone camera. No internet, no app store, no institutional infrastructure.
+Proofs are encoded as QR codes with a chunked binary protocol (deflate-raw compression, 8-byte header), so proofs can be printed on paper and verified offline with a phone camera. No internet, no app store, no institutional infrastructure.
 
-The [verify page](https://zk-eidas.com/verify) is a PWA — install it once, verify proofs offline forever.
+Large proofs that exceed QR capacity are stored server-side in a content-addressed blob store (SHA-256 CID), with a compact QR pointing to the retrieval URL.
+
+The [verify page](https://eidas-longfellow.fly.dev/verify) is a PWA — install it once, verify proofs offline forever.
 
 ## Architecture
 
 | Crate | Purpose |
 |-------|---------|
-| `zk-eidas` | Facade — builder API, predicate templates |
-| `zk-eidas-types` | Shared types — credentials, proofs, predicates |
-| `zk-eidas-parser` | SD-JWT VC parser — claims, disclosures, key extraction |
+| `zk-eidas` | Facade — predicate types, escrow utilities, templates |
+| `zk-eidas-types` | Shared types — credentials, proofs, predicates, envelopes |
 | `zk-eidas-mdoc` | mdoc/mDL parser — ISO 18013-5 CBOR credentials |
-| `zk-eidas-prover` | Witness generation (C++ binaries) + Groth16 proving (rapidsnark) |
-| `zk-eidas-verifier` | Proof verification + trusted circuit registry |
 | `zk-eidas-utils` | Date conversion, age calculation, field arithmetic |
-| `zk-eidas-wasm` | WASM bindings for browser — credential parsing (SD-JWT + mdoc), proof inspection |
+| `longfellow-sys` | FFI bindings to Longfellow C++ — circuit generation, proving, verification |
 | `cbor-print` | Chunked QR protocol for paper proof transport |
+| `zk-eidas-demo-api` | Axum demo server — issuance, proving, verification, escrow, TSP |
 
-10 Circom circuits (6 predicates + ecdsa_verify + nullifier + holder_binding + identity_escrow). Groth16 proofs. Server proving via rapidsnark. On-device browser proving via chunked snarkjs fork (zkey sections loaded from IndexedDB on demand, ~1.5 GB peak memory instead of ~3 GB).
+Longfellow hash circuits with SHA-256 commitment chains. Sumcheck + Ligero proofs (transparent — no trusted setup). Server-side proving only. Circuits are pre-generated during Docker build and loaded from disk at startup (0ms cold start).
 
 ## Building
 
 ```bash
-# Prerequisites: Rust 1.93+, Circom 2.1+, snarkjs 0.7+, Node 22+, jq
+# Prerequisites: Rust 1.93+, CMake, Clang, GMP, NASM, zstd, Node 22+
 
-# Download large circuit artifacts (zkeys, ptau files)
-cd circuits && ./download-artifacts.sh
-
-# Build predicate circuits from source (fast, ~30s)
-make predicates specials
+# The Longfellow C++ library builds automatically via cmake (vendored as git submodule)
+git submodule update --init
 
 # Build and test
-cd .. && cargo test --workspace
+cargo test --workspace
+
+# Pre-generate circuit cache (optional, for faster startup)
+cargo build --release -p longfellow-sys --bin generate-circuits
+./target/release/generate-circuits ./circuit-cache
 ```
 
 ## Testing
 
 ```bash
-# Rust unit + integration tests (252 tests)
+# Rust unit + integration tests (181 tests)
 cargo test --workspace
 
-# Circom circuit constraint tests (26 tests)
-cd circuits && npm test
-
-# WASM browser tests (Chrome + Firefox)
-cd crates/zk-eidas-wasm && wasm-pack test --headless --chrome --firefox
-
-# Web unit tests (vitest — QR chunking, nullifier check, chunked zkey loader)
+# Web unit tests (vitest — QR chunking, nullifier check)
 cd demo/web && npx vitest run
 
-# E2E tests — server-side proving (requires running container)
+# E2E tests (requires running container)
 cd demo/web && E2E_BASE_URL=http://127.0.0.1:8080 npx playwright test
-
-# E2E tests — on-device browser proving (slow, ~5-10 min per contract)
-cd demo/web && E2E_BASE_URL=http://127.0.0.1:8080 E2E_ON_DEVICE=1 npx playwright test
 ```
 
-## Circuit Artifacts
+## Deployment
 
-Large binary files (zkeys, ptau, CVM) are hosted externally. URLs are tracked in `circuits/artifact-urls.json`.
+The project deploys as a single Docker container on Fly.io. The multi-stage Dockerfile:
+
+1. **circuit-builder** — compiles Longfellow C++ and pre-generates all 4 circuit sizes (1–4 attributes). This layer is cached when `vendor/` and `crates/` don't change.
+2. **rust-builder** — builds the API binary on top of the cached circuit layer.
+3. **web-builder** — builds the React frontend (TanStack Router + Tailwind CSS).
+4. **runtime** — Ubuntu 24.04 with nginx + supervisord. Loads pre-generated circuits from disk at startup.
 
 ```bash
-# Download artifacts for local development
-cd circuits && ./download-artifacts.sh
+# Deploy
+fly deploy
 
-# After recompiling circuits, upload new artifacts
-source .env.production && node scripts/upload-artifacts.mjs
+# The API starts instantly — circuits are loaded from disk, not compiled at runtime
 ```
-
-| File | Size | Host |
-|------|------|------|
-| `ecdsa_verify.zkey` | 1.2 GB | UploadThing |
-| ECDSA zkey chunks (10 sections) | 1.2 GB total | UploadThing |
-| `ecdsa_verify.cvm` | 58 MB | UploadThing |
-| `pot21.ptau` | 2.4 GB | Hermez ceremony (Google Storage) |
-| `pot22.ptau` | 4.6 GB | Hermez ceremony (Google Storage) |
-| Predicate + special zkeys (10x) | ~2 MB | Git repo |
-
-ECDSA chunk files are split per-section (`ecdsa_verify.zkeyb` through `.zkeyk`) for on-device browser proving. The browser downloads them into IndexedDB and the chunked snarkjs fork reads sections on demand during proving.
 
 ## Standards
 
-- **eIDAS 2.0** — EU Digital Identity Framework, ARF requirement ZKP_06
-- **SD-JWT VC** — RFC 9901, EUDI Wallet credential format
+- **eIDAS 2.0** — EU Digital Identity Framework
 - **mdoc/mDL** — ISO 18013-5 CBOR mobile credentials
-- **ECDSA P-256** — secp256r1 / ES256, the curve used by EU member state issuers
+- **ML-KEM-768** — NIST FIPS 203 post-quantum key encapsulation
+- **AES-256-GCM** — NIST symmetric encryption for identity escrow
+- **ECDSA P-256** — TSP attestation signatures (DataIntegrityProof)
 
 ## License
 

@@ -10,8 +10,8 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as VerifyRouteImport } from './routes/verify'
-import { Route as UkraineRouteImport } from './routes/ukraine'
 import { Route as SandboxRouteImport } from './routes/sandbox'
+import { Route as ProposalRouteImport } from './routes/proposal'
 import { Route as PrintRouteImport } from './routes/print'
 import { Route as LearnRouteImport } from './routes/learn'
 import { Route as DemoRouteImport } from './routes/demo'
@@ -23,14 +23,14 @@ const VerifyRoute = VerifyRouteImport.update({
   path: '/verify',
   getParentRoute: () => rootRouteImport,
 } as any)
-const UkraineRoute = UkraineRouteImport.update({
-  id: '/ukraine',
-  path: '/ukraine',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const SandboxRoute = SandboxRouteImport.update({
   id: '/sandbox',
   path: '/sandbox',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ProposalRoute = ProposalRouteImport.update({
+  id: '/proposal',
+  path: '/proposal',
   getParentRoute: () => rootRouteImport,
 } as any)
 const PrintRoute = PrintRouteImport.update({
@@ -65,8 +65,8 @@ export interface FileRoutesByFullPath {
   '/demo': typeof DemoRoute
   '/learn': typeof LearnRoute
   '/print': typeof PrintRoute
+  '/proposal': typeof ProposalRoute
   '/sandbox': typeof SandboxRoute
-  '/ukraine': typeof UkraineRoute
   '/verify': typeof VerifyRoute
 }
 export interface FileRoutesByTo {
@@ -75,8 +75,8 @@ export interface FileRoutesByTo {
   '/demo': typeof DemoRoute
   '/learn': typeof LearnRoute
   '/print': typeof PrintRoute
+  '/proposal': typeof ProposalRoute
   '/sandbox': typeof SandboxRoute
-  '/ukraine': typeof UkraineRoute
   '/verify': typeof VerifyRoute
 }
 export interface FileRoutesById {
@@ -86,8 +86,8 @@ export interface FileRoutesById {
   '/demo': typeof DemoRoute
   '/learn': typeof LearnRoute
   '/print': typeof PrintRoute
+  '/proposal': typeof ProposalRoute
   '/sandbox': typeof SandboxRoute
-  '/ukraine': typeof UkraineRoute
   '/verify': typeof VerifyRoute
 }
 export interface FileRouteTypes {
@@ -98,8 +98,8 @@ export interface FileRouteTypes {
     | '/demo'
     | '/learn'
     | '/print'
+    | '/proposal'
     | '/sandbox'
-    | '/ukraine'
     | '/verify'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -108,8 +108,8 @@ export interface FileRouteTypes {
     | '/demo'
     | '/learn'
     | '/print'
+    | '/proposal'
     | '/sandbox'
-    | '/ukraine'
     | '/verify'
   id:
     | '__root__'
@@ -118,8 +118,8 @@ export interface FileRouteTypes {
     | '/demo'
     | '/learn'
     | '/print'
+    | '/proposal'
     | '/sandbox'
-    | '/ukraine'
     | '/verify'
   fileRoutesById: FileRoutesById
 }
@@ -129,8 +129,8 @@ export interface RootRouteChildren {
   DemoRoute: typeof DemoRoute
   LearnRoute: typeof LearnRoute
   PrintRoute: typeof PrintRoute
+  ProposalRoute: typeof ProposalRoute
   SandboxRoute: typeof SandboxRoute
-  UkraineRoute: typeof UkraineRoute
   VerifyRoute: typeof VerifyRoute
 }
 
@@ -143,18 +143,18 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof VerifyRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/ukraine': {
-      id: '/ukraine'
-      path: '/ukraine'
-      fullPath: '/ukraine'
-      preLoaderRoute: typeof UkraineRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/sandbox': {
       id: '/sandbox'
       path: '/sandbox'
       fullPath: '/sandbox'
       preLoaderRoute: typeof SandboxRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/proposal': {
+      id: '/proposal'
+      path: '/proposal'
+      fullPath: '/proposal'
+      preLoaderRoute: typeof ProposalRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/print': {
@@ -201,8 +201,8 @@ const rootRouteChildren: RootRouteChildren = {
   DemoRoute: DemoRoute,
   LearnRoute: LearnRoute,
   PrintRoute: PrintRoute,
+  ProposalRoute: ProposalRoute,
   SandboxRoute: SandboxRoute,
-  UkraineRoute: UkraineRoute,
   VerifyRoute: VerifyRoute,
 }
 export const routeTree = rootRouteImport

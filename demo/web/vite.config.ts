@@ -9,15 +9,18 @@ export default defineConfig({
   },
   resolve: {
     alias: {
-      'zk-eidas-wasm': path.resolve(__dirname, 'pkg/zk-eidas-wasm.js'),
-      buffer: 'buffer/',
       crypto: path.resolve(__dirname, 'app/lib/crypto-shim.ts'),
     },
+  },
+  preview: {
+    port: 3000,
+    strictPort: true,
+    allowedHosts: ['eidas-longfellow.fly.dev', 'zk-eidas.fly.dev', 'zk-eidas.com', 'www.zk-eidas.com'],
   },
   server: {
     port: 3000,
     strictPort: true,
-    allowedHosts: ['zk-eidas.fly.dev', 'zk-eidas.com', 'www.zk-eidas.com'],
+    allowedHosts: ['eidas-longfellow.fly.dev', 'zk-eidas.fly.dev', 'zk-eidas.com', 'www.zk-eidas.com'],
     fs: {
       allow: ['../..'],
     },
