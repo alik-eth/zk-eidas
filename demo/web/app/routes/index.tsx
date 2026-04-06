@@ -355,12 +355,13 @@ function DilemmaSection() {
     { title: t("dilemma.gapTitle"), desc: t("dilemma.gapDesc"), color: "text-amber-400", border: "border-amber-500/20" },
     { title: t("dilemma.promiseTitle"), desc: t("dilemma.promiseDesc"), color: "text-blue-400", border: "border-blue-500/20" },
     { title: t("dilemma.centralTitle"), desc: t("dilemma.centralDesc"), color: "text-red-400", border: "border-red-500/20" },
+    { title: t("dilemma.web3Title"), desc: t("dilemma.web3Desc"), color: "text-purple-400", border: "border-purple-500/20" },
   ];
 
   return (
     <section className="max-w-5xl mx-auto px-4 sm:px-8 py-16 sm:py-20 border-t border-slate-800">
       <h2 className="text-2xl sm:text-3xl font-bold mb-8">{t("dilemma.title")}</h2>
-      <div className="grid md:grid-cols-3 gap-6">
+      <div className="grid md:grid-cols-2 gap-6">
         {cards.map((card, i) => (
           <div key={i} className={`bg-slate-800/50 rounded-xl border ${card.border} p-6 space-y-3`}>
             <h3 className={`text-lg font-semibold ${card.color}`}>{card.title}</h3>

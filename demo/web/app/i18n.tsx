@@ -63,6 +63,14 @@ const translations: Record<string, Record<Locale, string>> = {
     en: "The EU can't — and shouldn't — centralize 27 member state registries. No single authority can be the verifier of last resort. The system must work without a central database.",
     uk: "ЄС не може — і не повинен — централізувати реєстри 27 держав-членів. Жодна єдина інстанція не може бути верифікатором останньої інстанції. Система має працювати без центральної бази даних.",
   },
+  "dilemma.web3Title": {
+    en: "The Web3 Identity Gap",
+    uk: "Розрив ідентичності Web3",
+  },
+  "dilemma.web3Desc": {
+    en: "Blockchain wallets are pseudonymous. KYC is bolted on through centralized providers — recreating the gatekeepers decentralization was meant to remove. With zk-eidas, blockchain becomes a consumer of government-issued credentials, not a replacement. Prove you're an EU citizen without revealing your name. Nullifiers prevent double-registration. Court-ordered deanonymization ensures compliance.",
+    uk: "Блокчейн-гаманці псевдонімні. KYC нав'язується через централізованих провайдерів — відтворюючи посередників, від яких децентралізація мала позбавити. З zk-eidas блокчейн стає споживачем державних посвідчень, а не їх заміною. Доведіть, що ви громадянин ЄС, не розкриваючи імені. Нуліфікатори запобігають подвійній реєстрації. Розкриття за рішенням суду забезпечує відповідність.",
+  },
 
   // ── The Proposal (brief on root) ────────────────────────────────────
   "rootProposal.title": {
