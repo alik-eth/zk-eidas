@@ -24,6 +24,27 @@ function ProposalPage() {
 
   const complianceItems = t("proposal.complianceItems").split('|')
 
+  const COMPLIANCE_LINKS: Record<number, string> = {
+    0: "https://eur-lex.europa.eu/eli/reg/2024/1183/oj",        // Art 5a(16)
+    1: "https://eur-lex.europa.eu/eli/reg/2024/1183/oj",        // Art 45a
+    2: "https://eur-lex.europa.eu/eli/reg/2024/1183/oj",        // Art 45d
+    3: "https://www.iso.org/standard/69084.html",                // ISO 18013-5
+    4: "https://digital-strategy.ec.europa.eu/en/library/european-digital-identity-wallet-architecture-and-reference-framework", // ARF
+    5: "https://www.sogis.eu/uk/supporting_doc_en.html",         // SOG-IS
+    6: "https://eur-lex.europa.eu/eli/reg/2016/679/oj",          // GDPR
+  }
+
+  const REFERENCES = [
+    { label: "Regulation (EU) 2024/1183", desc: { en: "eIDAS 2.0 — amending Regulation (EU) No 910/2014", uk: "eIDAS 2.0 — зміни до Регламенту (ЄС) № 910/2014" }, url: "https://eur-lex.europa.eu/eli/reg/2024/1183/oj" },
+    { label: "ARF v1.4", desc: { en: "European Digital Identity Wallet Architecture and Reference Framework", uk: "Архітектура та еталонна структура Європейського гаманця цифрової ідентичності" }, url: "https://digital-strategy.ec.europa.eu/en/library/european-digital-identity-wallet-architecture-and-reference-framework" },
+    { label: "ISO 18013-5", desc: { en: "Personal identification — ISO-compliant driving licence — Part 5: Mobile driving licence (mDL)", uk: "Ідентифікація особи — Посвідчення водія за ISO — Частина 5: Мобільне посвідчення водія (mDL)" }, url: "https://www.iso.org/standard/69084.html" },
+    { label: "SOG-IS", desc: { en: "Crypto Evaluation Scheme — Agreed Cryptographic Mechanisms", uk: "Схема криптографічної оцінки — Узгоджені криптографічні механізми" }, url: "https://www.sogis.eu/uk/supporting_doc_en.html" },
+    { label: "NIST FIPS 203", desc: { en: "Module-Lattice-Based Key-Encapsulation Mechanism (ML-KEM)", uk: "Механізм інкапсуляції ключів на базі модульних ґраток (ML-KEM)" }, url: "https://csrc.nist.gov/pubs/fips/203/final" },
+    { label: "W3C VC Data Model", desc: { en: "Verifiable Credentials Data Model v2.0", uk: "Модель даних перевіряємих посвідчень v2.0" }, url: "https://www.w3.org/TR/vc-data-model-2.0/" },
+    { label: "GDPR", desc: { en: "Regulation (EU) 2016/679 — General Data Protection Regulation", uk: "Регламент (ЄС) 2016/679 — Загальний регламент захисту даних" }, url: "https://eur-lex.europa.eu/eli/reg/2016/679/oj" },
+    { label: "Longfellow", desc: { en: "Google's zero-knowledge proving system (Sumcheck + Ligero)", uk: "Система доведення з нульовим знанням від Google (Sumcheck + Ligero)" }, url: "https://github.com/AliKVovk/zk-eidas" },
+  ]
+
   return (
     <div className="min-h-screen bg-slate-900 text-white">
       {/* Navigation — matches root */}
@@ -122,12 +143,19 @@ function ProposalPage() {
       <section className="max-w-5xl mx-auto px-4 sm:px-8 py-12 border-t border-slate-800">
         <h2 className="text-2xl sm:text-3xl font-bold mb-6">{t("proposal.complianceTitle")}</h2>
         <div className="grid sm:grid-cols-2 gap-3">
-          {complianceItems.map((item: string, i: number) => (
-            <div key={i} className="flex items-start gap-3 bg-slate-800/50 rounded-xl border border-slate-700/40 p-4">
-              <span className="text-emerald-400 shrink-0 mt-0.5">&#10003;</span>
-              <span className="text-sm text-slate-400">{item}</span>
-            </div>
-          ))}
+          {complianceItems.map((item: string, i: number) => {
+            const url = COMPLIANCE_LINKS[i]
+            return (
+              <div key={i} className="flex items-start gap-3 bg-slate-800/50 rounded-xl border border-slate-700/40 p-4">
+                <span className="text-emerald-400 shrink-0 mt-0.5">&#10003;</span>
+                {url ? (
+                  <a href={url} target="_blank" rel="noopener noreferrer" className="text-sm text-slate-400 hover:text-slate-200 transition-colors underline decoration-slate-700 hover:decoration-slate-400">{item}</a>
+                ) : (
+                  <span className="text-sm text-slate-400">{item}</span>
+                )}
+              </div>
+            )
+          })}
         </div>
       </section>
 
@@ -179,6 +207,26 @@ function ProposalPage() {
       <section className="max-w-5xl mx-auto px-4 sm:px-8 py-12 border-t border-slate-800">
         <h2 className="text-2xl sm:text-3xl font-bold mb-4">{t("proposal.integrationTitle")}</h2>
         <p className="text-sm text-slate-400 leading-relaxed max-w-3xl">{t("proposal.integrationDesc")}</p>
+      </section>
+
+      {/* References */}
+      <section className="max-w-5xl mx-auto px-4 sm:px-8 py-12 border-t border-slate-800">
+        <h2 className="text-2xl sm:text-3xl font-bold mb-6">{locale === 'en' ? 'References' : 'Посилання'}</h2>
+        <div className="grid gap-2">
+          {REFERENCES.map((ref, i) => (
+            <a
+              key={i}
+              href={ref.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-baseline gap-3 bg-slate-800/50 rounded-lg border border-slate-700/40 px-5 py-3 hover:border-slate-600 transition-colors group"
+            >
+              <span className="text-sm font-semibold text-blue-400 group-hover:text-blue-300 shrink-0">{ref.label}</span>
+              <span className="text-sm text-slate-500 group-hover:text-slate-400">— {ref.desc[locale]}</span>
+              <span className="text-slate-600 group-hover:text-slate-400 ml-auto shrink-0 text-xs">&#x2197;</span>
+            </a>
+          ))}
+        </div>
       </section>
 
       {/* CTA */}
