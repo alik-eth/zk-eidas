@@ -238,8 +238,8 @@ const translations: Record<string, Record<Locale, string>> = {
     uk: "Транспортний протокол для запиту та отримання ZK доказів від EUDI Wallets.",
   },
   "learn.stdArf": {
-    en: "Compatible with Architecture Reference Framework v1.4 PID and mDL credential profiles. Conformance tests validate against the exact ARF credential schemas.",
-    uk: "Сумісний з Architecture Reference Framework v1.4 профілями PID та mDL. Тести відповідності валідують саме ARF схеми посвідчень.",
+    en: "Compatible with Architecture Reference Framework (ARF) PID and mDL credential profiles. Conformance tests validate against the exact ARF credential schemas.",
+    uk: "Сумісний з Architecture Reference Framework (ARF) профілями PID та mDL. Тести відповідності валідують саме ARF схеми посвідчень.",
   },
   "learn.stdSogis": {
     en: "All cryptographic primitives (ECDSA P-256, SHA-256, AES-256-GCM, ML-KEM-768) are SOG-IS approved or NIST standardized. The proving system (Sumcheck+Ligero) uses only hash-based commitments — no pairing-based trusted setup.",
@@ -1179,8 +1179,8 @@ const translations: Record<string, Record<Locale, string>> = {
   },
   "proposal.problemTitle": { en: "The Problem", uk: "Проблема" },
   "proposal.problemDesc": {
-    en: "Article 5a(16) of Regulation (EU) 2024/1183 mandates that European Digital Identity Wallets enable selective disclosure and unlinkability. The Architecture Reference Framework (ARF v1.4) recommends batch issuance as the primary mechanism, where the issuer pre-signs multiple copies of each credential so the holder can present each copy once without being tracked. This approach works but creates significant operational burden: N signatures per credential, N copies to store, N credentials to revoke. BBS+ signatures offer a more elegant alternative through rerandomization, but they are not part of the eIDAS standard and rely on pairing-based cryptography that is not quantum-resistant.",
-    uk: "Стаття 5a(16) Регламенту (ЄС) 2024/1183 вимагає, щоб Європейські гаманці цифрової ідентичності забезпечували селективне розкриття та незв'язуваність. Architecture Reference Framework (ARF v1.4) рекомендує пакетну видачу як основний механізм, де емітент попередньо підписує кілька копій кожного посвідчення, щоб власник міг пред'явити кожну копію один раз без відстеження. Цей підхід працює, але створює значне операційне навантаження: N підписів на посвідчення, N копій для зберігання, N посвідчень для відкликання. Підписи BBS+ пропонують більш елегантну альтернативу через рерандомізацію, але вони не є частиною стандарту eIDAS і покладаються на криптографію на основі спарювань, яка не є квантово-стійкою.",
+    en: "Article 5a(16) of Regulation (EU) 2024/1183 mandates that European Digital Identity Wallets enable selective disclosure and unlinkability. The Architecture Reference Framework (ARF) recommends batch issuance as the primary mechanism, where the issuer pre-signs multiple copies of each credential so the holder can present each copy once without being tracked. This approach works but creates significant operational burden: N signatures per credential, N copies to store, N credentials to revoke. BBS+ signatures offer a more elegant alternative through rerandomization, but they are not part of the eIDAS standard and rely on pairing-based cryptography that is not quantum-resistant.",
+    uk: "Стаття 5a(16) Регламенту (ЄС) 2024/1183 вимагає, щоб Європейські гаманці цифрової ідентичності забезпечували селективне розкриття та незв'язуваність. Architecture Reference Framework (ARF) рекомендує пакетну видачу як основний механізм, де емітент попередньо підписує кілька копій кожного посвідчення, щоб власник міг пред'явити кожну копію один раз без відстеження. Цей підхід працює, але створює значне операційне навантаження: N підписів на посвідчення, N копій для зберігання, N посвідчень для відкликання. Підписи BBS+ пропонують більш елегантну альтернативу через рерандомізацію, але вони не є частиною стандарту eIDAS і покладаються на криптографію на основі спарювань, яка не є квантово-стійкою.",
   },
   "proposal.solutionTitle": { en: "The Solution", uk: "Рішення" },
   "proposal.solutionDesc": {
@@ -1217,8 +1217,8 @@ const translations: Record<string, Record<Locale, string>> = {
   },
   "proposal.complianceTitle": { en: "Regulatory Alignment", uk: "Регуляторна відповідність" },
   "proposal.complianceItems": {
-    en: "eIDAS 2.0 Article 5a(16): selective disclosure and unlinkability|eIDAS 2.0 Article 45a: Qualified Trust Service Provider obligations|eIDAS 2.0 Article 45d: Qualified Electronic Attestation of Attributes (QEAA)|ISO 18013-5: mdoc credential format (PID, mDL)|Architecture Reference Framework v1.4: compatible with existing EUDI Wallet architecture|SOG-IS / NIST: all cryptographic primitives approved or standardized|GDPR Article 25: privacy by design and by default",
-    uk: "eIDAS 2.0 Стаття 5a(16): селективне розкриття та незв'язуваність|eIDAS 2.0 Стаття 45a: зобов'язання Кваліфікованих Довірених Постачальників Послуг|eIDAS 2.0 Стаття 45d: Кваліфікована Електронна Атестація Атрибутів (QEAA)|ISO 18013-5: формат посвідчень mdoc (PID, mDL)|Architecture Reference Framework v1.4: сумісність з існуючою архітектурою EUDI Wallet|SOG-IS / NIST: усі криптографічні примітиви затверджені або стандартизовані|GDPR Стаття 25: приватність за дизайном та за замовчуванням",
+    en: "eIDAS 2.0 Article 5a(16): selective disclosure and unlinkability|eIDAS 2.0 Article 45a: Qualified Trust Service Provider obligations|eIDAS 2.0 Article 45d: Qualified Electronic Attestation of Attributes (QEAA)|ISO 18013-5: mdoc credential format (PID, mDL)|Architecture Reference Framework (ARF): compatible with existing EUDI Wallet architecture|SOG-IS / NIST: all cryptographic primitives approved or standardized|GDPR Article 25: privacy by design and by default",
+    uk: "eIDAS 2.0 Стаття 5a(16): селективне розкриття та незв'язуваність|eIDAS 2.0 Стаття 45a: зобов'язання Кваліфікованих Довірених Постачальників Послуг|eIDAS 2.0 Стаття 45d: Кваліфікована Електронна Атестація Атрибутів (QEAA)|ISO 18013-5: формат посвідчень mdoc (PID, mDL)|Architecture Reference Framework (ARF): сумісність з існуючою архітектурою EUDI Wallet|SOG-IS / NIST: усі криптографічні примітиви затверджені або стандартизовані|GDPR Стаття 25: приватність за дизайном та за замовчуванням",
   },
   "proposal.integrationTitle": { en: "Integration Path", uk: "Шлях інтеграції" },
   "proposal.integrationDesc": {
@@ -1247,7 +1247,7 @@ const translations: Record<string, Record<Locale, string>> = {
   "proposal.row.proofSize": { en: "Presentation size", uk: "Розмір презентації" },
   "proposal.row.crossBorder": { en: "Cross-border interoperability", uk: "Транскордонна сумісність" },
   "proposal.row.auditTrail": { en: "Third-party audit / verification", uk: "Аудит / верифікація третьою стороною" },
-  "proposal.cell.batch.eidas": { en: "ARF v1.4 recommended", uk: "Рекомендовано ARF v1.4" },
+  "proposal.cell.batch.eidas": { en: "ARF recommended", uk: "Рекомендовано ARF" },
   "proposal.cell.batch.sd": { en: "Yes (per-copy)", uk: "Так (по-копійно)" },
   "proposal.cell.batch.predicates": { en: "Issuer pre-computes (e.g., age_over_18 field)", uk: "Емітент попередньо обчислює (напр., поле age_over_18)" },
   "proposal.cell.batch.unlinkability": { en: "Limited by copy count", uk: "Обмежена кількістю копій" },

@@ -176,7 +176,7 @@ function Learn() {
               { standard: "mdoc / mDL (ISO 18013-5)", full: t("learn.stdMdoc"), href: "https://www.iso.org/standard/69084.html" },
               { standard: "ECDSA P-256 (secp256r1)", full: t("learn.stdEcdsa") },
               { standard: "OpenID4VP", full: t("learn.stdOpenid"), href: "https://openid.net/specs/openid-4-verifiable-presentations-1_0.html" },
-              { standard: "EUDI Wallet ARF v1.4", full: t("learn.stdArf"), href: "https://github.com/eu-digital-identity-wallet/eudi-doc-architecture-and-reference-framework" },
+              { standard: "EUDI Wallet ARF", full: t("learn.stdArf"), href: "https://github.com/eu-digital-identity-wallet/eudi-doc-architecture-and-reference-framework" },
               { standard: "SOG-IS Compliance", full: t("learn.stdSogis"), href: "https://www.sogis.eu/uk/supporting_doc_en.html" },
               { standard: "POTENTIAL LSP", full: t("learn.stdPotential"), href: "https://www.digital-identity-wallet.eu/" },
             ].map((s) => (
