@@ -116,13 +116,12 @@ fn clock_ticks_per_sec() -> u64 {
 
 struct Measurement {
     wall_ms: f64,
-    rss_delta_kb: i64,
+    rss_after_kb: u64,
     cpu_pct: f64,
 }
 
 fn measure<F: FnOnce()>(f: F) -> Measurement {
     let ticks_per_sec = clock_ticks_per_sec();
-    let rss_before = read_rss_kb();
     let cpu_before = read_cpu_ticks();
     let start = Instant::now();
 
@@ -133,7 +132,6 @@ fn measure<F: FnOnce()>(f: F) -> Measurement {
     let rss_after = read_rss_kb();
 
     let wall_ms = wall.as_secs_f64() * 1000.0;
-    let rss_delta_kb = rss_after as i64 - rss_before as i64;
     let cpu_ticks = cpu_after.saturating_sub(cpu_before);
     let cpu_secs = cpu_ticks as f64 / ticks_per_sec as f64;
     let cpu_pct = if wall.as_secs_f64() > 0.0 {
@@ -144,7 +142,7 @@ fn measure<F: FnOnce()>(f: F) -> Measurement {
 
     Measurement {
         wall_ms,
-        rss_delta_kb,
+        rss_after_kb: rss_after,
         cpu_pct,
     }
 }
@@ -210,7 +208,7 @@ fn bench_zk_pipeline() -> Vec<ZkResult> {
             eprintln!("  WARN: cache file not found: {}", cache_path.display());
             Measurement {
                 wall_ms: f64::NAN,
-                rss_delta_kb: 0,
+                rss_after_kb: 0,
                 cpu_pct: 0.0,
             }
         };
@@ -411,10 +409,9 @@ fn print_escrow_table(r: &EscrowResult) {
 
     let label_w = 28;
     let time_w = 14;
-    let rss_w = 14;
 
-    println!("{:<label_w$}{:>time_w$}{:>rss_w$}", "Operation", "Time", "RSS delta");
-    println!("{:<label_w$}{:>time_w$}{:>rss_w$}", "", "──────────", "──────────");
+    println!("{:<label_w$}{:>time_w$}", "Operation", "Time");
+    println!("{:<label_w$}{:>time_w$}", "", "──────────");
 
     let rows: &[(&str, &Measurement)] = &[
         ("ML-KEM-768 keygen",    &r.mlkem_keygen),
@@ -427,10 +424,9 @@ fn print_escrow_table(r: &EscrowResult) {
 
     for (name, m) in rows {
         println!(
-            "{:<label_w$}{:>time_w$}{:>rss_w$}",
+            "{:<label_w$}{:>time_w$}",
             name,
             fmt_ms(m.wall_ms),
-            fmt_mb(m.rss_delta_kb),
         );
     }
 
@@ -454,15 +450,6 @@ fn fmt_ms(v: f64) -> String {
         format!("{:.2}s", v / 1000.0)
     } else {
         format!("{:.2}ms", v)
-    }
-}
-
-fn fmt_mb(kb: i64) -> String {
-    let mb = kb as f64 / 1024.0;
-    if mb.abs() < 0.01 {
-        "~0 MB".into()
-    } else {
-        format!("{:+.1} MB", mb)
     }
 }
 
@@ -529,9 +516,9 @@ fn print_zk_table(results: &[ZkResult]) {
     println!();
 
     // Memory / CPU detail
-    print!("{:<label_w$}", "Gen RSS delta");
+    print!("{:<label_w$}", "Gen RSS (MB)");
     for r in results {
-        print!("{:>col_w$}", fmt_mb(r.circuit_gen.rss_delta_kb));
+        print!("{:>col_w$}", format!("{:.0}", r.circuit_gen.rss_after_kb as f64 / 1024.0));
     }
     println!();
 
@@ -541,15 +528,21 @@ fn print_zk_table(results: &[ZkResult]) {
     }
     println!();
 
-    print!("{:<label_w$}", "Prove RSS delta");
+    print!("{:<label_w$}", "Prove RSS (MB)");
     for r in results {
-        print!("{:>col_w$}", fmt_mb(r.prove.rss_delta_kb));
+        print!("{:>col_w$}", format!("{:.0}", r.prove.rss_after_kb as f64 / 1024.0));
     }
     println!();
 
     print!("{:<label_w$}", "Prove CPU util");
     for r in results {
         print!("{:>col_w$}", fmt_pct(r.prove.cpu_pct));
+    }
+    println!();
+
+    print!("{:<label_w$}", "Verify RSS (MB)");
+    for r in results {
+        print!("{:>col_w$}", format!("{:.0}", r.verify.rss_after_kb as f64 / 1024.0));
     }
     println!();
 
@@ -575,10 +568,11 @@ fn print_json(info: &SystemInfo, zk_results: &[ZkResult], escrow: &EscrowResult)
                     "\"prove_ms\":{pm},",
                     "\"verify_ms\":{vm},",
                     "\"proof_size_bytes\":{ps},",
-                    "\"gen_rss_delta_kb\":{gd},",
+                    "\"gen_rss_mb\":{gm},",
                     "\"gen_cpu_pct\":{gc},",
-                    "\"prove_rss_delta_kb\":{pd},",
+                    "\"prove_rss_mb\":{pm_r},",
                     "\"prove_cpu_pct\":{pc},",
+                    "\"verify_rss_mb\":{vm_r},",
                     "\"verify_cpu_pct\":{vc}",
                     "}}"
                 ),
@@ -592,10 +586,11 @@ fn print_json(info: &SystemInfo, zk_results: &[ZkResult], escrow: &EscrowResult)
                 pm = round2(r.prove.wall_ms),
                 vm = round2(r.verify.wall_ms),
                 ps = r.proof_size_bytes,
-                gd = r.circuit_gen.rss_delta_kb,
+                gm = round0(r.circuit_gen.rss_after_kb as f64 / 1024.0),
                 gc = round0(r.circuit_gen.cpu_pct),
-                pd = r.prove.rss_delta_kb,
+                pm_r = round0(r.prove.rss_after_kb as f64 / 1024.0),
                 pc = round0(r.prove.cpu_pct),
+                vm_r = round0(r.verify.rss_after_kb as f64 / 1024.0),
                 vc = round0(r.verify.cpu_pct),
             )
         })
@@ -609,12 +604,7 @@ fn print_json(info: &SystemInfo, zk_results: &[ZkResult], escrow: &EscrowResult)
             "\"aes_encrypt_ms\":{ae},",
             "\"mlkem_encrypt_k_ms\":{ek},",
             "\"mlkem_decrypt_k_ms\":{dk},",
-            "\"aes_decrypt_ms\":{ad},",
-            "\"mlkem_keygen_rss_kb\":{kg_r},",
-            "\"aes_encrypt_rss_kb\":{ae_r},",
-            "\"mlkem_encrypt_k_rss_kb\":{ek_r},",
-            "\"mlkem_decrypt_k_rss_kb\":{dk_r},",
-            "\"aes_decrypt_rss_kb\":{ad_r}",
+            "\"aes_decrypt_ms\":{ad}",
             "}}"
         ),
         kg = round2(escrow.mlkem_keygen.wall_ms),
@@ -623,11 +613,6 @@ fn print_json(info: &SystemInfo, zk_results: &[ZkResult], escrow: &EscrowResult)
         ek = round2(escrow.mlkem_encrypt_k.wall_ms),
         dk = round2(escrow.mlkem_decrypt_k.wall_ms),
         ad = round2(escrow.aes_decrypt.wall_ms),
-        kg_r = escrow.mlkem_keygen.rss_delta_kb,
-        ae_r = escrow.aes_encrypt.rss_delta_kb,
-        ek_r = escrow.mlkem_encrypt_k.rss_delta_kb,
-        dk_r = escrow.mlkem_decrypt_k.rss_delta_kb,
-        ad_r = escrow.aes_decrypt.rss_delta_kb,
     );
 
     let json = format!(
