@@ -10,7 +10,6 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as VerifyRouteImport } from './routes/verify'
-import { Route as UkraineRouteImport } from './routes/ukraine'
 import { Route as SandboxRouteImport } from './routes/sandbox'
 import { Route as ProposalRouteImport } from './routes/proposal'
 import { Route as PrintRouteImport } from './routes/print'
@@ -22,11 +21,6 @@ import { Route as IndexRouteImport } from './routes/index'
 const VerifyRoute = VerifyRouteImport.update({
   id: '/verify',
   path: '/verify',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const UkraineRoute = UkraineRouteImport.update({
-  id: '/ukraine',
-  path: '/ukraine',
   getParentRoute: () => rootRouteImport,
 } as any)
 const SandboxRoute = SandboxRouteImport.update({
@@ -73,7 +67,6 @@ export interface FileRoutesByFullPath {
   '/print': typeof PrintRoute
   '/proposal': typeof ProposalRoute
   '/sandbox': typeof SandboxRoute
-  '/ukraine': typeof UkraineRoute
   '/verify': typeof VerifyRoute
 }
 export interface FileRoutesByTo {
@@ -84,7 +77,6 @@ export interface FileRoutesByTo {
   '/print': typeof PrintRoute
   '/proposal': typeof ProposalRoute
   '/sandbox': typeof SandboxRoute
-  '/ukraine': typeof UkraineRoute
   '/verify': typeof VerifyRoute
 }
 export interface FileRoutesById {
@@ -96,7 +88,6 @@ export interface FileRoutesById {
   '/print': typeof PrintRoute
   '/proposal': typeof ProposalRoute
   '/sandbox': typeof SandboxRoute
-  '/ukraine': typeof UkraineRoute
   '/verify': typeof VerifyRoute
 }
 export interface FileRouteTypes {
@@ -109,7 +100,6 @@ export interface FileRouteTypes {
     | '/print'
     | '/proposal'
     | '/sandbox'
-    | '/ukraine'
     | '/verify'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -120,7 +110,6 @@ export interface FileRouteTypes {
     | '/print'
     | '/proposal'
     | '/sandbox'
-    | '/ukraine'
     | '/verify'
   id:
     | '__root__'
@@ -131,7 +120,6 @@ export interface FileRouteTypes {
     | '/print'
     | '/proposal'
     | '/sandbox'
-    | '/ukraine'
     | '/verify'
   fileRoutesById: FileRoutesById
 }
@@ -143,7 +131,6 @@ export interface RootRouteChildren {
   PrintRoute: typeof PrintRoute
   ProposalRoute: typeof ProposalRoute
   SandboxRoute: typeof SandboxRoute
-  UkraineRoute: typeof UkraineRoute
   VerifyRoute: typeof VerifyRoute
 }
 
@@ -154,13 +141,6 @@ declare module '@tanstack/react-router' {
       path: '/verify'
       fullPath: '/verify'
       preLoaderRoute: typeof VerifyRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/ukraine': {
-      id: '/ukraine'
-      path: '/ukraine'
-      fullPath: '/ukraine'
-      preLoaderRoute: typeof UkraineRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/sandbox': {
@@ -223,7 +203,6 @@ const rootRouteChildren: RootRouteChildren = {
   PrintRoute: PrintRoute,
   ProposalRoute: ProposalRoute,
   SandboxRoute: SandboxRoute,
-  UkraineRoute: UkraineRoute,
   VerifyRoute: VerifyRoute,
 }
 export const routeTree = rootRouteImport
