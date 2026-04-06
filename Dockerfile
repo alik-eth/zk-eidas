@@ -1,6 +1,6 @@
 # Stage 1: Build Rust API (Longfellow — no WASM, no Circom, no rapidsnark)
 FROM ubuntu:24.04 AS rust-builder
-RUN apt-get update && apt-get install -y curl build-essential pkg-config libssl-dev clang git libgmp-dev nasm unzip cmake libbenchmark-dev libzstd-dev zlib1g-dev && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y curl build-essential pkg-config libssl-dev clang git libgmp-dev nasm unzip cmake libbenchmark-dev libgtest-dev libzstd-dev zlib1g-dev && rm -rf /var/lib/apt/lists/*
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain 1.93.0
 ENV PATH="/root/.cargo/bin:${PATH}"
 WORKDIR /app
