@@ -4,9 +4,9 @@ Zero-knowledge selective disclosure for eIDAS 2.0 credentials.
 
 An open-source proving system that takes any eIDAS 2.0 credential (mdoc/mDL) and lets the holder prove predicates about their claims — without revealing the underlying values. A citizen proves "I am over 18" and the verifier learns nothing else. Credential authenticity is verified inside the ZK circuit via SHA-256 commitment chains, cryptographically binding proofs to authentic, already-issued government credentials.
 
-Built on [Longfellow](https://github.com/nicoleelias/longfellow), Google's Sumcheck + Ligero proving system with SHA-256 hash circuits. No trusted setup. No ceremony files. Sub-second proving. Instant startup from serialized circuits.
+Built on [Longfellow](https://github.com/nicoleelias/longfellow), Google's Sumcheck + Ligero proving system with SHA-256 hash circuits. No trusted setup. No ceremony files. ~1.2s proving, ~0.7s verification. Instant startup from serialized circuits.
 
-**[Live Demo](https://eidas-longfellow.fly.dev)**
+**[Live Demo](https://zk-eidas.com)** · **[Proposal](https://zk-eidas.com/proposal)** · **[Learn More](https://zk-eidas.com/learn)**
 
 ## How It Works
 
@@ -87,7 +87,7 @@ Proofs are encoded as QR codes with a chunked binary protocol (deflate-raw compr
 
 Large proofs that exceed QR capacity are stored server-side in a content-addressed blob store (SHA-256 CID), with a compact QR pointing to the retrieval URL.
 
-The [verify page](https://eidas-longfellow.fly.dev/verify) is a PWA — install it once, verify proofs offline forever.
+The [verify page](https://zk-eidas.com/verify) is a PWA — install it once, verify proofs offline forever.
 
 ## Architecture
 
@@ -122,7 +122,7 @@ cargo build --release -p longfellow-sys --bin generate-circuits
 ## Testing
 
 ```bash
-# Rust unit + integration tests (181 tests)
+# Rust unit + integration tests (145 tests)
 cargo test --workspace
 
 # Web unit tests (vitest — QR chunking, nullifier check)
@@ -131,6 +131,40 @@ cd demo/web && npx vitest run
 # E2E tests (requires running container)
 cd demo/web && E2E_BASE_URL=http://127.0.0.1:8080 npx playwright test
 ```
+
+## Benchmarks
+
+The `benchmark` binary measures the full Longfellow ZK pipeline and identity escrow operations. Run with `--json` for machine-readable output.
+
+```bash
+cargo build --release -p longfellow-sys --bin benchmark
+./target/release/benchmark
+```
+
+Results on Intel 8C/16T @ 2.6GHz, 32GB RAM (median of 5 iterations):
+
+**ZK Proving Pipeline (Longfellow, Geq predicate)**
+
+|                     | 1 attr  | 2 attr  | 3 attr  | 4 attr  |
+|---------------------|---------|---------|---------|---------|
+| Circuit gen (cold)  | 14.6s   | 15.5s   | 16.1s   | 16.8s   |
+| Circuit load (cache)| 0.02ms  | 0.02ms  | 0.02ms  | 0.02ms  |
+| Prove               | 1.12s   | 1.22s   | 1.27s   | 1.27s   |
+| Verify              | 601ms   | 703ms   | 720ms   | 722ms   |
+| Proof size          | 357 KB  | 358 KB  | 360 KB  | 362 KB  |
+| RSS (process)       | ~1.1 GB | ~1.2 GB | ~1.2 GB | ~1.3 GB |
+
+**Identity Escrow Pipeline (4 fields)**
+
+| Operation           | Time    |
+|---------------------|---------|
+| ML-KEM-768 keygen   | 0.06ms  |
+| AES-256-GCM encrypt | <0.01ms |
+| ML-KEM encrypt K    | 0.12ms  |
+| ML-KEM decrypt K    | 0.14ms  |
+| AES-256-GCM decrypt | <0.01ms |
+
+Circuit generation is a cold-path operation — circuits are pre-generated at build time and loaded from disk at startup (0.02ms). The RSS reported is absolute process memory, not delta. Escrow operations are negligible (<0.5ms total). CPU utilization is single-threaded (~100%) for all ZK operations.
 
 ## Deployment
 

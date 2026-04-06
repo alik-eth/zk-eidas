@@ -166,7 +166,7 @@ const translations: Record<string, Record<Locale, string>> = {
   "learn.compSize": { en: "Proof Size", uk: "Розмір доказу" },
   "learn.compSizeFull": { en: "Full disclosed claims", uk: "Повні розкриті поля" },
   "learn.compSizeBbs": { en: "~200 bytes", uk: "~200 байт" },
-  "learn.compSizeZk": { en: "~350 KB (QEAA: ~1-2 KB)", uk: "~350 КБ (QEAA: ~1-2 КБ)" },
+  "learn.compSizeZk": { en: "~360 KB (QEAA: ~1-2 KB)", uk: "~360 КБ (QEAA: ~1-2 КБ)" },
   "learn.compFootSdjwt": {
     en: "SD-JWT VC: RFC 9901. Selective disclosure via salted hashes, but the issuer's signature is constant across all presentations — a persistent correlation handle.",
     uk: "SD-JWT VC: RFC 9901. Селективне розкриття через хеші з сіллю, але підпис видавця постійний у всіх пред'явленнях — стійкий маркер кореляції.",
@@ -287,8 +287,8 @@ const translations: Record<string, Record<Locale, string>> = {
   },
   "learn.stage3Title": { en: "3. Prove", uk: "3. Доведення" },
   "learn.stage3Desc": {
-    en: "Longfellow (Sumcheck + Ligero) generates a zero-knowledge proof. The COSE signature is verified natively inside the prover — no separate circuit needed. The proof demonstrates that a predicate holds (e.g., age >= 18) without revealing the underlying data. ~350 KB, ~3 seconds on server, no trusted setup required. The proving system is quantum-resistant: all commitments are hash-based, no pairing-based ceremony.",
-    uk: "Longfellow (Sumcheck + Ligero) генерує доказ з нульовим знанням. Підпис COSE перевіряється нативно всередині довідника — без окремої схеми. Доказ демонструє, що предикат виконується (напр., вік >= 18) без розкриття вхідних даних. ~350 КБ, ~3 секунди на сервері, без довіреної ініціалізації. Система доведення квантово-стійка: всі зобов'язання базуються на хешах, без церемонії на основі пейрингів.",
+    en: "Longfellow (Sumcheck + Ligero) generates a zero-knowledge proof. The COSE signature is verified natively inside the prover — no separate circuit needed. The proof demonstrates that a predicate holds (e.g., age >= 18) without revealing the underlying data. ~360 KB proof, ~1.2s prove + ~0.7s verify on server, no trusted setup required. The proving system is quantum-resistant: all commitments are hash-based, no pairing-based ceremony.",
+    uk: "Longfellow (Sumcheck + Ligero) генерує доказ з нульовим знанням. Підпис COSE перевіряється нативно всередині довідника — без окремої схеми. Доказ демонструє, що предикат виконується (напр., вік >= 18) без розкриття вхідних даних. ~360 КБ доказ, ~1.2с генерація + ~0.7с верифікація на сервері, без довіреної ініціалізації. Система доведення квантово-стійка: всі зобов'язання базуються на хешах, без церемонії на основі пейрингів.",
   },
   "learn.stage3Nullifier": {
     en: "Each proof includes a nullifier — a deterministic hash that prevents double-use of the same credential for the same purpose, without revealing the holder's identity. Holder binding ties the proof to a specific device or session.",
@@ -300,8 +300,8 @@ const translations: Record<string, Record<Locale, string>> = {
   },
   "learn.stage4Title": { en: "4. Store", uk: "4. Зберігання" },
   "learn.stage4Desc": {
-    en: "The proof is content-addressed using SHA-256 and stored by its CID (Content Identifier). At ~350 KB, proofs are too large for QR codes (~3 KB max). The storage layer holds proofs until they are verified and attested. Future: IPFS pinning for decentralized storage.",
-    uk: "Доказ адресується контентом через SHA-256 і зберігається за CID (ідентифікатором контенту). Розміром ~350 КБ, докази занадто великі для QR-кодів (~3 КБ макс). Рівень зберігання утримує докази до їх верифікації та атестації. Майбутнє: IPFS для децентралізованого зберігання.",
+    en: "The proof is content-addressed using SHA-256 and stored by its CID (Content Identifier). At ~360 KB, proofs are too large for QR codes (~3 KB max). The storage layer holds proofs until they are verified and attested. Future: IPFS pinning for decentralized storage.",
+    uk: "Доказ адресується контентом через SHA-256 і зберігається за CID (ідентифікатором контенту). Розміром ~360 КБ, докази занадто великі для QR-кодів (~3 КБ макс). Рівень зберігання утримує докази до їх верифікації та атестації. Майбутнє: IPFS для децентралізованого зберігання.",
   },
   "learn.stage5Title": { en: "5. Attest", uk: "5. Атестація" },
   "learn.stage5Desc": {
@@ -848,7 +848,7 @@ const translations: Record<string, Record<Locale, string>> = {
   },
   "cred.revoke": { en: "Revoke", uk: "Відкликати" },
   "cred.sigLine": { en: "sig: secp256r1 verified in-circuit", uk: "secp256r1 в схемі" },
-  "cred.proofSize": { en: "ZK proof: ~350 KB (QEAA attestation: ~1-2 KB)", uk: "ZK доказ: ~350 КБ (QEAA атестація: ~1-2 КБ)" },
+  "cred.proofSize": { en: "ZK proof: ~360 KB (QEAA attestation: ~1-2 KB)", uk: "ZK доказ: ~360 КБ (QEAA атестація: ~1-2 КБ)" },
   "cred.tagline": { en: "Any eIDAS 2.0 credential \u2014 selective disclosure without compromise", uk: "Будь-яке eIDAS 2.0 посвідчення \u2014 вибіркове розкриття без компромісів" },
 
   // ── Credential showcase: document type labels ──────────────────────────
