@@ -593,8 +593,11 @@ function VerifierStep({ state, setState, t }: { state: WizardState; setState: Re
 
   // Auto-export CBOR on mount so buttons are instantly available
   useEffect(() => {
-    const doExport = state.compoundProofJson ? handleExportCompound : handleExport
-    doExport()
+    if (state.compoundProofJson) {
+      handleExportCompound()
+    } else if (state.proofs.length > 0) {
+      handleExport()
+    }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Auto-verify on mount via server
