@@ -102,6 +102,7 @@ function Learn() {
             { href: "#how-it-works", label: t("learn.tocHowItWorks") },
             { href: "#capabilities", label: t("learn.tocCapabilities") },
             { href: "#escrow", label: t("learn.tocEscrow") },
+            { href: "#attestation", label: t("learn.tocAttestation") },
             { href: "#standards", label: t("learn.tocStandards") },
             { href: "#privacy", label: t("learn.tocPrivacy") },
           ].map((item) => (
@@ -476,7 +477,7 @@ function Learn() {
           <div className="bg-slate-800/30 rounded-xl border border-slate-700/50 p-6 sm:p-8 mb-10">
             <div className="flex flex-wrap items-center justify-center gap-2 sm:gap-3 text-sm font-mono">
               {[
-                { label: "SD-JWT / mdoc", sub: t("learn.howCredential") },
+                { label: t("learn.howInputLabel"), sub: t("learn.howCredential") },
                 { label: t("learn.howParser"), sub: t("learn.howParserSub") },
                 { label: t("learn.howWitness"), sub: t("learn.howWitnessSub") },
                 { label: t("learn.howCircuit"), sub: t("learn.howCircuitSub") },
@@ -766,6 +767,20 @@ function Learn() {
 
           {/* Overhead note */}
           <p className="text-sm text-slate-500">{t("learn.escrowOverhead")}</p>
+        </section>
+
+        {/* ── 7b. Proof Attestation ─────────────────────────────────────── */}
+        <section id="attestation" className="scroll-mt-24">
+          <h2 className="text-2xl font-bold text-white mb-2">{t("learn.attestTitle")}</h2>
+          <p className="text-slate-400 mb-6">{t("learn.attestSubtitle")}</p>
+          <div className="bg-slate-800/50 rounded-xl border border-slate-700/40 p-6 space-y-4">
+            <p className="text-slate-300 leading-relaxed">{t("learn.attestWhy")}</p>
+            <div className="bg-slate-900/60 rounded-lg p-4 font-mono text-sm text-emerald-400">
+              {t("learn.attestFlow")}
+            </div>
+            <p className="text-slate-300 leading-relaxed">{t("learn.attestOffline")}</p>
+            <p className="text-slate-300 leading-relaxed">{t("learn.attestAdvantage")}</p>
+          </div>
         </section>
 
         {/* ── 7. Standards & Compliance ─────────────────────────────────── */}
