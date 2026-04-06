@@ -24,15 +24,67 @@ const translations: Record<string, Record<Locale, string>> = {
 
   // ── Hero ────────────────────────────────────────────────────────────────
   "hero.subtitle": {
-    en: "Prove who you are without revealing who you are",
-    uk: "Доведіть, хто ви є, не розкриваючи хто ви є",
+    en: "Europe promised digital identity. The hard part isn't the wallet — it's proving things without a central registry.",
+    uk: "Європа пообіцяла цифрову ідентичність. Складність не в гаманці — а в доведенні без центрального реєстру.",
   },
   "hero.tagline": {
-    en: "EU digital IDs expose your data every time you show them. We wrap them in zero-knowledge proofs — so you prove facts (\"I'm 18+\") without sharing personal details.",
-    uk: "Цифрові ID ЄС розкривають ваші дані щоразу, коли ви їх показуєте. Ми загортаємо їх у ZK-докази — ви доводите факти («мені є 18»), не ділячись персональними даними.",
+    en: "Zero-knowledge proofs for eIDAS 2.0 — no trusted setup, no central database, no surveillance.",
+    uk: "Докази з нульовим знанням для eIDAS 2.0 — без довіреної ініціалізації, без центральної бази, без стеження.",
   },
   "hero.tryDemo": { en: "Try the Demo", uk: "Спробувати демо" },
   "hero.viewGithub": { en: "View on GitHub", uk: "Переглянути на GitHub" },
+
+  // ── The Dilemma ─────────────────────────────────────────────────────
+  "dilemma.title": {
+    en: "The Dilemma",
+    uk: "Дилема",
+  },
+  "dilemma.gapTitle": {
+    en: "The Digital-Physical Gap",
+    uk: "Цифрово-фізичний розрив",
+  },
+  "dilemma.gapDesc": {
+    en: "Citizens still carry paper documents. Digital credentials exist, but verification means full disclosure or online registry lookups. Physical bureaucracy persists because digital identity hasn't solved the trust problem.",
+    uk: "Громадяни досі носять паперові документи. Цифрові посвідчення існують, але верифікація означає повне розкриття або онлайн-запити до реєстрів. Паперова бюрократія зберігається, бо цифрова ідентичність не вирішила проблему довіри.",
+  },
+  "dilemma.promiseTitle": {
+    en: "The Promise of eIDAS 2.0",
+    uk: "Обіцянка eIDAS 2.0",
+  },
+  "dilemma.promiseDesc": {
+    en: "Article 5a(16) mandates selective disclosure and unlinkability. Wallets should let you prove \"I'm over 18\" without revealing your name or birthdate. The regulation is right — the implementation is the challenge.",
+    uk: "Стаття 5a(16) вимагає селективного розкриття та незв'язуваності. Гаманці мають дозволяти довести \"мені є 18\" без розкриття імені чи дати народження. Регламент правильний — проблема в реалізації.",
+  },
+  "dilemma.centralTitle": {
+    en: "The Centralization Problem",
+    uk: "Проблема централізації",
+  },
+  "dilemma.centralDesc": {
+    en: "The EU can't — and shouldn't — centralize 27 member state registries. No single authority can be the verifier of last resort. The system must work without a central database.",
+    uk: "ЄС не може — і не повинен — централізувати реєстри 27 держав-членів. Жодна єдина інстанція не може бути верифікатором останньої інстанції. Система має працювати без центральної бази даних.",
+  },
+
+  // ── The Proposal (brief on root) ────────────────────────────────────
+  "rootProposal.title": {
+    en: "A Proposal for Trust Service Providers",
+    uk: "Пропозиція для довірених постачальників послуг",
+  },
+  "rootProposal.attestDesc": {
+    en: "A Qualified TSP verifies a zero-knowledge proof and issues a signed attestation (QEAA). At ~1-2 KB, it fits in a single QR code — verifiable offline, legally meaningful under eIDAS 2.0.",
+    uk: "Кваліфікований TSP перевіряє доказ з нульовим знанням і видає підписану атестацію (QEAA). Розміром ~1-2 КБ, вона поміщається в один QR-код — перевіряється офлайн, юридично значуща за eIDAS 2.0.",
+  },
+  "rootProposal.escrowDesc": {
+    en: "The TSP holds the decryption key for identity escrow. Encrypted credential fields are released only on court order — accountability without surveillance.",
+    uk: "TSP зберігає ключ дешифрування для ескроу ідентичності. Зашифровані поля посвідчень розкриваються лише за рішенням суду — підзвітність без стеження.",
+  },
+  "rootProposal.cta": {
+    en: "Read the full TSP proposal",
+    uk: "Читати повну пропозицію TSP",
+  },
+  "rootProposal.learnMore": {
+    en: "How it works — the technical details",
+    uk: "Як це працює — технічні деталі",
+  },
 
   // ── Problem ──────────────────────────────────────────────────────────
   "problem.title": {
