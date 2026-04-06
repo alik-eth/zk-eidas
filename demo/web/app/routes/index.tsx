@@ -44,7 +44,7 @@ const PROFILES: Profile[] = [
   {
     country: "Ukraine",
     docTypeKey: "cred.pid",
-    format: "SD-JWT VC",
+    format: "mdoc",
     flag: ["#005BBB", "#FFD500"],
     flagDir: "col",
     fields: [
@@ -72,7 +72,7 @@ const PROFILES: Profile[] = [
   {
     country: "France",
     docTypeKey: "cred.diploma",
-    format: "SD-JWT VC",
+    format: "mdoc",
     flag: ["#002395", "#FFFFFF", "#ED2939"],
     flagDir: "row",
     fields: [

@@ -221,7 +221,7 @@ const translations: Record<string, Record<Locale, string>> = {
   "learn.compFormatSdjwt": { en: "Native SD-JWT", uk: "Нативний SD-JWT" },
   "learn.compFormatBbs": { en: "New format required", uk: "Потрібен новий формат" },
   "learn.compFormatBatch": { en: "Native SD-JWT", uk: "Нативний SD-JWT" },
-  "learn.compFormatZk": { en: "Native SD-JWT / mdoc", uk: "Нативний SD-JWT / mdoc" },
+  "learn.compFormatZk": { en: "Native mdoc", uk: "Нативний mdoc" },
   "learn.compSize": { en: "Proof Size", uk: "Розмір доказу" },
   "learn.compSizeFull": { en: "Full disclosed claims", uk: "Повні розкриті поля" },
   "learn.compSizeBbs": { en: "~200 bytes", uk: "~200 байт" },
@@ -1173,7 +1173,7 @@ const translations: Record<string, Record<Locale, string>> = {
   "sandbox.wasmUnavailable": { en: "WASM Unavailable", uk: "WASM недоступний" },
   "sandbox.verifyingShort": { en: "Verifying...", uk: "Перевірка..." },
   // TODO v2: remove after WASM code cleanup
-  "sandbox.autoVerifying": { en: "Verifying proof in your browser...", uk: "Верифікація доказу у вашому браузері..." },
+  "sandbox.autoVerifying": { en: "Verifying proof...", uk: "Верифікація доказу..." },
   "sandbox.verificationResults": {
     en: "Verification Results",
     uk: "Результати верифікації",
@@ -1407,8 +1407,8 @@ const translations: Record<string, Record<Locale, string>> = {
     uk: "Офлайн верифікатор доказів",
   },
   "verify.subtitle": {
-    en: "Drop a .cbor proof envelope to verify it entirely in your browser. No data is sent to any server \u2014 verification uses trusted VKs and WASM.",
-    uk: "Перетягніть .cbor конверт доказу для верифікації повністю у вашому браузері. Дані не відправляються на жоден сервер \u2014 верифікація використовує довірені VK та WASM.",
+    en: "Scan a QEAA attestation QR code or drop a .cbor proof envelope to verify. Attestations are verified offline via TSP signature; full proofs are verified server-side.",
+    uk: "Скануйте QR-код QEAA атестації або перетягніть .cbor конверт доказу для верифікації. Атестації перевіряються офлайн через підпис TSP; повні докази перевіряються на сервері.",
   },
   "verify.offlineVerifier": {
     en: "Offline Verifier",
@@ -1419,8 +1419,8 @@ const translations: Record<string, Record<Locale, string>> = {
     uk: "Працює офлайн.",
   },
   "verify.pwaDesc": {
-    en: "Add this page to your home screen to install it as an app. Once installed, you can scan and verify paper proofs without internet — everything runs on your device.",
-    uk: "Додайте цю сторінку на головний екран, щоб встановити як застосунок. Після встановлення ви зможете сканувати та перевіряти паперові докази без інтернету — все працює на вашому пристрої.",
+    en: "Add this page to your home screen to install it as an app. Scan QEAA attestation QR codes and verify them offline via TSP signature check.",
+    uk: "Додайте цю сторінку на головний екран, щоб встановити як застосунок. Скануйте QR-коди QEAA атестацій та перевіряйте їх офлайн через перевірку підпису TSP.",
   },
   "verify.dropHere": {
     en: "Drop a .cbor proof file here",
@@ -1431,25 +1431,28 @@ const translations: Record<string, Record<Locale, string>> = {
     uk: "або натисніть для вибору",
   },
   "verify.proofEnvelope": { en: "Proof Envelope", uk: "Конверт доказу" },
+  // TODO v2: remove after WASM code cleanup
   "verify.verifyAllWasm": {
-    en: "Verify All (WASM)",
-    uk: "Перевірити все (WASM)",
+    en: "Verify All",
+    uk: "Перевірити все",
   },
+  // TODO v2: remove after WASM code cleanup
   "verify.initWasm": {
-    en: "Initializing WASM...",
-    uk: "Ініціалізація WASM...",
+    en: "Initializing...",
+    uk: "Ініціалізація...",
   },
+  // TODO v2: remove after WASM code cleanup
   "verify.verifyingBrowser": {
-    en: "Verifying in browser...",
-    uk: "Перевірка в браузері...",
+    en: "Verifying...",
+    uk: "Перевірка...",
   },
   "verify.allVerified": {
-    en: "All proofs verified client-side. No data was sent to any server.",
-    uk: "Всі докази перевірено на клієнті. Дані не відправлено на жоден сервер.",
+    en: "All proofs verified successfully.",
+    uk: "Всі докази успішно перевірено.",
   },
   "verify.vkNote": {
-    en: "Verification keys derived from trusted circuit bytecode at build time.",
-    uk: "Ключі верифікації виведено з довіреного байткоду схеми під час збірки.",
+    en: "Proofs verified via Longfellow (Sumcheck+Ligero). Attestations verified via TSP signature.",
+    uk: "Докази перевірено через Longfellow (Sumcheck+Ligero). Атестації перевірено через підпис TSP.",
   },
   "verify.verifyAnother": {
     en: "Verify Another File",
