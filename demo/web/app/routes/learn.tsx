@@ -521,11 +521,11 @@ function Learn() {
           {/* Metrics box */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
             <div className="bg-slate-800/50 rounded-xl border border-slate-700/50 p-4 text-center">
-              <div className="text-2xl font-bold text-white mb-1">~800B</div>
+              <div className="text-2xl font-bold text-white mb-1">~350KB</div>
               <div className="text-xs text-slate-400">{t("learn.howMetricSize")}</div>
             </div>
             <div className="bg-slate-800/50 rounded-xl border border-slate-700/50 p-4 text-center">
-              <div className="text-2xl font-bold text-white mb-1">&lt;10ms</div>
+              <div className="text-2xl font-bold text-white mb-1">&lt;100ms</div>
               <div className="text-xs text-slate-400">{t("learn.howMetricVerify")}</div>
             </div>
             <div className="bg-slate-800/50 rounded-xl border border-slate-700/50 p-4 text-center">

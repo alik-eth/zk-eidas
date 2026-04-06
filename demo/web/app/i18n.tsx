@@ -225,7 +225,7 @@ const translations: Record<string, Record<Locale, string>> = {
   "learn.compSize": { en: "Proof Size", uk: "Розмір доказу" },
   "learn.compSizeFull": { en: "Full disclosed claims", uk: "Повні розкриті поля" },
   "learn.compSizeBbs": { en: "~200 bytes", uk: "~200 байт" },
-  "learn.compSizeZk": { en: "~800 bytes", uk: "~800 байт" },
+  "learn.compSizeZk": { en: "~350 KB (QEAA: ~1-2 KB)", uk: "~350 КБ (QEAA: ~1-2 КБ)" },
   "learn.compFootSdjwt": {
     en: "SD-JWT VC: RFC 9901. Selective disclosure via salted hashes, but the issuer's signature is constant across all presentations — a persistent correlation handle.",
     uk: "SD-JWT VC: RFC 9901. Селективне розкриття через хеші з сіллю, але підпис видавця постійний у всіх пред'явленнях — стійкий маркер кореляції.",
@@ -1377,7 +1377,7 @@ const translations: Record<string, Record<Locale, string>> = {
   },
   "cred.revoke": { en: "Revoke", uk: "Відкликати" },
   "cred.sigLine": { en: "sig: secp256r1 verified in-circuit", uk: "secp256r1 в схемі" },
-  "cred.proofSize": { en: "ZK proof: ~800 B compressed", uk: "ZK: ~800 Б стиснений" },
+  "cred.proofSize": { en: "ZK proof: ~350 KB (QEAA attestation: ~1-2 KB)", uk: "ZK доказ: ~350 КБ (QEAA атестація: ~1-2 КБ)" },
   "cred.tagline": { en: "Any eIDAS 2.0 credential \u2014 selective disclosure without compromise", uk: "Будь-яке eIDAS 2.0 посвідчення \u2014 вибіркове розкриття без компромісів" },
 
   // ── Credential showcase: document type labels ──────────────────────────

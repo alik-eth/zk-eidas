@@ -1268,8 +1268,6 @@ function Landing() {
 
       <SolutionSteps />
 
-      <LiveProofSection />
-
       <PaperContractsSection />
 
       {/* Footer */}
