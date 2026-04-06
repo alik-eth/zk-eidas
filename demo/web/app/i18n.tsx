@@ -1691,6 +1691,71 @@ const translations: Record<string, Record<Locale, string>> = {
   "contracts.vehicleSale.desc": { en: "Verify vehicle is insured and not collateral", uk: "Перевірити страхування ТЗ та відсутність застави" },
   "contracts.vehicleSale.body_en": { en: "Party 1 (\"the Seller\") and Party 2 (\"the Buyer\") enter this agreement under the following cryptographically proven conditions:\n\nSeller has proven:\n• They are at least 18 years of age\n• Their identity is bound to the vehicle registration (holder binding verified)\n\nThe vehicle (identified by VIN) has proven:\n• Insurance is currently active (not expired)\n• VIN is not in any revocation registry\n\nBuyer has proven:\n• They are at least 18 years of age\n\nNeither party's name, address, birthdate, or financial information has been disclosed. Each party is identified only by their document ID and the predicates they have proven. The holder binding proof cryptographically confirms that the Seller and the vehicle owner are the same person — without revealing who that person is.", uk: "Party 1 (\"the Seller\") and Party 2 (\"the Buyer\") enter this agreement under the following cryptographically proven conditions:\n\nSeller has proven:\n• They are at least 18 years of age\n• Their identity is bound to the vehicle registration (holder binding verified)\n\nThe vehicle (identified by VIN) has proven:\n• Insurance is currently active (not expired)\n• VIN is not in any revocation registry\n\nBuyer has proven:\n• They are at least 18 years of age\n\nNeither party's name, address, birthdate, or financial information has been disclosed. Each party is identified only by their document ID and the predicates they have proven. The holder binding proof cryptographically confirms that the Seller and the vehicle owner are the same person — without revealing who that person is." },
   "contracts.vehicleSale.body_uk": { en: "Особа 1 (\"Продавець\") та Особа 2 (\"Покупець\") укладають цей договір за наступних криптографічно доведених умов:\n\nПродавець довів:\n• Вік щонайменше 18 років\n• Його особа прив'язана до реєстрації ТЗ (зв'язок власника підтверджено)\n\nТранспортний засіб (ідентифікований за VIN) підтвердив:\n• Страхування чинне (не прострочене)\n• VIN не в реєстрі відкликань\n\nПокупець довів:\n• Вік щонайменше 18 років\n\nІм'я, адреса, дата народження та фінансова інформація жодної зі сторін не розкриті. Кожна сторона ідентифікована лише за ID документа та доведеними предикатами. Доказ прив'язки криптографічно підтверджує, що Продавець і власник ТЗ — одна й та сама особа, не розкриваючи, хто ця особа.", uk: "Особа 1 (\"Продавець\") та Особа 2 (\"Покупець\") укладають цей договір за наступних криптографічно доведених умов:\n\nПродавець довів:\n• Вік щонайменше 18 років\n• Його особа прив'язана до реєстрації ТЗ (зв'язок власника підтверджено)\n\nТранспортний засіб (ідентифікований за VIN) підтвердив:\n• Страхування чинне (не прострочене)\n• VIN не в реєстрі відкликань\n\nПокупець довів:\n• Вік щонайменше 18 років\n\nІм'я, адреса, дата народження та фінансова інформація жодної зі сторін не розкриті. Кожна сторона ідентифікована лише за ID документа та доведеними предикатами. Доказ прив'язки криптографічно підтверджує, що Продавець і власник ТЗ — одна й та сама особа, не розкриваючи, хто ця особа." },
+
+  // ── Proposal page ─────────────────────────────────────────────────────
+  "nav.proposal": { en: "TSP Proposal", uk: "Пропозиція TSP" },
+  "proposal.title": {
+    en: "Zero-Knowledge Selective Disclosure for eIDAS 2.0",
+    uk: "Селективне розкриття з нульовим знанням для eIDAS 2.0",
+  },
+  "proposal.subtitle": {
+    en: "A proposal for Qualified Trust Service Providers",
+    uk: "Пропозиція для кваліфікованих довірених постачальників послуг",
+  },
+  "proposal.problemTitle": { en: "The Problem", uk: "Проблема" },
+  "proposal.problemDesc": {
+    en: "Article 5a(16) of Regulation (EU) 2024/1183 mandates that European Digital Identity Wallets enable selective disclosure and unlinkability. Current approaches — SD-JWT with salted hashes and BBS+ batch signatures — offer partial solutions but cannot fully prevent correlation when relying parties collude.",
+    uk: "Стаття 5a(16) Регламенту (ЄС) 2024/1183 вимагає, щоб Європейські гаманці цифрової ідентичності забезпечували селективне розкриття та незв'язуваність. Поточні підходи — SD-JWT із солоними хешами та пакетні підписи BBS+ — пропонують часткові рішення, але не можуть повністю запобігти кореляції при змові перевіряючих сторін.",
+  },
+  "proposal.solutionTitle": { en: "The Solution", uk: "Рішення" },
+  "proposal.solutionDesc": {
+    en: "zk-eidas uses zero-knowledge proofs to achieve true unlinkability. The holder proves a predicate (e.g., \"age >= 18\") over their mdoc credential without revealing any other data. Each proof is cryptographically unlinkable — even the same holder proving the same predicate to the same verifier produces a different proof each time.",
+    uk: "zk-eidas використовує докази з нульовим знанням для досягнення справжньої незв'язуваності. Власник доводить предикат (напр., \"вік >= 18\") над своїм посвідченням mdoc без розкриття інших даних. Кожен доказ криптографічно незв'язуваний — навіть той самий власник, що доводить той самий предикат тому самому верифікатору, генерує різний доказ щоразу.",
+  },
+  "proposal.provingTitle": { en: "Proving System", uk: "Система доведення" },
+  "proposal.provingDesc": {
+    en: "Powered by Longfellow (Sumcheck + Ligero), a transparent proving system with no trusted setup. All commitments are hash-based — no pairing-based ceremony. This provides post-quantum security for the proving layer.",
+    uk: "Працює на Longfellow (Sumcheck + Ligero) — прозора система доведення без довіреної ініціалізації. Всі зобов'язання базуються на хешах — без церемонії на основі пейрингів. Це забезпечує пост-квантову безпеку для рівня доведення.",
+  },
+  "proposal.tspTitle": { en: "TSP Service Model", uk: "Модель послуг TSP" },
+  "proposal.tspDesc": {
+    en: "We propose two services for Qualified Trust Service Providers under eIDAS 2.0:",
+    uk: "Ми пропонуємо дві послуги для кваліфікованих довірених постачальників послуг за eIDAS 2.0:",
+  },
+  "proposal.service1Title": { en: "Service 1: Proof Attestation", uk: "Послуга 1: Атестація доказу" },
+  "proposal.service1Desc": {
+    en: "The TSP verifies a zero-knowledge proof and issues a Qualified Electronic Attestation of Attributes (QEAA). The attestation is a W3C Verifiable Credential signed with the TSP's qualified certificate. At ~1-2 KB, it fits in a single QR code for offline verification.",
+    uk: "TSP перевіряє доказ з нульовим знанням і видає Кваліфіковану Електронну Атестацію Атрибутів (QEAA). Атестація — це W3C Verifiable Credential, підписаний кваліфікованим сертифікатом TSP. Розміром ~1-2 КБ, вона поміщається в один QR-код для офлайн верифікації.",
+  },
+  "proposal.service1Endpoint": {
+    en: "POST /tsp/attest — verify proof, return signed QEAA",
+    uk: "POST /tsp/attest — перевірити доказ, повернути підписану QEAA",
+  },
+  "proposal.service2Title": { en: "Service 2: Identity Escrow Custody", uk: "Послуга 2: Зберігання ескроу ідентичності" },
+  "proposal.service2Desc": {
+    en: "The TSP holds the private key for identity escrow decryption (ML-KEM-768). Encrypted credential fields are released only on court order or arbitration ruling. This enables accountability while preserving day-to-day privacy.",
+    uk: "TSP зберігає приватний ключ для дешифрування ескроу ідентичності (ML-KEM-768). Зашифровані поля посвідчень розкриваються лише за рішенням суду або арбітражу. Це забезпечує підзвітність при збереженні повсякденної приватності.",
+  },
+  "proposal.service2Endpoint": {
+    en: "POST /tsp/escrow/decrypt — decrypt identity fields with court authorization",
+    uk: "POST /tsp/escrow/decrypt — дешифрувати поля ідентичності за авторизацією суду",
+  },
+  "proposal.complianceTitle": { en: "Compliance", uk: "Відповідність" },
+  "proposal.complianceItems": {
+    en: "eIDAS 2.0 Article 5a(16): unlinkability|eIDAS 2.0 Article 45d: Qualified Electronic Attestation of Attributes|ISO 18013-5: mdoc credential format|Architecture Reference Framework v1.4: PID and mDL profiles|SOG-IS: all primitives approved or NIST standardized|GDPR Article 25: privacy by design",
+    uk: "eIDAS 2.0 Стаття 5a(16): незв'язуваність|eIDAS 2.0 Стаття 45d: Кваліфікована Електронна Атестація Атрибутів|ISO 18013-5: формат посвідчень mdoc|Architecture Reference Framework v1.4: профілі PID та mDL|SOG-IS: всі примітиви затверджені або стандартизовані NIST|GDPR Стаття 25: приватність за дизайном",
+  },
+  "proposal.integrationTitle": { en: "Integration Path", uk: "Шлях інтеграції" },
+  "proposal.integrationDesc": {
+    en: "An existing Qualified Trust Service Provider can adopt these services with minimal infrastructure. The proving system runs as a single server-side binary. The attestation service requires only an ECDSA P-256 signing key (upgradable to a qualified certificate). The escrow service requires an ML-KEM-768 keypair stored in an HSM.",
+    uk: "Існуючий кваліфікований довірений постачальник послуг може впровадити ці послуги з мінімальною інфраструктурою. Система доведення працює як один серверний бінарний файл. Послуга атестації потребує лише ключ підпису ECDSA P-256 (з можливістю оновлення до кваліфікованого сертифіката). Послуга ескроу потребує ключову пару ML-KEM-768, що зберігається в HSM.",
+  },
+  "proposal.cryptoTitle": { en: "Cryptographic Primitives", uk: "Криптографічні примітиви" },
+  "proposal.cryptoItems": {
+    en: "Longfellow (Sumcheck + Ligero): transparent ZK proofs, no trusted setup, post-quantum|ECDSA P-256: COSE signature verification, QEAA signing|AES-256-GCM: identity escrow field encryption|ML-KEM-768 (NIST FIPS 203): post-quantum key encapsulation for escrow|SHA-256: content-addressed proof storage (CID)",
+    uk: "Longfellow (Sumcheck + Ligero): прозорі ZK докази, без довіреної ініціалізації, пост-квантові|ECDSA P-256: верифікація підписів COSE, підписання QEAA|AES-256-GCM: шифрування полів ескроу ідентичності|ML-KEM-768 (NIST FIPS 203): пост-квантова інкапсуляція ключів для ескроу|SHA-256: контент-адресоване сховище доказів (CID)",
+  },
+  "proposal.tryDemo": { en: "Try the Live Demo", uk: "Спробувати демо" },
 };
 
 // ---------------------------------------------------------------------------
