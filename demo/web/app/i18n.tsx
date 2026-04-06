@@ -123,6 +123,7 @@ const translations: Record<string, Record<Locale, string>> = {
   "learn.tocHowItWorks": { en: "How It Works", uk: "Як це працює" },
   "learn.tocCapabilities": { en: "Capabilities", uk: "Можливості" },
   "learn.tocEscrow": { en: "Escrow", uk: "Ескроу" },
+  "learn.tocAttestation": { en: "Attestation", uk: "Атестація" },
   "learn.tocStandards": { en: "Standards", uk: "Стандарти" },
   "learn.tocPrivacy": { en: "GDPR", uk: "GDPR" },
 
@@ -266,6 +267,7 @@ const translations: Record<string, Record<Locale, string>> = {
     en: "From credential to proof in five steps.",
     uk: "Від посвідчення до доказу за п'ять кроків.",
   },
+  "learn.howInputLabel": { en: "mdoc", uk: "mdoc" },
   "learn.howCredential": { en: "Credential", uk: "Посвідчення" },
   "learn.howParser": { en: "Parser", uk: "Парсер" },
   "learn.howParserSub": { en: "Claims + Key", uk: "Поля + Ключ" },
@@ -453,6 +455,29 @@ const translations: Record<string, Record<Locale, string>> = {
     uk: "ciphertexts[]|tags[]|encrypted_key",
   },
   "learn.escrowArchMlkem": { en: "ML-KEM-768 encrypt(K)", uk: "ML-KEM-768 encrypt(K)" },
+
+  // 7b. Proof Attestation
+  "learn.attestTitle": { en: "Proof Attestation (QEAA)", uk: "Атестація доказу (QEAA)" },
+  "learn.attestSubtitle": {
+    en: "A Qualified Trust Service Provider verifies your ZK proof and issues a signed attestation.",
+    uk: "Кваліфікований довірений постачальник перевіряє ваш ZK доказ і видає підписану атестацію.",
+  },
+  "learn.attestWhy": {
+    en: "Longfellow proofs are ~350 KB — too large for a QR code. Instead, a qualified TSP verifies the proof and issues a Qualified Electronic Attestation of Attributes (QEAA). The attestation is ~1-2 KB, fits in a single QR code, and is legally meaningful under eIDAS 2.0.",
+    uk: "Докази Longfellow мають розмір ~350 КБ — занадто великі для QR-коду. Натомість кваліфікований TSP перевіряє доказ і видає Кваліфіковану Електронну Атестацію Атрибутів (QEAA). Атестація має розмір ~1-2 КБ, поміщається в один QR-код і є юридично значущою за eIDAS 2.0.",
+  },
+  "learn.attestFlow": {
+    en: "Holder proves → TSP verifies → TSP signs attestation → QR code with attestation",
+    uk: "Власник доводить → TSP перевіряє → TSP підписує атестацію → QR-код з атестацією",
+  },
+  "learn.attestOffline": {
+    en: "Offline verification works by checking the TSP's signature on the attestation — no need to re-run the ZK proof.",
+    uk: "Офлайн верифікація працює через перевірку підпису TSP на атестації — не потрібно повторно запускати ZK доказ.",
+  },
+  "learn.attestAdvantage": {
+    en: "This is actually stronger than raw proof verification: the attestation carries legal weight as a qualified electronic statement under eIDAS 2.0 Article 45d.",
+    uk: "Це насправді сильніше за перевірку сирого доказу: атестація має юридичну вагу як кваліфіковане електронне твердження за статтею 45d eIDAS 2.0.",
+  },
 
   // Landing page — quantum callout
   "paperContracts.quantumSafe": {
