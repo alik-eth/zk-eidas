@@ -2,10 +2,8 @@ import { createFileRoute } from '@tanstack/react-router'
 import React, { useEffect, useRef, useState } from 'react'
 import { Tooltip } from '../components/Tooltip'
 import { StepWizard } from '../components/StepWizard'
-import { ProveMethodToggle, type ProveMethod } from '../components/ProveMethodToggle'
 import { useT, useLocale } from '../i18n'
 import { CREDENTIAL_TYPES, resolveVariant, type FieldDisplay } from '../lib/credential-types'
-import { proveCompoundInBrowser, getCacheStats, type BrowserProofResult } from '../lib/snarkjs-prover'
 import { EscrowPanel, type EscrowConfig } from '../components/EscrowPanel'
 
 // Types
@@ -266,14 +264,9 @@ function HolderStep({ state, setState, t }: { state: WizardState; setState: Reac
   const [escrowConfig, setEscrowConfig] = useState<EscrowConfig | null>(null)
   const escrowPrivkeyRef = useRef<string | null>(null)
   const [proveTimeMs, setProveTimeMs] = useState<number | null>(null)
+  // TODO v2: remove after WASM code cleanup — stubs for dead browser-proving code
   const [presReqLoading, setPresReqLoading] = useState(false)
   const [presReqResult, setPresReqResult] = useState<{ id: string; input_descriptors: { id: string; constraints: { path: string; predicate_op: string; value: string }[] }[] } | null>(null)
-  // Browser proving state
-  const [proveMethod, setProveMethod] = useState<ProveMethod>('server')
-  const proveOnDevice = proveMethod === 'device'
-  const [browserProgress, setBrowserProgress] = useState('')
-  const [_browserResult, _setBrowserResult] = useState<BrowserProofResult | null>(null)
-
   // Reset proved state when user reverts back to this step
   useEffect(() => {
     if (state.step === 2 && proved) {
@@ -307,98 +300,6 @@ function HolderStep({ state, setState, t }: { state: WizardState; setState: Reac
     }
   }
 
-  // Browser proving (disabled — needs /holder/prepare-witness endpoint)
-  // Will be enabled when lightweight witness endpoint is implemented.
-  // ECDSA (~2M constraints) always runs server-side; only predicate
-  // circuits (~300 constraints) can prove in-browser via snarkjs.
-  const handleProveBrowser = async () => {
-    setLoading(true)
-    setElapsed(0)
-    setBrowserProgress('Preparing inputs...')
-    _setBrowserResult(null)
-    const timer = setInterval(() => setElapsed(prev => prev + 1), 1000)
-    try {
-      const userPredicates = resolvedPredicates.filter(p => selected[p.id]).map(p => p.predicate)
-
-      const result = await proveCompoundInBrowser(
-        state.credential!,
-        state.format!,
-        userPredicates,
-        API_URL,
-        t,
-        (_stage: string, detail: string) => setBrowserProgress(detail),
-      )
-
-      // Build proof results from ECDSA + predicate proofs
-      const proofs: ProofResult[] = [
-        {
-          predicate: 'ecdsa_verify',
-          proof_json: JSON.stringify({ proof: result.ecdsaProof.proof, publicSignals: result.ecdsaProof.publicSignals }),
-          proof_hex: '',
-          op: 'ecdsa',
-        },
-        ...result.predicateProofs.map((p, i) => ({
-          predicate: userPredicates[i]?.claim ?? `predicate_${i}`,
-          proof_json: JSON.stringify({ proof: p.proof, publicSignals: p.publicSignals }),
-          proof_hex: '',
-          op: userPredicates[i]?.op ?? 'unknown',
-        })),
-      ]
-
-      setProveTimeMs(result.totalTimeMs)
-      clearInterval(timer)
-      setLoading(false)
-      setProved(true)
-      setBrowserProgress(`Done in ${(result.totalTimeMs / 1000).toFixed(1)}s — all proofs verified locally`)
-      // Build compound proof JSON compatible with server format
-      const compoundProof = {
-        proofs: result.predicateProofs.map((p, i) => ({
-          proof_bytes: Array.from(new TextEncoder().encode(JSON.stringify(p.proof))),
-          public_inputs: p.publicSignals.map(s => Array.from(new TextEncoder().encode(s))),
-          verification_key: [],
-          predicate_op: userPredicates[i]?.op === 'gte' ? 'Gte' :
-            userPredicates[i]?.op === 'lte' ? 'Lte' :
-            userPredicates[i]?.op === 'eq' ? 'Eq' :
-            userPredicates[i]?.op === 'neq' ? 'Neq' :
-            userPredicates[i]?.op === 'set_member' ? 'SetMember' :
-            userPredicates[i]?.op === 'range' ? 'Range' : 'Gte',
-          nullifier: null,
-          claim_name: userPredicates[i]?.claim ?? null,
-        })),
-        op: compoundMode === 'or' ? 'Or' : 'And',
-        ecdsa_proofs: Object.fromEntries(
-          [...new Set(userPredicates.map(p => p.claim))].map(claim => {
-            const ecdsaForClaim = result.ecdsaProofs.get(claim) ?? result.ecdsaProof;
-            return [claim, {
-              proof_bytes: Array.from(new TextEncoder().encode(JSON.stringify(ecdsaForClaim.proof))),
-              public_inputs: ecdsaForClaim.publicSignals.map(s => Array.from(new TextEncoder().encode(s))),
-              verification_key: [],
-              predicate_op: 'Ecdsa',
-              nullifier: null,
-            }];
-          })
-        ),
-      };
-
-      setTimeout(() => {
-        setState(prev => ({
-          ...prev,
-          step: 3,
-          proofs,
-          hiddenFields: userPredicates.map(p => p.claim),
-          nullifier: null,
-          compoundProofJson: JSON.stringify(compoundProof),
-          compoundOp: compoundMode === 'or' ? 'Or' : 'And',
-          selectedPredicateIds: Object.entries(selected).filter(([, v]) => v).map(([k]) => k),
-        }))
-      }, 800)
-    } catch (e: unknown) {
-      clearInterval(timer)
-      setLoading(false)
-      setBrowserProgress('')
-      alert(`On-device proof failed: ${e instanceof Error ? e.message : String(e)}`)
-    }
-  }
 
   const handleProve = async () => {
     setLoading(true)
@@ -619,35 +520,16 @@ function HolderStep({ state, setState, t }: { state: WizardState; setState: Reac
         </div>
       )}
 
-      {/* Prove method toggle */}
-      <div className="flex items-center justify-between mb-2">
-        <span className="text-xs text-slate-500 font-medium uppercase tracking-wider">Proving</span>
-        <ProveMethodToggle
-          value={proveMethod}
-          onChange={setProveMethod}
-          disabled={loading}
-        />
-      </div>
-
-      {/* Progress */}
-      {loading && browserProgress && (
-        <p className="text-xs text-blue-400 mb-2 animate-pulse">{browserProgress}</p>
-      )}
-
       {/* Actions */}
       <button
-        onClick={proveOnDevice ? handleProveBrowser : handleProve}
+        onClick={handleProve}
         disabled={loading || selectedCount === 0}
         className="flex items-center justify-center gap-2 w-full bg-blue-600 hover:bg-blue-700 disabled:bg-slate-600 disabled:cursor-not-allowed text-white font-semibold py-3 rounded-lg transition-colors"
       >
         <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
         {loading
-          ? proveOnDevice
-            ? `${t('sandbox.generatingShort')} (${elapsed}s)`
-            : t('sandbox.generatingShort')
-          : proveOnDevice
-            ? t('sandbox.generateBrowserBtn')
-            : t('sandbox.generateBtn')}
+          ? t('sandbox.generatingShort')
+          : t('sandbox.generateBtn')}
       </button>
     </div>
   )
@@ -663,15 +545,11 @@ function VerifierStep({ state, setState, t }: { state: WizardState; setState: Re
   const [error, setError] = useState<string | null>(null)
   const [exportData, setExportData] = useState<{ cbor_base64: string; cbor_size_bytes: number } | null>(null)
   const [exportLoading, setExportLoading] = useState(false)
-  const [verificationPath, setVerificationPath] = useState<'server' | 'wasm' | null>(null)
-  const [wasmAvailable, setWasmAvailable] = useState<boolean | null>(null)
+  const [verificationPath, setVerificationPath] = useState<'server' | null>(null)
   const [verifyTimeMs, setVerifyTimeMs] = useState<number | null>(null)
   const [revoking, setRevoking] = useState(false)
   const [revocationResult, setRevocationResult] = useState<{ status: string; revocation_root: string } | null>(null)
   const [currentRoot, setCurrentRoot] = useState<string | null>(null)
-
-  const [chainValid, setChainValid] = useState<boolean | null>(null)
-  const [initProfile, setInitProfile] = useState<{ jsImport: number; wasmCompile: number; total: number } | null>(null)
 
   const escrowData = (() => {
     if (!state.compoundProofJson || !state.escrowConfig) return null
@@ -707,26 +585,6 @@ function VerifierStep({ state, setState, t }: { state: WizardState; setState: Re
   }
 
   useEffect(() => {
-    let cancelled = false
-    ;(async () => {
-      try {
-        const { initVerifier, getInitTiming, loadTrustedVks } = await import('@zk-eidas/verifier-sdk')
-        await loadTrustedVks('/trusted-vks.json')
-        await initVerifier()
-        const timing = getInitTiming()
-        if (!cancelled) {
-          setWasmAvailable(true)
-          if (timing) setInitProfile(timing)
-        }
-      } catch (e) {
-        console.warn('WASM verification unavailable:', e)
-        if (!cancelled) setWasmAvailable(false)
-      }
-    })()
-    return () => { cancelled = true }
-  }, [])
-
-  useEffect(() => {
     fetch(`${API_URL}/issuer/revocation-root`)
       .then(res => res.json())
       .then(data => setCurrentRoot(data.revocation_root))
@@ -739,24 +597,13 @@ function VerifierStep({ state, setState, t }: { state: WizardState; setState: Re
     doExport()
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Auto-verify on mount: try WASM first, fallback to server
+  // Auto-verify on mount via server
   const autoVerifyRan = useRef(false)
   useEffect(() => {
-    if (autoVerifyRan.current || verified || wasmAvailable === null) return
+    if (autoVerifyRan.current || verified) return
     autoVerifyRan.current = true
-    ;(async () => {
-      if (wasmAvailable) {
-        try {
-          await handleVerifyWasm()
-        } catch {
-          // WASM failed, fallback to server
-          await handleVerifyServer()
-        }
-      } else {
-        await handleVerifyServer()
-      }
-    })()
-  }, [wasmAvailable]) // eslint-disable-line react-hooks/exhaustive-deps
+    handleVerifyServer()
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleExport = async () => {
     setExportLoading(true)
@@ -838,60 +685,6 @@ function VerifierStep({ state, setState, t }: { state: WizardState; setState: Re
 
     } catch (e: any) {
       setError(`Server verification failed: ${e.message}`)
-    } finally {
-      setVerifying(false)
-    }
-  }
-
-  const [wasmProfile, setWasmProfile] = useState<{ vkDecode: number; proofParse: number; snarkjsInit: number; snarkjsVerify: number; total: number }[] | null>(null)
-
-  const handleVerifyWasm = async () => {
-    setVerifying(true)
-    setError(null)
-    try {
-      const t0 = performance.now()
-      const { verifyCompoundProof, verifyProofWithProfile, loadTrustedVks } = await import('@zk-eidas/verifier-sdk')
-      const vks = await loadTrustedVks('/trusted-vks.json')
-      const timings: typeof wasmProfile = []
-
-      if (state.compoundProofJson) {
-        const envelope = JSON.parse(state.compoundProofJson)
-        const chainResult = await verifyCompoundProof(envelope, vks)
-        const subCount = chainResult.predicateResults.filter(r => r.valid).length
-        setResults([{
-          predicate: `compound[${envelope.op}]: ${subCount} sub-proofs verified`,
-          valid: chainResult.valid,
-        }])
-        setChainValid(chainResult.chainValid)
-        setNotDisclosed(state.hiddenFields)
-        setWasmProfile(timings)
-        setVerificationPath('wasm')
-        setVerified(true)
-        setVerifyTimeMs(performance.now() - t0)
-      } else {
-        const verResults: { predicate: string; valid: boolean }[] = []
-        for (const proof of state.proofs) {
-          const parsed = JSON.parse(proof.proof_json) as { proof_bytes: number[]; public_inputs: number[][]; predicate_op: string }
-          const proofJson = new TextDecoder().decode(new Uint8Array(parsed.proof_bytes))
-          const publicSignals = (parsed.public_inputs || []).map(
-            (inp: number[]) => new TextDecoder().decode(new Uint8Array(inp))
-          )
-          const combined = JSON.stringify({ ...JSON.parse(proofJson), publicSignals })
-          const res = await verifyProofWithProfile(new TextEncoder().encode(combined), parsed.predicate_op, vks)
-          verResults.push({ predicate: proof.predicate, valid: res.valid })
-          timings.push(res.timing)
-        }
-        setResults(verResults)
-        setChainValid(null)
-        setNotDisclosed(state.hiddenFields)
-        setWasmProfile(timings)
-        setVerificationPath('wasm')
-        setVerified(true)
-        setVerifyTimeMs(performance.now() - t0)
-      }
-    } catch (e: any) {
-      console.error('WASM verification error:', e)
-      setError(`WASM verification failed: ${e?.message || e?.toString() || String(e)}`)
     } finally {
       setVerifying(false)
     }
@@ -1125,8 +918,8 @@ function VerifierStep({ state, setState, t }: { state: WizardState; setState: Re
                         <p className="text-sm font-semibold text-slate-200">{t('sandbox.zkStep3Title')}</p>
                         <p className="text-xs text-slate-500">{t('sandbox.zkStep3Desc')}</p>
                       </div>
-                      {verificationPath === 'wasm' && verifyTimeMs !== null && (
-                        <span className="text-xs text-purple-400 bg-purple-900/30 border border-purple-700/30 px-2 py-0.5 rounded-full font-mono shrink-0">WASM {Math.round(verifyTimeMs)}ms</span>
+                      {verificationPath === 'server' && verifyTimeMs !== null && (
+                        <span className="text-xs text-slate-400 bg-slate-700/30 border border-slate-600/30 px-2 py-0.5 rounded-full font-mono shrink-0">{Math.round(verifyTimeMs)}ms</span>
                       )}
                     </div>
                     <div className="ml-3.5 pl-6">
@@ -1145,85 +938,10 @@ function VerifierStep({ state, setState, t }: { state: WizardState; setState: Re
                           )
                         })}
                       </div>
-                      {chainValid === true && (
-                        <div className="text-xs text-green-400 mt-1">{t('verify.chainVerified')}</div>
-                      )}
-                      {chainValid === false && (
-                        <div className="text-xs text-red-400 mt-1">{t('verify.chainFailed')}</div>
-                      )}
                     </div>
                   </div>
 
                 </div>
-
-                {/* WASM Performance Profile */}
-                {wasmProfile && wasmProfile.length > 0 && (
-                  <div className="px-5 pb-4">
-                    <details className="group">
-                      <summary className="text-xs text-slate-500 cursor-pointer hover:text-slate-400 transition-colors select-none list-none [&::-webkit-details-marker]:hidden">
-                        {t('sandbox.zkProfileToggle')}
-                      </summary>
-                      <div className="mt-3 space-y-3">
-                        {initProfile && (
-                          <div>
-                            <p className="text-xs text-slate-500 mb-1.5">{t('sandbox.zkProfileWasmInit')}</p>
-                            <div className="space-y-1">
-                              {[
-                                { label: t('sandbox.zkProfileJsImport'), ms: initProfile.jsImport, color: 'bg-indigo-500' },
-                                { label: t('sandbox.zkProfileWasmBoot'), ms: initProfile.wasmCompile, color: 'bg-cyan-500' },
-                              ].map((step) => {
-                                const maxMs = Math.max(initProfile.jsImport, initProfile.wasmCompile, 1)
-                                return (
-                                  <div key={step.label} className="flex items-center gap-2">
-                                    <span className="text-xs text-slate-500 w-28 text-right shrink-0">{step.label}</span>
-                                    <div className="flex-1 h-4 bg-slate-700/30 rounded overflow-hidden">
-                                      <div className={`h-full ${step.color} rounded opacity-60`} style={{ width: `${Math.max((step.ms / maxMs) * 100, 2)}%` }} />
-                                    </div>
-                                    <span className="text-xs font-mono text-slate-400 w-14 text-right shrink-0">{step.ms < 1 ? '<1' : Math.round(step.ms)}ms</span>
-                                  </div>
-                                )
-                              })}
-                            </div>
-                            <div className="flex justify-end mt-1 mb-3">
-                              <span className="text-xs font-mono text-slate-300">{t('sandbox.zkProfileTotal')}: {Math.round(initProfile.total)}ms</span>
-                            </div>
-                            <div className="border-t border-slate-700/50 mb-3" />
-                          </div>
-                        )}
-                        {wasmProfile.map((p, i) => {
-                          const steps = [
-                            { label: t('sandbox.zkProfileVk'), ms: p.vkDecode, color: 'bg-blue-500' },
-                            { label: t('sandbox.zkProfileParse'), ms: p.proofParse, color: 'bg-amber-500' },
-                            { label: t('sandbox.zkProfileInit'), ms: p.snarkjsInit, color: 'bg-slate-500' },
-                            { label: t('sandbox.zkProfileVerify'), ms: p.snarkjsVerify, color: 'bg-green-500' },
-                          ]
-                          const maxMs = Math.max(...steps.map(s => s.ms), 1)
-                          return (
-                            <div key={i}>
-                              {wasmProfile.length > 1 && (
-                                <p className="text-xs text-slate-500 mb-1.5">{t('sandbox.zkProfileProof')} {i + 1}</p>
-                              )}
-                              <div className="space-y-1">
-                                {steps.map((step) => (
-                                  <div key={step.label} className="flex items-center gap-2">
-                                    <span className="text-xs text-slate-500 w-28 text-right shrink-0">{step.label}</span>
-                                    <div className="flex-1 h-4 bg-slate-700/30 rounded overflow-hidden">
-                                      <div className={`h-full ${step.color} rounded opacity-60`} style={{ width: `${Math.max((step.ms / maxMs) * 100, 2)}%` }} />
-                                    </div>
-                                    <span className="text-xs font-mono text-slate-400 w-14 text-right shrink-0">{step.ms < 1 ? '<1' : Math.round(step.ms)}ms</span>
-                                  </div>
-                                ))}
-                              </div>
-                              <div className="flex justify-end mt-1">
-                                <span className="text-xs font-mono text-slate-300">{t('sandbox.zkProfileTotal')}: {Math.round(p.total)}ms</span>
-                              </div>
-                            </div>
-                          )
-                        })}
-                      </div>
-                    </details>
-                  </div>
-                )}
 
                 {/* Bottom banner */}
                 <div className="px-6 py-4 bg-green-950/20 border-t border-green-800/20">

@@ -1,8 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router'
 import React, { useEffect, useRef, useState } from 'react'
 import { StepWizard } from '../components/StepWizard'
-import { ProveMethodToggle, type ProveMethod } from '../components/ProveMethodToggle'
-import { proveCompoundInBrowser, proveInBrowser } from '../lib/snarkjs-prover'
 import { useT, useLocale, tLang } from '../i18n'
 import { CREDENTIAL_TYPES, resolveVariant, type FieldDisplay } from '../lib/credential-types'
 import { CONTRACT_TEMPLATES } from '../lib/contract-templates'
@@ -533,9 +531,6 @@ function ProveStep({ state, setState, t }: { state: ContractWizardState; setStat
   const [error, setError] = useState<string | null>(null)
   const [currentProvingIndex, setCurrentProvingIndex] = useState(-1)
   const [skipCache, setSkipCache] = useState(false)
-  const [proveMethod, setProveMethod] = useState<ProveMethod>('server')
-  const [browserProgress, setBrowserProgress] = useState('')
-  const proveOnDevice = proveMethod === 'device'
   const [escrowEnabled, setEscrowEnabled] = useState(true)
 
   // Reset local state when credentials change
@@ -874,332 +869,6 @@ function ProveStep({ state, setState, t }: { state: ContractWizardState; setStat
     }
   }
 
-  const handleProveBrowser = async () => {
-    setLoading(true)
-    setElapsed(0)
-    setError(null)
-    setBrowserProgress('Preparing...')
-    const timer = setInterval(() => setElapsed(prev => prev + 1), 1000)
-    try {
-      // Load WASM for credential parsing
-      const { default: init, prepare_inputs } = await import('zk-eidas-wasm')
-      await init()
-
-      const updatedCredentials = [...state.credentials]
-      const allQrDataUrls: string[] = []
-      let totalCompressedSize = 0
-      const partyProofs: PartyProof[] = []
-      let sharedContractHash: string | null = null
-      const timestamp = new Date().toISOString()
-
-      const { encodeProofChunks, LogicalOpFlag, encodeTermsQr, encodeMetadataQr } = await import('../lib/qr-chunking')
-      const QRCode = (await import('qrcode')).default
-      const proofCount = template!.credentials.length + 2
-
-      // Compute contract_hash client-side: SHA256(terms + timestamp) → first 8 bytes as u64
-      const selectedTemplate = CONTRACT_TEMPLATES.find(tpl => tpl.id === state.templateId)
-      const termsString = JSON.stringify(selectedTemplate)
-      const termsHashBuf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(termsString + timestamp))
-      const termsHashView = new DataView(termsHashBuf)
-      const contractHashU64 = termsHashView.getBigUint64(0)
-      const contractHashHex = `0x${contractHashU64.toString(16).padStart(16, '0')}`
-      sharedContractHash = contractHashHex
-
-      for (let ci = 0; ci < template!.credentials.length; ci++) {
-        setCurrentProvingIndex(ci)
-        const req = template!.credentials[ci]
-        const cred = updatedCredentials[ci]
-        const config = CREDENTIAL_TYPES.find(ct => ct.id === req.credentialType)
-        if (!config) throw new Error(`Unknown credential type: ${req.credentialType}`)
-
-        const templatePredicates = req.predicateIds
-          .map(pid => config.predicates.find(p => p.id === pid))
-          .filter((p): p is NonNullable<typeof p> => p !== undefined)
-
-        const predicates = templatePredicates.map(p => ({
-          claim: p.predicate.claim,
-          op: p.predicate.op,
-          value: p.predicate.value === '__FROM_FORM__'
-            ? (cred.fields.find(f => f.name === p.predicate.claim)?.value ?? '')
-            : p.predicate.value,
-        }))
-
-        // 1. Browser-side ECDSA + predicate proving
-        setBrowserProgress(`[${ci + 1}/${template!.credentials.length}] Proving ${t(req.roleLabelKey)} on device...`)
-        const result = await proveCompoundInBrowser(
-          cred.credential,
-          cred.format,
-          predicates,
-          API_URL,
-          t,
-          (_stage: string, detail: string) => setBrowserProgress(`[${ci + 1}/${template!.credentials.length}] ${detail}`),
-        )
-
-        // 2. Browser-side nullifier proving (if this credential has a nullifier field)
-        let nullifierHex: string | null = null
-        const salt = crypto.getRandomValues(new BigUint64Array(1))[0]
-        const saltHex = `0x${salt.toString(16).padStart(16, '0')}`
-
-        if (req.nullifierField) {
-          setBrowserProgress(`[${ci + 1}/${template!.credentials.length}] ${t("prove.generatingProof")} (nullifier)...`)
-
-          // The nullifier circuit needs an ECDSA commitment for the nullifier field,
-          // which may differ from the predicate claim. Generate a separate ECDSA proof.
-          const nullifierFieldName = req.nullifierField
-          const credIdRaw = prepare_inputs(cred.credential, nullifierFieldName)
-          const credIdData = JSON.parse(credIdRaw)
-          const credentialId = credIdData.claim_value
-
-          // Check if we already have an ECDSA proof for this claim
-          let nullifierEcdsa = result.ecdsaProofs.get(nullifierFieldName)
-          if (!nullifierEcdsa) {
-            // Need a separate ECDSA proof for the nullifier field
-            setBrowserProgress(`[${ci + 1}/${template!.credentials.length}] ECDSA (${nullifierFieldName})...`)
-            nullifierEcdsa = await proveInBrowser(
-              'ecdsa_verify',
-              credIdData.ecdsa_inputs,
-              API_URL,
-              t,
-              (_stage: string, detail: string) => setBrowserProgress(`[${ci + 1}/${template!.credentials.length}] Nullifier ECDSA: ${detail}`),
-            )
-          }
-
-          const commitment = nullifierEcdsa.publicSignals[0]
-          const sdArrayHash = nullifierEcdsa.publicSignals[1]
-          const msgHashField = nullifierEcdsa.publicSignals[2]
-
-          const nullifierInputs: Record<string, string> = {
-            credential_id: credentialId,
-            sd_array_hash: sdArrayHash,
-            message_hash: msgHashField,
-            commitment,
-            contract_hash: contractHashU64.toString(),
-            salt: salt.toString(),
-          }
-
-          const nullifierResult = await proveInBrowser(
-            'nullifier',
-            nullifierInputs,
-            API_URL,
-            t,
-            (_stage: string, detail: string) => setBrowserProgress(`[${ci + 1}/${template!.credentials.length}] Nullifier: ${detail}`),
-          )
-
-          // Nullifier output is publicSignals[0]
-          nullifierHex = `0x${BigInt(nullifierResult.publicSignals[0]).toString(16).padStart(64, '0')}`
-        }
-
-        // 3. Build compound proof JSON matching server format
-        const compoundProof = {
-          proofs: result.predicateProofs.map((p, i) => ({
-            proof_bytes: Array.from(new TextEncoder().encode(JSON.stringify(p.proof))),
-            public_inputs: p.publicSignals.map(s => Array.from(new TextEncoder().encode(s))),
-            verification_key: [],
-            predicate_op: predicates[i]?.op === 'gte' ? 'Gte' :
-              predicates[i]?.op === 'lte' ? 'Lte' :
-              predicates[i]?.op === 'eq' ? 'Eq' :
-              predicates[i]?.op === 'neq' ? 'Neq' :
-              predicates[i]?.op === 'set_member' ? 'SetMember' :
-              predicates[i]?.op === 'range' ? 'Range' : 'Gte',
-            nullifier: null,
-            claim_name: predicates[i]?.claim ?? null,
-          })),
-          op: 'And',
-          ecdsa_proofs: Object.fromEntries(
-            [...new Set(predicates.map(p => p.claim))].map(claim => {
-              const ecdsaForClaim = result.ecdsaProofs.get(claim) ?? result.ecdsaProof
-              return [claim, {
-                proof_bytes: Array.from(new TextEncoder().encode(JSON.stringify(ecdsaForClaim.proof))),
-                public_inputs: ecdsaForClaim.publicSignals.map(s => Array.from(new TextEncoder().encode(s))),
-                verification_key: [],
-                predicate_op: 'Ecdsa',
-                nullifier: null,
-              }]
-            })
-          ),
-        }
-        const compoundProofJson = JSON.stringify(compoundProof)
-
-        // 4. Export compound proof for QR codes (sends proof bytes only, NOT credential)
-        const exportRes = await fetch(`${API_URL}/holder/proof-export-compound?compress=true`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ compound_proof_json: compoundProofJson }),
-        })
-        if (!exportRes.ok) throw new Error(await exportRes.text())
-        const exportData = await exportRes.json()
-
-        // Generate QR codes (skip if proof too large)
-        const compressed = Uint8Array.from(atob(exportData.compressed_cbor_base64 || exportData.cbor_base64), c => c.charCodeAt(0))
-        totalCompressedSize += compressed.length
-        let qrUrlsForThisCredential: string[] = []
-        try {
-          const proofId = ci + 1
-          const logicalOp = proofCount > 1 ? LogicalOpFlag.And : LogicalOpFlag.Single
-          const chunks = encodeProofChunks(compressed, proofId, ci, proofCount, logicalOp)
-          const qrStartIndex = allQrDataUrls.length
-          for (const chunk of chunks) {
-            const url = await QRCode.toDataURL([{ data: chunk, mode: 'byte' as const }], {
-              errorCorrectionLevel: 'L', margin: 1, width: 280,
-            })
-            allQrDataUrls.push(url)
-          }
-          qrUrlsForThisCredential = allQrDataUrls.slice(qrStartIndex)
-        } catch (e) {
-          console.warn('QR generation skipped (proof too large for QR):', e)
-          try {
-            const blobRes = await fetch(`${API_URL}/proofs`, { method: 'POST', body: compressed })
-            if (blobRes.ok) {
-              const { cid } = await blobRes.json()
-              const verifyUrl = `${window.location.origin}/verify?cid=${cid}`
-              const qrUrl = await QRCode.toDataURL(verifyUrl, {
-                errorCorrectionLevel: 'L', margin: 1, width: 280,
-              })
-              qrUrlsForThisCredential = [qrUrl]
-              allQrDataUrls.push(qrUrl)
-            }
-          } catch (blobErr) {
-            console.warn('Blob store failed:', blobErr)
-          }
-        }
-
-        const predicateDescriptions = templatePredicates.map(p => t(p.labelKey))
-
-        updatedCredentials[ci] = {
-          ...cred,
-          compoundProofJson,
-          compoundOp: 'And',
-          hiddenFields: predicates.map(p => p.claim),
-          predicateDescriptions,
-          qrDataUrls: qrUrlsForThisCredential,
-        }
-
-        if (req.nullifierField && nullifierHex) {
-          partyProofs.push({
-            role: req.role,
-            roleLabelKey: req.roleLabelKey,
-            nullifier: nullifierHex,
-            salt: saltHex,
-            issuer: config ? resolveVariant(config, locale === 'uk' ? 'uk' : 'en').issuer : '',
-            qrDataUrls: qrUrlsForThisCredential,
-          })
-        }
-      }
-
-      // Terms QR
-      setBrowserProgress('Generating QR codes...')
-      const termsQrChunk = await encodeTermsQr(termsString, timestamp, proofCount)
-      const termsQrUrl = await QRCode.toDataURL([{ data: termsQrChunk, mode: 'byte' as const }], {
-        errorCorrectionLevel: 'L', margin: 1, width: 280,
-      })
-
-      // Metadata QR
-      const metadataQrChunk = await encodeMetadataQr(
-        sharedContractHash!,
-        partyProofs.map(p => ({ role: p.role, nullifier: p.nullifier, salt: p.salt })),
-        proofCount,
-      )
-      const metadataQrUrl = await QRCode.toDataURL([{ data: metadataQrChunk, mode: 'byte' as const }], {
-        errorCorrectionLevel: 'L', margin: 1, width: 280,
-      })
-
-      // CBOR bundle
-      const { decode, encode } = await import('cbor-x')
-      const proofEnvelopes = []
-      for (const cred of updatedCredentials) {
-        if (!cred.compoundProofJson) continue
-        const expRes = await fetch(`${API_URL}/holder/proof-export-compound?compress=true`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ compound_proof_json: cred.compoundProofJson }),
-        })
-        if (!expRes.ok) continue
-        const expData = await expRes.json()
-        if (expData.compressed_cbor_base64) {
-          const comp = Uint8Array.from(atob(expData.compressed_cbor_base64 || expData.cbor_base64), c => c.charCodeAt(0))
-          const { decompressDeflate } = await import('../lib/qr-chunking')
-          const cbor = await decompressDeflate(comp)
-          proofEnvelopes.push(decode(cbor))
-        } else {
-          // Longfellow: cbor_base64 contains JSON-encoded proof bytes
-          const raw = Uint8Array.from(atob(expData.cbor_base64), c => c.charCodeAt(0))
-          proofEnvelopes.push(JSON.parse(new TextDecoder().decode(raw)))
-        }
-      }
-      const bundle = encode({
-        version: 2,
-        proof_envelopes: proofEnvelopes,
-        terms: { terms: termsString, timestamp },
-        metadata: {
-          contract_hash: sharedContractHash,
-          parties: partyProofs.map(p => ({ role: p.role, nullifier: p.nullifier, salt: p.salt })),
-        },
-      })
-      const bundleCborUrl = `data:application/cbor;base64,${(() => { const u8 = new Uint8Array(bundle); let s = ''; for (let i = 0; i < u8.length; i += 8192) s += String.fromCharCode(...u8.subarray(i, i + 8192)); return btoa(s); })()}`
-
-      // Holder bindings (still server-side — only sends claim hashes, not credentials)
-      const bindingResults: BindingResult[] = []
-      if (template!.bindings) {
-        for (const binding of template!.bindings) {
-          setCurrentProvingIndex(-2)
-          const credA = updatedCredentials.find(c => c.role === binding.roleA)
-          const credB = updatedCredentials.find(c => c.role === binding.roleB)
-          if (credA && credB) {
-            const bindingRes = await fetch(`${API_URL}/holder/prove-binding`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                credential_a: credA.credential,
-                credential_b: credB.credential,
-                format_a: 'mdoc',
-                format_b: 'mdoc',
-                binding_claim_a: binding.claimA,
-                binding_claim_b: binding.claimB,
-                predicates_a: [],
-                predicates_b: [],
-              }),
-            })
-            if (bindingRes.ok) {
-              const bindingData = await bindingRes.json()
-              bindingResults.push({
-                labelKey: binding.labelKey,
-                bindingHash: bindingData.binding_hash,
-                verified: bindingData.binding_verified,
-              })
-            } else {
-              console.warn('Holder binding failed:', await bindingRes.text())
-            }
-          }
-        }
-      }
-
-      clearInterval(timer)
-      setLoading(false)
-      setProved(true)
-      setBrowserProgress('')
-      setTimeout(() => {
-        setState(prev => ({
-          ...prev,
-          step: 4,
-          credentials: updatedCredentials,
-          bindings: bindingResults,
-          qrDataUrls: allQrDataUrls,
-          compressedSize: totalCompressedSize,
-          cached: false,
-          partyProofs,
-          contractHash: sharedContractHash,
-          termsQrUrl,
-          metadataQrUrl,
-          bundleCborUrl,
-        }))
-      }, 600)
-    } catch (e: unknown) {
-      clearInterval(timer)
-      setLoading(false)
-      setBrowserProgress('')
-      setError(`On-device proof failed: ${e instanceof Error ? e.message : String(e)}`)
-    }
-  }
 
   return (
     <div className="space-y-6">
@@ -1324,23 +993,8 @@ function ProveStep({ state, setState, t }: { state: ContractWizardState; setStat
         </div>
       )}
 
-      {/* Prove method toggle */}
-      <div className="flex items-center justify-between mb-2">
-        <span className="text-xs text-slate-500 font-medium uppercase tracking-wider">Proving</span>
-        <ProveMethodToggle
-          value={proveMethod}
-          onChange={setProveMethod}
-          disabled={loading || proved}
-        />
-      </div>
-
-      {/* Browser proving progress */}
-      {loading && proveOnDevice && browserProgress && (
-        <p className="text-xs text-blue-400 mb-2 animate-pulse">{browserProgress}</p>
-      )}
-
       <button
-        onClick={proveOnDevice ? handleProveBrowser : () => handleProve()}
+        onClick={() => handleProve()}
         disabled={loading || proved}
         className="flex items-center justify-center gap-2 w-full bg-blue-600 hover:bg-blue-700 disabled:bg-slate-600 disabled:cursor-not-allowed text-white font-semibold py-3 rounded-lg transition-colors"
       >
@@ -1348,12 +1002,8 @@ function ProveStep({ state, setState, t }: { state: ContractWizardState; setStat
           <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
         </svg>
         {loading
-          ? proveOnDevice
-            ? `${t('contracts.generating')} (${elapsed}s)`
-            : t('contracts.generating')
-          : proveOnDevice
-            ? t('sandbox.generateBrowserBtn')
-            : t('contracts.generateProof')}
+          ? t('contracts.generating')
+          : t('contracts.generateProof')}
       </button>
 
       {proved && state.cached && !loading && (
@@ -1645,7 +1295,7 @@ function VerifyStep({ state, t }: { state: ContractWizardState; t: (key: string)
   const [allValid, setAllValid] = useState(false)
   const [results, setResults] = useState<{ role: string; predicate: string; valid: boolean }[]>([])
   const [error, setError] = useState<string | null>(null)
-  const [verificationMethod, setVerificationMethod] = useState<'wasm' | 'server' | null>(null)
+  const [verificationMethod, setVerificationMethod] = useState<'server' | null>(null)
   const [verifyTimeMs, setVerifyTimeMs] = useState<number | null>(null)
   const [chainDetails, setChainDetails] = useState<{
     ecdsaResults: Record<string, { valid: boolean; commitment: string }>
@@ -1691,96 +1341,48 @@ function VerifyStep({ state, t }: { state: ContractWizardState; t: (key: string)
       const t0 = performance.now()
       const subResults: { role: string; predicate: string; valid: boolean }[] = []
 
-      // Try WASM first
       try {
-        const sdk = await import('@zk-eidas/verifier-sdk')
-        const trustedVks = await sdk.loadTrustedVks('/trusted-vks.json')
-        await sdk.initVerifier()
-
-        const mergedEcdsa: Record<string, { valid: boolean; commitment: string }> = {}
-        let mergedChainValid: boolean | null = null
-        let mergedEscrowValid: boolean | null = null
-
         for (let ci = 0; ci < state.credentials.length; ci++) {
           const cred = state.credentials[ci]
           const req = template?.credentials[ci]
           if (!cred.compoundProofJson || !req) continue
 
-          const envelope = JSON.parse(cred.compoundProofJson)
-          const chainResult = await sdk.verifyCompoundProof(envelope, trustedVks)
+          const res = await fetch(`${API_URL}/verifier/verify-compound`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              compound_proof_json: cred.compoundProofJson,
+              hidden_fields: cred.hiddenFields,
+            }),
+          })
+          if (!res.ok) throw new Error(await res.text())
+          const data = await res.json()
 
-          for (let i = 0; i < chainResult.predicateResults.length; i++) {
-            const pr = chainResult.predicateResults[i]
-            const desc = cred.predicateDescriptions[i] || pr.op || 'unknown'
-            subResults.push({ role: req.role, predicate: desc, valid: pr.valid })
-          }
-
-          // Merge ECDSA results
-          for (const [claim, res] of Object.entries(chainResult.ecdsaResults)) {
-            mergedEcdsa[`${req.role}:${claim}`] = res
-          }
-          if (chainResult.chainValid !== null) {
-            mergedChainValid = mergedChainValid === null ? chainResult.chainValid : (mergedChainValid && chainResult.chainValid)
-          }
-          if (chainResult.escrowValid !== undefined && chainResult.escrowValid !== null) {
-            mergedEscrowValid = mergedEscrowValid === null ? chainResult.escrowValid : (mergedEscrowValid && chainResult.escrowValid)
+          if (data.sub_proofs_verified != null) {
+            cred.predicateDescriptions.forEach((desc: string, i: number) => {
+              subResults.push({
+                role: req.role,
+                predicate: desc,
+                valid: i < data.sub_proofs_verified,
+              })
+            })
+          } else {
+            subResults.push({
+              role: req.role,
+              predicate: `compound[${data.op}]`,
+              valid: data.valid,
+            })
           }
         }
 
         const valid = subResults.every(r => r.valid)
         setResults(subResults)
         setAllValid(valid)
-        setChainDetails({ ecdsaResults: mergedEcdsa, chainValid: mergedChainValid, escrowValid: mergedEscrowValid })
-        setVerificationMethod('wasm')
+        setVerificationMethod('server')
         setVerifyTimeMs(performance.now() - t0)
         setVerified(true)
-      } catch (wasmErr) {
-        console.warn('WASM verification failed, falling back to server:', wasmErr)
-        // Fall back to server — verify each credential's proof
-        try {
-          subResults.length = 0
-          for (let ci = 0; ci < state.credentials.length; ci++) {
-            const cred = state.credentials[ci]
-            const req = template?.credentials[ci]
-            if (!cred.compoundProofJson || !req) continue
-
-            const res = await fetch(`${API_URL}/verifier/verify-compound`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                compound_proof_json: cred.compoundProofJson,
-                hidden_fields: cred.hiddenFields,
-              }),
-            })
-            if (!res.ok) throw new Error(await res.text())
-            const data = await res.json()
-
-            if (data.sub_proofs_verified != null) {
-              cred.predicateDescriptions.forEach((desc, i) => {
-                subResults.push({
-                  role: req.role,
-                  predicate: desc,
-                  valid: i < data.sub_proofs_verified,
-                })
-              })
-            } else {
-              subResults.push({
-                role: req.role,
-                predicate: `compound[${data.op}]`,
-                valid: data.valid,
-              })
-            }
-          }
-
-          const valid = subResults.every(r => r.valid)
-          setResults(subResults)
-          setAllValid(valid)
-          setVerificationMethod('server')
-          setVerifyTimeMs(performance.now() - t0)
-          setVerified(true)
-        } catch (serverErr) {
-          setError(`Verification failed: ${serverErr instanceof Error ? serverErr.message : String(serverErr)}`)
-        }
+      } catch (e) {
+        setError(`Verification failed: ${e instanceof Error ? e.message : String(e)}`)
       } finally {
         setVerifying(false)
       }
@@ -1834,7 +1436,7 @@ function VerifyStep({ state, t }: { state: ContractWizardState; t: (key: string)
               <p className="font-semibold text-sm">{allValid ? t('contracts.verified') : t('contracts.verifyFailed')}</p>
               {verifyTimeMs !== null && (
                 <p className="text-xs opacity-70 mt-0.5">
-                  {verificationMethod === 'wasm' ? 'WASM' : 'Server'} · {Math.round(verifyTimeMs)}ms · {state.credentials.length} credential{state.credentials.length > 1 ? 's' : ''}
+                  Server · {Math.round(verifyTimeMs)}ms · {state.credentials.length} credential{state.credentials.length > 1 ? 's' : ''}
                 </p>
               )}
             </div>
