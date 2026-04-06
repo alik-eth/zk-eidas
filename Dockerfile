@@ -9,6 +9,8 @@ WORKDIR /app
 COPY vendor/longfellow-zk/ vendor/longfellow-zk/
 COPY Cargo.toml Cargo.lock ./
 COPY crates/ crates/
+COPY demo/api/Cargo.toml demo/api/Cargo.toml
+RUN mkdir -p demo/api/src && echo 'fn main(){}' > demo/api/src/main.rs
 
 # Build the circuit generator binary and pre-generate all 4 circuit sizes
 RUN cargo build --release -p longfellow-sys --bin generate-circuits && \
