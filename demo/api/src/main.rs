@@ -12,14 +12,11 @@ use tower_http::cors::{AllowOrigin, CorsLayer};
 use axum::extract::Path as AxumPath;
 use axum::body::Body;
 
-struct AppState {
+pub struct AppState {
     circuits_path: String,
     status_list: Mutex<Vec<u8>>,  // bitstring: 0=valid, 1=revoked
     prove_semaphore: Semaphore,  // limit concurrent proof generation
     proof_cache: HashMap<String, CachedProof>,
-    binding_cache: HashMap<String, CachedBindingProof>,
-    /// ECDSA commitment cache: credential_id → (commitment, sd_array_hash, message_hash)
-    ecdsa_cache: Arc<std::sync::Mutex<HashMap<u64, (Vec<u8>, Vec<u8>, Vec<u8>)>>>,
     /// Cached Longfellow circuit (generated once on first use) — used by benchmark endpoint
     longfellow_circuit: tokio::sync::OnceCell<Vec<u8>>,
     /// Per-attribute-count Longfellow circuit cache (indices 0–3 → 1–4 attributes)
@@ -37,24 +34,6 @@ struct CachedProof {
     hidden_fields: Vec<String>,
     sub_proofs_count: usize,
     compressed_cbor_base64: String,
-}
-
-#[derive(Clone, Serialize, Deserialize)]
-struct CachedBindingProof {
-    proofs_a: Vec<CachedProofResult>,
-    proofs_b: Vec<CachedProofResult>,
-    binding_hash: String,
-    binding_verified: bool,
-    hidden_fields_a: Vec<String>,
-    hidden_fields_b: Vec<String>,
-}
-
-#[derive(Clone, Serialize, Deserialize)]
-struct CachedProofResult {
-    predicate: String,
-    proof_json: String,
-    proof_hex: String,
-    op: String,
 }
 
 // === Issue ===
@@ -643,7 +622,6 @@ struct CompoundProveRequest {
 #[derive(Deserialize, Clone)]
 struct EscrowRequest {
     field_names: Vec<String>,
-    ecdsa_claim: String,
     authority_pubkey: String, // hex-encoded secp256k1 pubkey
 }
 
@@ -935,8 +913,6 @@ struct ProveBindingRequest {
     binding_claim_b: String,
     predicates_a: Vec<PredicateRequest>,
     predicates_b: Vec<PredicateRequest>,
-    #[serde(default)]
-    skip_cache: bool,
 }
 
 #[derive(Serialize)]
@@ -949,11 +925,6 @@ struct ProveBindingResponse {
     hidden_fields_b: Vec<String>,
     #[serde(skip_serializing_if = "std::ops::Not::not")]
     cached: bool,
-}
-
-fn compute_binding_cache_key(req: &ProveBindingRequest) -> String {
-    let key_material = format!("binding|{}|{}", req.binding_claim_a, req.binding_claim_b);
-    format!("{:016x}", fnv_hash(key_material.as_bytes()))
 }
 
 async fn prove_binding(
@@ -1313,10 +1284,6 @@ struct ContractProveRequest {
     predicates: Vec<PredicateRequest>,
     contract_terms: String,
     timestamp: String,
-    #[serde(default)]
-    skip_cache: bool,
-    #[serde(default)]
-    nullifier_field: Option<String>,
     #[serde(default)]
     role: Option<String>,
     #[serde(default)]
@@ -1718,12 +1685,10 @@ fn fnv_hash(data: &[u8]) -> u64 {
 
 struct LoadedCache {
     proofs: HashMap<String, CachedProof>,
-    bindings: HashMap<String, CachedBindingProof>,
-    ecdsa_commitments: HashMap<u64, (Vec<u8>, Vec<u8>, Vec<u8>)>,
 }
 
 fn load_proof_cache(api_dir: &str) -> LoadedCache {
-    let empty = || LoadedCache { proofs: HashMap::new(), bindings: HashMap::new(), ecdsa_commitments: HashMap::new(), };
+    let empty = || LoadedCache { proofs: HashMap::new() };
 
     // Try directory-based cache first
     let dir_candidates = [
@@ -1761,8 +1726,6 @@ fn load_proof_cache(api_dir: &str) -> LoadedCache {
 
 fn load_proof_cache_dir(cache_dir: &std::path::Path) -> LoadedCache {
     let mut proofs = HashMap::new();
-    let mut bindings = HashMap::new();
-    let mut ecdsa_commitments = HashMap::new();
 
     let read_dir_entries = |subdir: &str| -> Vec<(String, serde_json::Value)> {
         let path = cache_dir.join(subdir);
@@ -1790,29 +1753,8 @@ fn load_proof_cache_dir(cache_dir: &std::path::Path) -> LoadedCache {
         }
     }
 
-    for (key, val) in read_dir_entries("binding") {
-        if let Ok(cached) = serde_json::from_value::<CachedBindingProof>(val) {
-            bindings.insert(key, cached);
-        }
-    }
-
-    let to_bytes = |arr: &[serde_json::Value]| -> Vec<u8> {
-        arr.iter().filter_map(|x| x.as_u64().map(|n| n as u8)).collect()
-    };
-    for (key, val) in read_dir_entries("ecdsa") {
-        if let (Ok(cid), Some(c), Some(s), Some(m)) = (
-            key.parse::<u64>(),
-            val["commitment"].as_array(),
-            val["sd_array_hash"].as_array(),
-            val["message_hash"].as_array(),
-        ) {
-            ecdsa_commitments.insert(cid, (to_bytes(c), to_bytes(s), to_bytes(m)));
-        }
-    }
-
-    eprintln!("[cache] Loaded {} cached proofs + {} bindings + {} ecdsa from {}",
-        proofs.len(), bindings.len(), ecdsa_commitments.len(), cache_dir.display());
-    LoadedCache { proofs, bindings, ecdsa_commitments }
+    eprintln!("[cache] Loaded {} cached proofs from {}", proofs.len(), cache_dir.display());
+    LoadedCache { proofs }
 }
 
 fn load_proof_cache_from_value(parsed: &serde_json::Value, source: &str) -> LoadedCache {
@@ -1824,33 +1766,8 @@ fn load_proof_cache_from_value(parsed: &serde_json::Value, source: &str) -> Load
             }
         }
     }
-    let mut bindings = HashMap::new();
-    if let Some(entries) = parsed["binding_entries"].as_object() {
-        for (key, entry) in entries {
-            if let Ok(cached) = serde_json::from_value::<CachedBindingProof>(entry.clone()) {
-                bindings.insert(key.clone(), cached);
-            }
-        }
-    }
-    let mut ecdsa_commitments = HashMap::new();
-    if let Some(entries) = parsed["ecdsa_commitments"].as_object() {
-        let to_bytes = |arr: &[serde_json::Value]| -> Vec<u8> {
-            arr.iter().filter_map(|x| x.as_u64().map(|n| n as u8)).collect()
-        };
-        for (key, entry) in entries {
-            if let (Ok(cid), Some(c), Some(s), Some(m)) = (
-                key.parse::<u64>(),
-                entry["commitment"].as_array(),
-                entry["sd_array_hash"].as_array(),
-                entry["message_hash"].as_array(),
-            ) {
-                ecdsa_commitments.insert(cid, (to_bytes(c), to_bytes(s), to_bytes(m)));
-            }
-        }
-    }
-    eprintln!("[cache] Loaded {} cached proofs + {} bindings + {} ecdsa commitments from {}",
-        proofs.len(), bindings.len(), ecdsa_commitments.len(), source);
-    LoadedCache { proofs, bindings, ecdsa_commitments, }
+    eprintln!("[cache] Loaded {} cached proofs from {}", proofs.len(), source);
+    LoadedCache { proofs }
 }
 
 // === Circuit Artifact Serving ===
@@ -1893,172 +1810,6 @@ async fn serve_circuit_artifact(
             .body(Body::from("Not found"))
             .unwrap(),
     }
-}
-
-// === Prepare Inputs (for browser-side proving) ===
-
-/// Compute the epoch-days cutoff for an age threshold (inlined from zk-eidas facade).
-/// Returns the epoch-days value for (reference_date - min_age years).
-fn age_cutoff_epoch_days_from(min_age: u32, year: u32, month: u32, day: u32) -> u64 {
-    let cutoff_year = year.saturating_sub(min_age);
-    let days = zk_eidas_utils::date_to_epoch_days(cutoff_year, month, day);
-    days.max(0) as u64
-}
-
-/// Build the ECDSA circuit input JSON for a credential claim (inlined from zk-eidas facade).
-///
-/// Returns `(ecdsa_inputs_json_value, claim_u64)` or None if the credential
-/// lacks ECDSA signature data or the required claim disclosure.
-fn build_ecdsa_input_json_for_claim(
-    credential: &zk_eidas_types::credential::Credential,
-    claim_name: &str,
-) -> Option<(serde_json::Value, u64)> {
-    use sha2::{Digest, Sha256};
-    use zk_eidas_types::credential::SignatureData;
-    use zk_eidas_types::{bytes_to_u64, to_43bit_limbs};
-
-    match credential.signature_data() {
-        SignatureData::Ecdsa {
-            pub_key_x,
-            pub_key_y,
-            signature,
-            message_hash,
-            sd_claims_hashes,
-        } => {
-            let _disclosure = credential.disclosures().get(claim_name)?;
-            let claim_value = credential.claims().get(claim_name)?;
-            let claim_u64 = claim_value.to_circuit_u64();
-
-            let disclosure_bytes = credential.disclosures().get(claim_name)?;
-            let disclosure_hash_bytes: [u8; 32] = Sha256::digest(disclosure_bytes).into();
-            let disclosure_hash = bytes_to_u64(&disclosure_hash_bytes);
-
-            let mut signature_r = [0u8; 32];
-            let mut signature_s = [0u8; 32];
-            signature_r.copy_from_slice(&signature[..32]);
-            signature_s.copy_from_slice(&signature[32..]);
-
-            let mut sd_array = [0u64; 16];
-            for (i, hash) in sd_claims_hashes.iter().take(16).enumerate() {
-                sd_array[i] = bytes_to_u64(hash);
-            }
-
-            let to_strings = |bytes: &[u8; 32]| -> Vec<String> {
-                to_43bit_limbs(bytes).iter().map(|l| l.to_string()).collect()
-            };
-
-            let ecdsa_inputs = serde_json::json!({
-                "signature_r": to_strings(&signature_r),
-                "signature_s": to_strings(&signature_s),
-                "message_hash": to_strings(message_hash),
-                "pub_key_x": to_strings(pub_key_x),
-                "pub_key_y": to_strings(pub_key_y),
-                "claim_value": claim_u64.to_string(),
-                "disclosure_hash": disclosure_hash.to_string(),
-                "sd_array": sd_array.iter().map(|v| v.to_string()).collect::<Vec<_>>(),
-            });
-
-            Some((ecdsa_inputs, claim_u64))
-        }
-        _ => None,
-    }
-}
-
-#[derive(Deserialize)]
-struct PrepareInputsRequest {
-    credential: String,
-    format: String,
-    predicates: Vec<PredicateRequest>,
-}
-
-#[derive(Serialize)]
-struct PrepareInputsResponse {
-    ecdsa_inputs: serde_json::Value,
-    claim_value: String,
-    predicates: Vec<PredicateInputSpec>,
-}
-
-#[derive(Serialize)]
-struct PredicateInputSpec {
-    circuit: String,
-    claim_value: String,
-    #[serde(flatten)]
-    extra: serde_json::Value,
-}
-
-async fn prepare_inputs(
-    State(state): State<Arc<AppState>>,
-    Json(req): Json<PrepareInputsRequest>,
-) -> Result<Json<PrepareInputsResponse>, (StatusCode, String)> {
-    let credential = if req.format == "mdoc" {
-        let (mdoc_bytes, pub_key_x, pub_key_y) = parse_mdoc_token(&req.credential)
-            .map_err(|e| (StatusCode::BAD_REQUEST, format!("mdoc token: {e}")))?;
-        zk_eidas_mdoc::MdocParser::parse_with_issuer_key(&mdoc_bytes, pub_key_x, pub_key_y)
-            .map_err(|e| (StatusCode::BAD_REQUEST, format!("mdoc parse: {e}")))?
-    } else {
-        zk_eidas_parser::SdJwtParser::new()
-            .parse(&req.credential)
-            .map_err(|e| (StatusCode::BAD_REQUEST, format!("parse error: {e}")))?
-    };
-    let _ = &state.circuits_path; // circuits_path not needed for input preparation
-
-    // Use the first predicate's claim for ECDSA input (all predicates share the same ECDSA proof)
-    let first_claim = req.predicates.first()
-        .map(|p| p.claim.as_str())
-        .ok_or_else(|| (StatusCode::BAD_REQUEST, "no predicates".to_string()))?;
-
-    let (ecdsa_inputs, claim_u64) = build_ecdsa_input_json_for_claim(&credential, first_claim)
-        .ok_or_else(|| (StatusCode::BAD_REQUEST, "credential lacks ECDSA data or claim disclosure".to_string()))?;
-
-    let mut predicates = Vec::new();
-    for pred in &req.predicates {
-        let claim_val = credential.claims().get(&pred.claim);
-        let is_date = claim_val.map(|v| matches!(v, zk_eidas_types::credential::ClaimValue::Date { .. })).unwrap_or(false);
-
-        // Date claims with small values (< 200) are age thresholds → invert gte↔lte
-        // Date claims with large values (epoch days) are direct comparisons → pass through
-        let is_age_threshold = is_date && pred.value.as_u64().unwrap_or(0) < 200;
-
-        let (year, month, day) = today_ymd();
-        let (circuit, threshold) = match pred.op.as_str() {
-            "gte" if is_age_threshold => {
-                // gte(age) on date → lte(birthdate, cutoff_epoch_days)
-                let age = pred.value.as_u64().unwrap_or(0) as u32;
-                let cutoff = age_cutoff_epoch_days_from(age, year, month, day);
-                ("lte", serde_json::Value::from(cutoff))
-            }
-            "gte" => ("gte", pred.value.clone()),
-            "lte" if is_age_threshold => {
-                // lte(age) on date → gte(birthdate, cutoff_epoch_days)
-                let age = pred.value.as_u64().unwrap_or(0) as u32;
-                let cutoff = age_cutoff_epoch_days_from(age, year, month, day);
-                ("gte", serde_json::Value::from(cutoff))
-            }
-            "lte" => ("lte", pred.value.clone()),
-            other => (other, pred.value.clone()),
-        };
-
-        predicates.push(PredicateInputSpec {
-            circuit: circuit.to_string(),
-            claim_value: claim_u64.to_string(),
-            extra: serde_json::json!({
-                "op": pred.op,
-                "claim": pred.claim,
-                "value": threshold,
-            }),
-        });
-    }
-
-    Ok(Json(PrepareInputsResponse {
-        ecdsa_inputs,
-        claim_value: claim_u64.to_string(),
-        predicates,
-    }))
-}
-
-fn today_ymd() -> (u32, u32, u32) {
-    let days = (std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs() / 86400) as i64;
-    zk_eidas_utils::epoch_days_to_ymd(days)
 }
 
 /// Decrypt the symmetric key K from ML-KEM-768 ciphertext (inlined from zk-eidas facade).
@@ -2350,8 +2101,6 @@ pub fn build_app(circuits_path: &str) -> (Router, Arc<AppState>) {
         status_list: Mutex::new(Vec::new()),
         prove_semaphore: Semaphore::new(1),  // one proof at a time
         proof_cache: loaded.proofs,
-        binding_cache: loaded.bindings,
-        ecdsa_cache: Arc::new(std::sync::Mutex::new(loaded.ecdsa_commitments)),
         longfellow_circuit: tokio::sync::OnceCell::new(),
         longfellow_circuits: std::array::from_fn(|_| tokio::sync::OnceCell::new()),
         proof_blobs: std::sync::RwLock::new(HashMap::new()),
@@ -2373,7 +2122,6 @@ pub fn build_app(circuits_path: &str) -> (Router, Arc<AppState>) {
         .route("/issuer/revoke", post(revoke_credential))
         .route("/issuer/revocation-status", get(revocation_status))
         .route("/issuer/revocation-root", get(revocation_status))  // backward compat alias
-        .route("/holder/prepare-inputs", post(prepare_inputs))
         .route("/circuits/{*rest}", get(serve_circuit_artifact))
         .route("/verifier/presentation-request", post(presentation_request))
         .route("/escrow/decrypt", post(escrow_decrypt))
@@ -3114,7 +2862,6 @@ mod tests {
         let with_escrow = CompoundProveRequest {
             identity_escrow: Some(EscrowRequest {
                 field_names: vec!["given_name".into(), "family_name".into()],
-                ecdsa_claim: "birth_date".into(),
                 authority_pubkey: "aabbcc".into(),
             }),
             ..base.clone()
@@ -3123,7 +2870,7 @@ mod tests {
             "escrow should NOT change cache key — escrow is generated fresh per credential");
     }
 
-    // === prepare-inputs endpoint tests ===
+    // === Test helpers (lightweight server) ===
 
     static LIGHT_SERVER: OnceLock<String> = OnceLock::new();
 
@@ -3170,171 +2917,6 @@ mod tests {
             .json().await.unwrap();
         let cred = res["credential"].as_str().unwrap().to_string();
         (url, cred)
-    }
-
-    /// Helper: call prepare-inputs and return the response JSON
-    async fn prepare(base_url: &str, credential: &str, predicates: serde_json::Value) -> serde_json::Value {
-        let client = reqwest::Client::new();
-        let res = client
-            .post(format!("{base_url}/holder/prepare-inputs"))
-            .json(&serde_json::json!({
-                "credential": credential,
-                "format": "mdoc",
-                "predicates": predicates,
-            }))
-            .send().await.unwrap();
-        assert_eq!(res.status().as_u16(), 200, "prepare-inputs failed: {}", res.text().await.unwrap_or_default());
-        res.json().await.unwrap()
-    }
-
-    #[tokio::test]
-    async fn prepare_inputs_age_gte_returns_lte_circuit() {
-        let (url, cred) = issue_test_credential(serde_json::json!({
-            "given_name": "Test", "birth_date": "1998-05-14"
-        })).await;
-        let data = prepare(url, &cred, serde_json::json!([
-            { "claim": "birth_date", "op": "gte", "value": 18 }
-        ])).await;
-
-        // Age gte on date → lte circuit (inverted)
-        assert_eq!(data["predicates"][0]["circuit"], "lte");
-        // Threshold should be epoch days cutoff, not 18
-        let threshold = data["predicates"][0]["value"].as_u64().unwrap();
-        assert!(threshold > 10000, "threshold should be epoch days, got {threshold}");
-        // Claim value should be epoch days for 1998-05-14
-        let cv = data["claim_value"].as_str().unwrap().parse::<u64>().unwrap();
-        assert!(cv > 10000 && cv < 30000, "claim_value should be epoch days, got {cv}");
-    }
-
-    #[tokio::test]
-    async fn prepare_inputs_age_lte_returns_gte_circuit() {
-        let (url, cred) = issue_test_credential(serde_json::json!({
-            "given_name": "Test", "birth_date": "1998-05-14"
-        })).await;
-        let data = prepare(url, &cred, serde_json::json!([
-            { "claim": "birth_date", "op": "lte", "value": 65 }
-        ])).await;
-
-        // Age lte on date → gte circuit (inverted)
-        assert_eq!(data["predicates"][0]["circuit"], "gte");
-    }
-
-    #[tokio::test]
-    async fn prepare_inputs_expiry_date_gte_passes_through() {
-        let (url, cred) = issue_test_credential(serde_json::json!({
-            "given_name": "Test", "birth_date": "1998-05-14", "expiry_date": "2035-05-14"
-        })).await;
-        let epoch_today = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH).unwrap().as_secs() / 86400;
-        let data = prepare(url, &cred, serde_json::json!([
-            { "claim": "expiry_date", "op": "gte", "value": epoch_today }
-        ])).await;
-
-        // Expiry date with large value → gte passes through (no inversion)
-        assert_eq!(data["predicates"][0]["circuit"], "gte");
-        let threshold = data["predicates"][0]["value"].as_u64().unwrap();
-        assert_eq!(threshold, epoch_today, "threshold should pass through as epoch days");
-    }
-
-    #[tokio::test]
-    async fn prepare_inputs_eq_string() {
-        let (url, cred) = issue_test_credential(serde_json::json!({
-            "given_name": "Test", "birth_date": "1998-05-14", "document_number": "UA-123"
-        })).await;
-        let data = prepare(url, &cred, serde_json::json!([
-            { "claim": "document_number", "op": "eq", "value": "UA-123" }
-        ])).await;
-
-        assert_eq!(data["predicates"][0]["circuit"], "eq");
-        assert_eq!(data["predicates"][0]["value"], "UA-123");
-    }
-
-    #[tokio::test]
-    async fn prepare_inputs_set_member() {
-        let (url, cred) = issue_test_credential(serde_json::json!({
-            "given_name": "Test", "birth_date": "1998-05-14", "nationality": "UA"
-        })).await;
-        let data = prepare(url, &cred, serde_json::json!([
-            { "claim": "nationality", "op": "set_member", "value": ["UA", "DE", "FR"] }
-        ])).await;
-
-        assert_eq!(data["predicates"][0]["circuit"], "set_member");
-        let set = data["predicates"][0]["value"].as_array().unwrap();
-        assert_eq!(set.len(), 3);
-    }
-
-    #[tokio::test]
-    async fn prepare_inputs_neq() {
-        let (url, cred) = issue_test_credential(serde_json::json!({
-            "given_name": "Test", "birth_date": "1998-05-14", "document_number": "UA-123"
-        })).await;
-        let data = prepare(url, &cred, serde_json::json!([
-            { "claim": "document_number", "op": "neq", "value": "REVOKED" }
-        ])).await;
-
-        assert_eq!(data["predicates"][0]["circuit"], "neq");
-    }
-
-    #[tokio::test]
-    async fn prepare_inputs_ecdsa_inputs_have_required_fields() {
-        let (url, cred) = issue_test_credential(serde_json::json!({
-            "given_name": "Test", "birth_date": "1998-05-14"
-        })).await;
-        let data = prepare(url, &cred, serde_json::json!([
-            { "claim": "birth_date", "op": "gte", "value": 18 }
-        ])).await;
-
-        let ecdsa = &data["ecdsa_inputs"];
-        // All required ECDSA circuit inputs present
-        assert!(ecdsa["signature_r"].is_array(), "missing signature_r");
-        assert!(ecdsa["signature_s"].is_array(), "missing signature_s");
-        assert!(ecdsa["message_hash"].is_array(), "missing message_hash");
-        assert!(ecdsa["pub_key_x"].is_array(), "missing pub_key_x");
-        assert!(ecdsa["pub_key_y"].is_array(), "missing pub_key_y");
-        assert!(ecdsa["claim_value"].is_string(), "missing claim_value");
-        assert!(ecdsa["disclosure_hash"].is_string(), "missing disclosure_hash");
-        assert!(ecdsa["sd_array"].is_array(), "missing sd_array");
-
-        // Limb arrays should have 6 elements (k=6 for P-256)
-        assert_eq!(ecdsa["signature_r"].as_array().unwrap().len(), 6);
-        assert_eq!(ecdsa["pub_key_x"].as_array().unwrap().len(), 6);
-
-        // sd_array should have 16 elements
-        assert_eq!(ecdsa["sd_array"].as_array().unwrap().len(), 16);
-    }
-
-    #[tokio::test]
-    async fn prepare_inputs_missing_claim_returns_400() {
-        let (url, cred) = issue_test_credential(serde_json::json!({
-            "given_name": "Test", "birth_date": "1998-05-14"
-        })).await;
-        let client = reqwest::Client::new();
-        let res = client
-            .post(format!("{url}/holder/prepare-inputs"))
-            .json(&serde_json::json!({
-                "credential": cred,
-                "format": "mdoc",
-                "predicates": [{ "claim": "nonexistent", "op": "gte", "value": 18 }],
-            }))
-            .send().await.unwrap();
-        assert_eq!(res.status().as_u16(), 400);
-    }
-
-    #[tokio::test]
-    async fn prepare_inputs_no_predicates_returns_400() {
-        let (url, cred) = issue_test_credential(serde_json::json!({
-            "given_name": "Test", "birth_date": "1998-05-14"
-        })).await;
-        let client = reqwest::Client::new();
-        let res = client
-            .post(format!("{url}/holder/prepare-inputs"))
-            .json(&serde_json::json!({
-                "credential": cred,
-                "format": "mdoc",
-                "predicates": [],
-            }))
-            .send().await.unwrap();
-        assert_eq!(res.status().as_u16(), 400);
     }
 
     // === contract-prove endpoint tests ===

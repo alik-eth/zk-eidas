@@ -8,7 +8,6 @@ edition = "2021"
 zk-eidas-types = { path = "../../crates/zk-eidas-types" }
 zk-eidas-mdoc = { path = "../../crates/zk-eidas-mdoc" }
 zk-eidas-utils = { path = "../../crates/zk-eidas-utils" }
-zk-eidas-parser = { path = "../../crates/zk-eidas-parser" }
 # zk-eidas-prover removed on longfellow branch (replaced by longfellow-sys)
 longfellow-sys = { path = "../../crates/longfellow-sys" }
 axum = "0.8"

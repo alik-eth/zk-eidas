@@ -1200,8 +1200,13 @@ version = "2.0.0"
 dependencies = [
  "bindgen",
  "cmake",
+ "hex",
  "libc",
+ "serde_json",
  "thiserror",
+ "zk-eidas",
+ "zk-eidas-mdoc",
+ "zk-eidas-types",
 ]
 
 [[package]]
@@ -2816,7 +2821,6 @@ dependencies = [
  "tokio",
  "tower-http",
  "zk-eidas-mdoc",
- "zk-eidas-parser",
  "zk-eidas-types",
  "zk-eidas-utils",
 ]
@@ -2827,20 +2831,6 @@ version = "2.0.0"
 dependencies = [
  "ciborium",
  "coset",
- "p256",
- "rand",
- "serde",
- "serde_json",
- "sha2",
- "thiserror",
- "zk-eidas-types",
-]
-
-[[package]]
-name = "zk-eidas-parser"
-version = "2.0.0"
-dependencies = [
- "base64",
  "p256",
  "rand",
  "serde",

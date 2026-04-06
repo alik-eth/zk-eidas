@@ -264,7 +264,6 @@ function HolderStep({ state, setState, t }: { state: WizardState; setState: Reac
   const [escrowConfig, setEscrowConfig] = useState<EscrowConfig | null>(null)
   const escrowPrivkeyRef = useRef<string | null>(null)
   const [proveTimeMs, setProveTimeMs] = useState<number | null>(null)
-  // TODO v2: remove after WASM code cleanup — stubs for dead browser-proving code
   const [presReqLoading, setPresReqLoading] = useState(false)
   const [presReqResult, setPresReqResult] = useState<{ id: string; input_descriptors: { id: string; constraints: { path: string; predicate_op: string; value: string }[] }[] } | null>(null)
   // Reset proved state when user reverts back to this step
@@ -538,18 +537,15 @@ function HolderStep({ state, setState, t }: { state: WizardState; setState: Reac
 // === Step 3: Verifier ===
 
 function VerifierStep({ state, setState, t }: { state: WizardState; setState: React.Dispatch<React.SetStateAction<WizardState>>; t: (key: string) => string }) {
-  const [verifying, setVerifying] = useState(false)
+  const [, setVerifying] = useState(false)
   const [verified, setVerified] = useState(false)
   const [results, setResults] = useState<{ predicate: string; valid: boolean }[]>([])
-  const [notDisclosed, setNotDisclosed] = useState<string[]>([])
+  const [, setNotDisclosed] = useState<string[]>([])
   const [error, setError] = useState<string | null>(null)
   const [exportData, setExportData] = useState<{ cbor_base64: string; cbor_size_bytes: number } | null>(null)
   const [exportLoading, setExportLoading] = useState(false)
   const [verificationPath, setVerificationPath] = useState<'server' | null>(null)
   const [verifyTimeMs, setVerifyTimeMs] = useState<number | null>(null)
-  const [revoking, setRevoking] = useState(false)
-  const [revocationResult, setRevocationResult] = useState<{ status: string; revocation_root: string } | null>(null)
-  const [currentRoot, setCurrentRoot] = useState<string | null>(null)
 
   const escrowData = (() => {
     if (!state.compoundProofJson || !state.escrowConfig) return null
@@ -583,13 +579,6 @@ function VerifierStep({ state, setState, t }: { state: WizardState; setState: Re
       setDecrypting(false)
     }
   }
-
-  useEffect(() => {
-    fetch(`${API_URL}/issuer/revocation-root`)
-      .then(res => res.json())
-      .then(data => setCurrentRoot(data.revocation_root))
-      .catch(() => {})
-  }, [])
 
   // Auto-export CBOR on mount so buttons are instantly available
   useEffect(() => {
@@ -690,26 +679,6 @@ function VerifierStep({ state, setState, t }: { state: WizardState; setState: Re
       setError(`Server verification failed: ${e.message}`)
     } finally {
       setVerifying(false)
-    }
-  }
-
-  const handleRevoke = async () => {
-    if (!state.credentialId) return
-    setRevoking(true)
-    try {
-      const res = await fetch(`${API_URL}/issuer/revoke`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ credential_id: state.credentialId }),
-      })
-      if (!res.ok) throw new Error(await res.text())
-      const data = await res.json()
-      setRevocationResult(data)
-      setCurrentRoot(data.revocation_root)
-    } catch (e: any) {
-      alert(`Revocation failed: ${e.message}`)
-    } finally {
-      setRevoking(false)
     }
   }
 

@@ -115,19 +115,6 @@ const translations: Record<string, Record<Locale, string>> = {
   "problem.row5": { en: "Prove facts without raw data (e.g. age \u2265 18)", uk: "Доведення фактів без сирих даних (напр. вік \u2265 18)" },
   "problem.row6": { en: "No changes to existing systems", uk: "Без змін існуючих систем" },
 
-  // ── Ukraine ──────────────────────────────────────────────────────────
-  "ukraine.title": {
-    en: "Built for scale. Proven by Diia.",
-    uk: "Побудовано для масштабу. Доведено Дією.",
-  },
-  "ukraine.stat1": { en: "active users", uk: "активних користувачів" },
-  "ukraine.stat2": { en: "countries exported to", uk: "країн експорту" },
-  "ukraine.stat3": { en: "wallet pilot participant", uk: "учасник пілоту гаманця" },
-  "ukraine.desc": {
-    en: "Ukraine is the only non-EU country in the POTENTIAL EUDI Wallet pilot. Diia — the most widely deployed digital identity app in Europe — is open source and runs on the same credential formats zk-eidas supports. We're building the unlinkability layer.",
-    uk: "Україна — єдина країна поза ЄС у пілоті POTENTIAL EUDI Wallet. Дія — найпоширеніший застосунок цифрової ідентичності в Європі — має відкритий код і працює на тих самих форматах посвідчень, що підтримує zk-eidas. Ми будуємо шар незв'язуваності.",
-  },
-
   // ── Learn More page ─────────────────────────────────────────────────────
   "learn.back": { en: "Back", uk: "Назад" },
   "learn.title": { en: "Why Zero-Knowledge for eIDAS 2.0", uk: "Чому Zero-Knowledge для eIDAS 2.0" },
@@ -994,12 +981,12 @@ const translations: Record<string, Record<Locale, string>> = {
     uk: "СТОРОНИ",
   },
   "verify.verifyParty": {
-    en: "VERIFY PARTY IDENTITY",
-    uk: "ПЕРЕВІРИТИ ОСОБУ СТОРОНИ",
+    en: "MATCH NULLIFIER TO PARTY",
+    uk: "ЗІСТАВИТИ НУЛІФІКАТОР ЗІ СТОРОНОЮ",
   },
   "verify.documentNumber": {
-    en: "Document number",
-    uk: "Номер документа",
+    en: "Nullifier hash (from proof receipt)",
+    uk: "Хеш нуліфікатора (з квитанції доказу)",
   },
   "verify.check": {
     en: "Check",

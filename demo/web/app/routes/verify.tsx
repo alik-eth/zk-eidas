@@ -91,7 +91,7 @@ function VerifyPage() {
   const [decryptedEscrow, setDecryptedEscrow] = useState<Record<number, { fields: Record<string, string>; integrityValid: boolean }>>({})
   const [decryptingEscrow, setDecryptingEscrow] = useState<number | null>(null)
   const [contractTerms, setContractTerms] = useState<{ terms: string; timestamp: string } | null>(null)
-  const [contractMeta, setContractMeta] = useState<{ contract_hash: string; parties: { role: string; nullifier: string; salt: string }[] } | null>(null)
+  const [contractMeta, setContractMeta] = useState<{ contract_hash: string; parties: { role: string; nullifier: string }[] } | null>(null)
   const [hashCheckResult, setHashCheckResult] = useState<'match' | 'mismatch' | null>(null)
   const [computedHash, setComputedHash] = useState<string | null>(null)
   const [partyCheckOpen, setPartyCheckOpen] = useState(false)
@@ -119,7 +119,7 @@ function VerifyPage() {
   const runVerificationPipeline = async (
     proofsToVerify: DecodedProof[],
     terms: { terms: string; timestamp: string } | null,
-    meta: { contract_hash: string; parties: { role: string; nullifier: string; salt: string }[] } | null,
+    meta: { contract_hash: string; parties: { role: string; nullifier: string }[] } | null,
   ) => {
     setVerifying(true)
     setError(null)
@@ -167,10 +167,9 @@ function VerifyPage() {
     if (!credentialIdInput.trim() || !contractMeta) return
     setPartyChecking(true)
     try {
-      const { checkNullifier } = await import('../lib/nullifier-check')
-      const results = await checkNullifier(
+      const { matchNullifier } = await import('../lib/nullifier-check')
+      const results = matchNullifier(
         credentialIdInput.trim(),
-        contractMeta.contract_hash,
         contractMeta.parties,
       )
       setPartyCheckResults(results)
@@ -716,7 +715,6 @@ function VerifyPage() {
                       <span className="text-slate-400 font-semibold uppercase w-20 shrink-0">{party.role}</span>
                       <div className="flex-1 min-w-0 font-mono text-xs text-slate-400 space-y-0.5">
                         <p className="break-all">nullifier: {party.nullifier}</p>
-                        <p className="break-all">salt: {party.salt}</p>
                       </div>
                     </div>
                   ))}
@@ -785,7 +783,7 @@ function VerifyPage() {
                                 {'\u2713'} {t('verify.partyMatch').replace('{role}', r.role.toUpperCase())}
                               </p>
                               <p className="text-xs text-slate-500 mt-1">
-                                Poseidon(credential_id, contract_hash, salt) = nullifier {'\u2713'}
+                                SHA-256 nullifier match {'\u2713'}
                               </p>
                             </div>
                           ))

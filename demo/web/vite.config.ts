@@ -9,8 +9,6 @@ export default defineConfig({
   },
   resolve: {
     alias: {
-      'zk-eidas-wasm': path.resolve(__dirname, 'pkg/zk-eidas-wasm.js'),
-      buffer: 'buffer/',
       crypto: path.resolve(__dirname, 'app/lib/crypto-shim.ts'),
     },
   },

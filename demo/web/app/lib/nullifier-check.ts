@@ -1,25 +1,13 @@
 /**
  * Nullifier check utilities for the /verify page.
  *
- * Mirrors the Rust prover's conversions:
- * - stringToCredentialId: SHA-256(utf8) → first 8 bytes → u64 BE (same as ClaimValue::to_circuit_u64 for strings)
- * - computeContractHash: SHA-256(terms + timestamp) → first 8 bytes → u64 BE → "0x" + hex (same as contract_prove)
- * - checkNullifier: Poseidon(credential_id, contract_hash, salt) → compare to nullifier
+ * Longfellow nullifiers are SHA-256(credential_cbor_bytes || contract_hash),
+ * computed inside the ZK circuit. The verifier cannot recompute them without
+ * the original credential bytes — they can only compare nullifier values.
+ *
+ * - computeContractHash: SHA-256(terms || timestamp)[0..8] as u64 hex (cross-checks contract binding)
+ * - matchNullifier: compares a known nullifier against each party's nullifier (string equality)
  */
-
-// circomlibjs requires Node.js Buffer in the browser
-import { Buffer } from 'buffer'
-if (typeof globalThis.Buffer === 'undefined') {
-  globalThis.Buffer = Buffer
-}
-
-/** Convert a credential ID string to the u64 BigInt used in the nullifier circuit. */
-export async function stringToCredentialId(s: string): Promise<bigint> {
-  const encoded = new TextEncoder().encode(s)
-  const hashBuf = await crypto.subtle.digest('SHA-256', encoded)
-  const bytes = new Uint8Array(hashBuf)
-  return bytesToU64BE(bytes)
-}
 
 /** Compute contract_hash the same way the Rust backend does: SHA-256(terms || timestamp)[0..8] as u64 hex. */
 export async function computeContractHash(terms: string, timestamp: string): Promise<string> {
@@ -33,23 +21,15 @@ export async function computeContractHash(terms: string, timestamp: string): Pro
   return '0x' + u64.toString(16).padStart(16, '0')
 }
 
-/** Check a credential_id against all parties' nullifiers using Poseidon hash. */
-export async function checkNullifier(
-  credentialIdStr: string,
-  contractHashHex: string,
-  parties: { role: string; nullifier: string; salt: string }[],
-): Promise<{ role: string; matched: boolean }[]> {
-  const { buildPoseidon } = await import('circomlibjs')
-  const poseidon = await buildPoseidon()
-
-  const credentialId = await stringToCredentialId(credentialIdStr)
-  const contractHash = BigInt(contractHashHex)
-
+/** Match a nullifier value against contract parties by string comparison. */
+export function matchNullifier(
+  nullifierHex: string,
+  parties: { role: string; nullifier: string }[],
+): { role: string; matched: boolean }[] {
+  const normalized = nullifierHex.toLowerCase().replace(/^0x/, '')
   return parties.map(party => {
-    const salt = BigInt(party.salt)
-    const nullifier = BigInt(party.nullifier)
-    const hash = poseidon.F.toObject(poseidon([credentialId, contractHash, salt]))
-    return { role: party.role, matched: hash === nullifier }
+    const partyNorm = party.nullifier.toLowerCase().replace(/^0x/, '')
+    return { role: party.role, matched: normalized === partyNorm }
   })
 }
 
