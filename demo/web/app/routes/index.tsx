@@ -521,7 +521,7 @@ function SolutionSteps() {
               <p className="text-xs text-slate-400 leading-relaxed">{t("solution.step3Desc")}</p>
               <div className="mt-3 flex items-center gap-1.5">
                 <div className="w-1.5 h-1.5 rounded-full bg-emerald-500/50" />
-                <span className="text-[10px] font-mono text-emerald-400/60">Groth16 · WASM · offline</span>
+                <span className="text-[10px] font-mono text-emerald-400/60">Longfellow · Quantum-safe · No trusted setup</span>
               </div>
             </div>
           </div>
@@ -700,26 +700,6 @@ function LiveProofSection() {
     format: string;
   } | null>(null);
   const compressedCborRef = useRef<string | null>(null);
-  const wasmReadyRef = useRef(false);
-  const sdkRef = useRef<Awaited<typeof import("@zk-eidas/verifier-sdk")> | null>(null);
-  const vksRef = useRef<any>(null);
-
-  // Pre-load WASM when section mounts
-  useEffect(() => {
-    (async () => {
-      try {
-        const sdk = await import("@zk-eidas/verifier-sdk");
-        const vks = await sdk.loadTrustedVks("/trusted-vks.json");
-        await sdk.initVerifier();
-        sdkRef.current = sdk;
-        vksRef.current = vks;
-        wasmReadyRef.current = true;
-      } catch {
-        // Will fall through to lazy init in handleVerify
-      }
-    })();
-  }, []);
-
   const handleGenerate = useCallback(async () => {
     setPhase("proving");
     setError(null);
@@ -805,22 +785,18 @@ function LiveProofSection() {
     setError(null);
     try {
       const t0 = performance.now();
-      // Use pre-loaded SDK if available, otherwise lazy-load
-      let sdk = sdkRef.current;
-      let trustedVks = vksRef.current;
-      if (!sdk || !trustedVks) {
-        sdk = await import("@zk-eidas/verifier-sdk");
-        trustedVks = await sdk.loadTrustedVks("/trusted-vks.json");
-        await sdk.initVerifier();
-        sdkRef.current = sdk;
-        vksRef.current = trustedVks;
-        wasmReadyRef.current = true;
-      }
-
-      const envelope = JSON.parse(proofRef.current.compound_proof_json);
-      const chainResult = await sdk.verifyCompoundProof(envelope, trustedVks);
+      const res = await fetch(`${API_URL}/verifier/verify-compound`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          compound_proof_json: proofRef.current.compound_proof_json,
+          hidden_fields: [],
+        }),
+      });
+      if (!res.ok) throw new Error(await res.text());
+      const data = await res.json();
       setVerifyTimeMs(Math.round(performance.now() - t0));
-      if (!chainResult.valid) throw new Error("Proof invalid");
+      if (!data.valid) throw new Error("Proof invalid");
       setPhase("verified");
     } catch (e: any) {
       setError(e.message);
