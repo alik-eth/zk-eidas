@@ -762,8 +762,8 @@ function LiveProofSection() {
       });
       if (exportRes.ok) {
         const exportData = await exportRes.json();
-        compressedCborRef.current = exportData.compressed_cbor_base64;
-        setCompressedSizeBytes(atob(exportData.compressed_cbor_base64).length);
+        compressedCborRef.current = exportData.compressed_cbor_base64 || exportData.cbor_base64;
+        setCompressedSizeBytes(atob(compressedCborRef.current!).length);
       }
 
       proofRef.current = {

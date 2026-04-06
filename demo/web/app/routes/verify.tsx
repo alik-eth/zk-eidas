@@ -8,6 +8,60 @@ export const Route = createFileRoute('/verify')({
   component: VerifyPage,
 })
 
+interface QeaaAttestation {
+  '@context': string[]
+  type: string[]
+  issuer: string
+  issuanceDate: string
+  credentialSubject: {
+    proofCid: string
+    predicate: string
+    credentialType: string
+    verificationResult: string
+    proofSystem: string
+  }
+  proof: {
+    type: string
+    cryptosuite: string
+    verificationMethod: string
+    proofValue: string
+  }
+}
+
+function tryParseQeaa(data: string): QeaaAttestation | null {
+  try {
+    const parsed = JSON.parse(data)
+    if (Array.isArray(parsed.type) && parsed.type.includes('ProofAttestation')) {
+      return parsed as QeaaAttestation
+    }
+  } catch { /* not JSON */ }
+  return null
+}
+
+function hexToBytes(hex: string): Uint8Array {
+  const bytes = new Uint8Array(hex.length / 2)
+  for (let i = 0; i < bytes.length; i++) {
+    bytes[i] = parseInt(hex.slice(i * 2, i * 2 + 2), 16)
+  }
+  return bytes
+}
+
+async function verifyQeaaSignature(attestation: QeaaAttestation): Promise<boolean> {
+  const { proof, ...vcWithoutProof } = attestation
+  const canonical = JSON.stringify(vcWithoutProof)
+  const msgHash = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(canonical))
+
+  const pubKeyBytes = hexToBytes(proof.verificationMethod)
+  const key = await crypto.subtle.importKey(
+    'raw', pubKeyBytes.buffer as ArrayBuffer, { name: 'ECDSA', namedCurve: 'P-256' }, false, ['verify']
+  )
+
+  const sigBytes = hexToBytes(proof.proofValue)
+  return crypto.subtle.verify(
+    { name: 'ECDSA', hash: 'SHA-256' }, key, sigBytes.buffer as ArrayBuffer, msgHash
+  )
+}
+
 interface DecodedProof {
   predicate: string
   proofBytes: Uint8Array
@@ -25,7 +79,6 @@ function VerifyPage() {
   const [verified, setVerified] = useState(false)
   const [fileName, setFileName] = useState<string | null>(null)
   const [dragging, setDragging] = useState(false)
-  const [wasmReady, setWasmReady] = useState(false)
   const [scanMode, setScanMode] = useState(false)
   const [scanProgress, setScanProgress] = useState<{
     scanned: number; total: number;
@@ -45,28 +98,23 @@ function VerifyPage() {
   const [credentialIdInput, setCredentialIdInput] = useState('')
   const [partyCheckResults, setPartyCheckResults] = useState<{ role: string; matched: boolean }[] | null>(null)
   const [partyChecking, setPartyChecking] = useState(false)
+  const [qeaaResult, setQeaaResult] = useState<{ attestation: QeaaAttestation; signatureValid: boolean } | null>(null)
   const collectorRef = useRef(new ChunkCollector())
   const cborRef = useRef<{ decode: (data: Uint8Array) => any; encode: (value: any) => Uint8Array } | null>(null)
 
-  // Pre-initialize snarkjs verification backend + cbor-x
+  // Pre-initialize cbor-x
   useEffect(() => {
-    let cancelled = false
     ;(async () => {
       try {
-        const [cborModule, { initVerifier, loadTrustedVks }] = await Promise.all([
-          import('cbor-x'),
-          import('@zk-eidas/verifier-sdk'),
-        ])
+        const cborModule = await import('cbor-x')
         cborRef.current = cborModule
-        await loadTrustedVks('/trusted-vks.json')
-        await initVerifier()
-        if (!cancelled) setWasmReady(true)
       } catch (e) {
-        console.warn('WASM init failed:', e)
+        console.warn('cbor-x init failed:', e)
       }
     })()
-    return () => { cancelled = true }
   }, [])
+
+  const API_URL = typeof window !== 'undefined' && window.location.hostname === 'localhost' ? 'http://localhost:3001' : ''
 
   const runVerificationPipeline = async (
     proofsToVerify: DecodedProof[],
@@ -76,9 +124,7 @@ function VerifyPage() {
     setVerifying(true)
     setError(null)
     try {
-      // Stage 1: Proof verification
-      const { verifyCompoundProof, loadTrustedVks } = await import('@zk-eidas/verifier-sdk')
-      const vks = await loadTrustedVks('/trusted-vks.json')
+      // Stage 1: Proof verification via server API
       const envelope = {
         proofs: proofsToVerify.map(p => ({
           proof_bytes: Array.from(p.proofBytes),
@@ -88,10 +134,16 @@ function VerifyPage() {
         })),
         op: proofsToVerify.length > 1 ? 'and' : 'single',
       }
-      const chainResult = await verifyCompoundProof(envelope, vks)
-      const results = proofsToVerify.map((p, i) => ({
+      const res = await fetch(`${API_URL}/verifier/verify-compound`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ compound_proof_json: JSON.stringify(envelope), hidden_fields: [] }),
+      })
+      if (!res.ok) throw new Error(await res.text())
+      const data = await res.json()
+      const results = proofsToVerify.map((p) => ({
         ...p,
-        valid: chainResult.predicateResults[i]?.valid ?? false,
+        valid: data.valid ?? false,
       }))
       setProofs(results)
 
@@ -206,6 +258,20 @@ function VerifyPage() {
   const stopScanRef = useRef<() => void>(() => {})
 
   const handleScanData = useCallback(async (data: Uint8Array) => {
+    // Try to detect QEAA attestation (JSON text in QR)
+    try {
+      const text = new TextDecoder().decode(data)
+      const qeaa = tryParseQeaa(text)
+      if (qeaa) {
+        const sigValid = await verifyQeaaSignature(qeaa)
+        setQeaaResult({ attestation: qeaa, signatureValid: sigValid })
+        setScanMode(false)
+        stopScanRef.current()
+        setFileName('QEAA attestation (scanned)')
+        return
+      }
+    } catch { /* not text, fall through to chunk collector */ }
+
     const collector = collectorRef.current
     const isNew = collector.add(data)
     if (!isNew) return
@@ -294,10 +360,7 @@ function VerifyPage() {
     setVerifying(true)
     setError(null)
     try {
-      const { verifyCompoundProof, loadTrustedVks } = await import('@zk-eidas/verifier-sdk')
-      const vks = await loadTrustedVks('/trusted-vks.json')
-
-      // Build a CompoundEnvelope from the decoded proofs
+      // Build a CompoundEnvelope from the decoded proofs and verify via server
       const envelope = {
         proofs: proofs.map(p => ({
           proof_bytes: Array.from(p.proofBytes),
@@ -307,11 +370,17 @@ function VerifyPage() {
         })),
         op: proofs.length > 1 ? 'and' : 'single',
       }
-      const chainResult = await verifyCompoundProof(envelope, vks)
+      const res = await fetch(`${API_URL}/verifier/verify-compound`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ compound_proof_json: JSON.stringify(envelope), hidden_fields: [] }),
+      })
+      if (!res.ok) throw new Error(await res.text())
+      const data = await res.json()
 
-      const results = proofs.map((p, i) => ({
+      const results = proofs.map((p) => ({
         ...p,
-        valid: chainResult.predicateResults[i]?.valid ?? false,
+        valid: data.valid ?? false,
       }))
 
       setProofs(results)
@@ -380,7 +449,7 @@ function VerifyPage() {
           {t('verify.pwaDesc')}
         </div>
 
-        {proofs.length === 0 && (
+        {proofs.length === 0 && !qeaaResult && (
           <div
             onDragOver={(e) => { e.preventDefault(); setDragging(true) }}
             onDragLeave={() => setDragging(false)}
@@ -404,7 +473,7 @@ function VerifyPage() {
           </div>
         )}
 
-        {proofs.length === 0 && (
+        {proofs.length === 0 && !qeaaResult && (
           <div className="mt-4 text-center">
             <p className="text-xs text-slate-500 mb-2">{t('verify.orScanPaper')}</p>
             {!scanMode ? (
@@ -470,6 +539,94 @@ function VerifyPage() {
         {error && (
           <div className="bg-red-900/30 border border-red-700 rounded-lg p-4 text-red-300 text-sm mt-4">
             {error}
+          </div>
+        )}
+
+        {qeaaResult && (
+          <div className="space-y-6">
+            <div className="bg-slate-800 rounded-lg border border-slate-700 overflow-hidden">
+              <div className="px-6 py-3 border-b border-slate-700 flex items-center justify-between">
+                <h3 className="text-sm font-semibold text-slate-300 uppercase tracking-wider">QEAA Attestation</h3>
+                <span className="text-xs text-slate-500">{fileName}</span>
+              </div>
+              <div className="p-4 space-y-3">
+                {/* Signature validity */}
+                <div className={`flex items-center gap-3 rounded-lg px-4 py-3 border ${
+                  qeaaResult.signatureValid
+                    ? 'bg-green-900/20 border-green-700/40'
+                    : 'bg-red-900/20 border-red-700/40'
+                }`}>
+                  <span className="text-xl font-bold">
+                    {qeaaResult.signatureValid ? '\u2713' : '\u2717'}
+                  </span>
+                  <div className="flex-1">
+                    <p className={`font-semibold text-sm ${qeaaResult.signatureValid ? 'text-green-300' : 'text-red-300'}`}>
+                      TSP Signature {qeaaResult.signatureValid ? 'Valid' : 'Invalid'}
+                    </p>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      {qeaaResult.attestation.proof.cryptosuite} &middot; ECDSA P-256
+                    </p>
+                  </div>
+                  <span className={`text-xs font-semibold px-2 py-0.5 rounded ${
+                    qeaaResult.signatureValid ? 'bg-green-900/50 text-green-300' : 'bg-red-900/50 text-red-300'
+                  }`}>
+                    {qeaaResult.signatureValid ? 'VALID' : 'INVALID'}
+                  </span>
+                </div>
+
+                {/* Attestation details */}
+                <div className="bg-slate-700/30 border border-slate-600 rounded-lg px-4 py-3 space-y-2">
+                  <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+                    <div>
+                      <span className="text-slate-500 text-xs">Predicate</span>
+                      <p className="text-slate-200 font-medium">{qeaaResult.attestation.credentialSubject.predicate}</p>
+                    </div>
+                    <div>
+                      <span className="text-slate-500 text-xs">Credential Type</span>
+                      <p className="text-slate-200 font-medium">{qeaaResult.attestation.credentialSubject.credentialType}</p>
+                    </div>
+                    <div>
+                      <span className="text-slate-500 text-xs">Proof System</span>
+                      <p className="text-slate-200 font-medium">{qeaaResult.attestation.credentialSubject.proofSystem}</p>
+                    </div>
+                    <div>
+                      <span className="text-slate-500 text-xs">Issuance Date</span>
+                      <p className="text-slate-200 font-medium">{new Date(qeaaResult.attestation.issuanceDate).toLocaleString()}</p>
+                    </div>
+                    <div>
+                      <span className="text-slate-500 text-xs">Verification Result</span>
+                      <p className="text-slate-200 font-medium">{qeaaResult.attestation.credentialSubject.verificationResult}</p>
+                    </div>
+                    <div>
+                      <span className="text-slate-500 text-xs">Issuer</span>
+                      <p className="text-slate-200 font-medium truncate">{qeaaResult.attestation.issuer}</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* View full proof link */}
+                <a
+                  href={`${API_URL}/proofs/${qeaaResult.attestation.credentialSubject.proofCid}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 text-sm text-blue-400 hover:text-blue-300 transition-colors"
+                >
+                  View full proof bytes
+                  <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+                    <polyline points="15 3 21 3 21 9" />
+                    <line x1="10" y1="14" x2="21" y2="3" />
+                  </svg>
+                </a>
+              </div>
+            </div>
+
+            <button
+              onClick={() => { setQeaaResult(null); setFileName(null); setError(null) }}
+              className="w-full bg-slate-700 hover:bg-slate-600 text-white font-semibold py-3 rounded-lg transition-colors"
+            >
+              {t('verify.verifyAnother')}
+            </button>
           </div>
         )}
 
@@ -570,10 +727,10 @@ function VerifyPage() {
             {!verified && !contractMeta && (
               <button
                 onClick={handleVerify}
-                disabled={verifying || !wasmReady}
+                disabled={verifying}
                 className="w-full bg-purple-600 hover:bg-purple-700 disabled:bg-slate-600 text-white font-semibold py-3 rounded-lg transition-colors"
               >
-                {verifying ? t('verify.verifyingBrowser') : !wasmReady ? t('verify.initWasm') : t('verify.verifyAllWasm')}
+                {verifying ? t('verify.verifyingBrowser') : t('verify.verifyAllWasm')}
               </button>
             )}
 
@@ -714,7 +871,7 @@ function VerifyPage() {
             )}
 
             <button
-              onClick={() => { setProofs([]); setVerified(false); setFileName(null); setError(null); setContractTerms(null); setContractMeta(null); setHashCheckResult(null); setComputedHash(null); setPartyCheckOpen(false); setCredentialIdInput(''); setPartyCheckResults(null); setEscrowEnvelopes(new Map()); setDecryptedEscrow({}); setEscrowSeedInput(''); setDecryptingEscrow(null) }}
+              onClick={() => { setProofs([]); setVerified(false); setFileName(null); setError(null); setContractTerms(null); setContractMeta(null); setHashCheckResult(null); setComputedHash(null); setPartyCheckOpen(false); setCredentialIdInput(''); setPartyCheckResults(null); setEscrowEnvelopes(new Map()); setDecryptedEscrow({}); setEscrowSeedInput(''); setDecryptingEscrow(null); setQeaaResult(null) }}
               className="w-full bg-slate-700 hover:bg-slate-600 text-white font-semibold py-3 rounded-lg transition-colors"
             >
               {t('verify.verifyAnother')}

@@ -1049,25 +1049,37 @@ function PrintStep({ state, t }: { state: WizardState; t: (key: string) => strin
 
   async function generateQRCodes() {
     try {
-      const { encodeProofChunks, LogicalOpFlag } = await import('../lib/qr-chunking')
       const QRCode = (await import('qrcode')).default
-      const opFlag = state.printLogicalOp === 'and' ? LogicalOpFlag.And : state.printLogicalOp === 'or' ? LogicalOpFlag.Or : LogicalOpFlag.Single
 
       const sections: typeof qrSections = []
       for (let i = 0; i < state.printProofs.length; i++) {
         const proof = state.printProofs[i]
-        const compressed = Uint8Array.from(atob(proof.compressedCbor), c => c.charCodeAt(0))
-        const chunks = encodeProofChunks(compressed, i + 1, i, state.printProofs.length, opFlag)
-        const dataUrls: string[] = []
-        for (const chunk of chunks) {
-          const url = await QRCode.toDataURL([{ data: chunk, mode: 'byte' as const }], {
-            errorCorrectionLevel: 'L',
-            margin: 1,
-            width: 280,
-          })
-          dataUrls.push(url)
-        }
-        sections.push({ predicate: proof.predicate, dataUrls, compressedSize: compressed.length })
+        const proofBytes = Uint8Array.from(atob(proof.compressedCbor), c => c.charCodeAt(0))
+
+        // Store proof in blob store
+        const blobRes = await fetch(`${API_URL}/proofs`, { method: 'POST', body: proofBytes })
+        if (!blobRes.ok) throw new Error('Failed to store proof')
+        const { cid } = await blobRes.json()
+
+        // Get QEAA attestation from TSP
+        const attestRes = await fetch(`${API_URL}/tsp/attest`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            cid,
+            predicate: proof.predicate,
+            credentialType: 'org.iso.18013.5.1.mDL',
+          }),
+        })
+        if (!attestRes.ok) throw new Error('Failed to get attestation')
+        const attestation = await attestRes.json()
+        const attestJson = JSON.stringify(attestation)
+
+        // Single QR code for the attestation (~1-2KB fits easily)
+        const url = await QRCode.toDataURL(attestJson, { errorCorrectionLevel: 'L', margin: 1, width: 280 })
+        const dataUrls = [url]
+
+        sections.push({ predicate: proof.predicate, dataUrls, compressedSize: proofBytes.length })
       }
       setQrSections(sections)
     } catch (e: unknown) {

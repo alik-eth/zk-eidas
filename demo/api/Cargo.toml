@@ -21,9 +21,12 @@ base64 = "0.22"
 reqwest = { version = "0.12", features = ["json"] }
 libc = "0.2"
 sha2 = "0.10"
+aes-gcm = "0.10"
 rand = "0.8"
 num-bigint = "0.4"
 ml-kem = { version = "0.3.0-rc.1", features = ["getrandom"] }
+p256 = { version = "0.13", features = ["ecdsa", "ecdsa-core"] }
+chrono = "0.4"
 
 [[bin]]
 name = "pre-warm"

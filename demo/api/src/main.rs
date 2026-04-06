@@ -20,14 +20,14 @@ struct AppState {
     binding_cache: HashMap<String, CachedBindingProof>,
     /// ECDSA commitment cache: credential_id → (commitment, sd_array_hash, message_hash)
     ecdsa_cache: Arc<std::sync::Mutex<HashMap<u64, (Vec<u8>, Vec<u8>, Vec<u8>)>>>,
-    /// Escrow proof cache: escrow_cache_key → serialized IdentityEscrowData JSON
-    escrow_cache: HashMap<String, String>,
     /// Cached Longfellow circuit (generated once on first use) — used by benchmark endpoint
     longfellow_circuit: tokio::sync::OnceCell<Vec<u8>>,
     /// Per-attribute-count Longfellow circuit cache (indices 0–3 → 1–4 attributes)
     longfellow_circuits: [tokio::sync::OnceCell<longfellow_sys::mdoc::MdocCircuit>; 4],
     /// Content-addressed proof blob store: SHA-256 hex CID → raw bytes
     proof_blobs: std::sync::RwLock<HashMap<String, Vec<u8>>>,
+    /// TSP ECDSA P-256 signing key for QEAA attestations
+    tsp_signing_key: p256::ecdsa::SigningKey,
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -1593,57 +1593,6 @@ fn compute_cache_key(req: &CompoundProveRequest) -> String {
     format!("{:016x}", fnv_hash(key_material.as_bytes()))
 }
 
-/// Convert a ClaimValue to a plain string for cache key computation.
-fn claim_value_to_string(v: &zk_eidas_types::credential::ClaimValue) -> String {
-    use zk_eidas_types::credential::ClaimValue;
-    match v {
-        ClaimValue::String(s) => s.clone(),
-        ClaimValue::Integer(n) => n.to_string(),
-        ClaimValue::Boolean(b) => b.to_string(),
-        ClaimValue::Date { year, month, day } => format!("{year:04}-{month:02}-{day:02}"),
-    }
-}
-
-/// Extract claims from a credential as sorted JSON (BTreeMap<String, String>)
-/// for escrow cache key computation. Format matches prewarm's claims.
-fn extract_claims(credential: &str, format: &str) -> Result<serde_json::Value, (StatusCode, String)> {
-    if format == "mdoc" {
-        let (mdoc_bytes, pub_key_x, pub_key_y) = parse_mdoc_token(credential)
-            .map_err(|e| (StatusCode::BAD_REQUEST, format!("mdoc token: {e}")))?;
-        let cred = zk_eidas_mdoc::MdocParser::parse_with_issuer_key(&mdoc_bytes, pub_key_x, pub_key_y)
-            .map_err(|e| (StatusCode::BAD_REQUEST, format!("mdoc parse: {e}")))?;
-        let claims: std::collections::BTreeMap<_, _> = cred.claims().iter()
-            .map(|(k, v)| (k.clone(), claim_value_to_string(v)))
-            .collect();
-        Ok(serde_json::to_value(claims).unwrap_or_default())
-    } else {
-        let cred = zk_eidas_parser::SdJwtParser::new()
-            .parse(credential)
-            .map_err(|e| (StatusCode::BAD_REQUEST, format!("parse: {e}")))?;
-        let claims: std::collections::BTreeMap<_, _> = cred.claims().iter()
-            .map(|(k, v)| (k.clone(), claim_value_to_string(v)))
-            .collect();
-        Ok(serde_json::to_value(claims).unwrap_or_default())
-    }
-}
-
-/// Compute escrow cache key from credential claims + escrow config.
-/// Uses only the escrow field values (not all claims) to avoid format mismatches.
-fn compute_escrow_cache_key(claims: &serde_json::Value, escrow: &EscrowRequest) -> String {
-    // Extract only the escrow-relevant field values, sorted by field name
-    let mut field_names = escrow.field_names.clone();
-    field_names.sort();
-    let field_values: Vec<String> = field_names.iter()
-        .map(|f| claims.get(f).and_then(|v| v.as_str()).unwrap_or("").to_string())
-        .collect();
-    let key_material = format!("escrow|{}|{}|{}",
-        field_values.join("|"),
-        escrow.ecdsa_claim,
-        escrow.authority_pubkey,
-    );
-    format!("{:016x}", fnv_hash(key_material.as_bytes()))
-}
-
 fn fnv_hash(data: &[u8]) -> u64 {
     let mut hash: u64 = 0xcbf29ce484222325;
     for &byte in data {
@@ -1657,11 +1606,10 @@ struct LoadedCache {
     proofs: HashMap<String, CachedProof>,
     bindings: HashMap<String, CachedBindingProof>,
     ecdsa_commitments: HashMap<u64, (Vec<u8>, Vec<u8>, Vec<u8>)>,
-    escrow: HashMap<String, String>,
 }
 
 fn load_proof_cache(api_dir: &str) -> LoadedCache {
-    let empty = || LoadedCache { proofs: HashMap::new(), bindings: HashMap::new(), ecdsa_commitments: HashMap::new(), escrow: HashMap::new() };
+    let empty = || LoadedCache { proofs: HashMap::new(), bindings: HashMap::new(), ecdsa_commitments: HashMap::new(), };
 
     // Try directory-based cache first
     let dir_candidates = [
@@ -1748,30 +1696,9 @@ fn load_proof_cache_dir(cache_dir: &std::path::Path) -> LoadedCache {
         }
     }
 
-    // Load escrow cache — each file contains serialized IdentityEscrowData JSON
-    let mut escrow = HashMap::new();
-    let escrow_path = cache_dir.join("escrow");
-    if escrow_path.is_dir() {
-        if let Ok(dir) = std::fs::read_dir(&escrow_path) {
-            for entry in dir.flatten() {
-                let p = entry.path();
-                if p.extension().is_some_and(|e| e == "json") {
-                    let key = p.file_stem().unwrap_or_default().to_string_lossy().to_string();
-                    if let Ok(data) = std::fs::read_to_string(&p) {
-                        // Validate it parses as IdentityEscrowData
-                        match serde_json::from_str::<zk_eidas_types::proof::IdentityEscrowData>(&data) {
-                            Ok(_) => { escrow.insert(key, data); }
-                            Err(e) => { eprintln!("[cache] Failed to parse escrow {}: {e}", p.display()); }
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    eprintln!("[cache] Loaded {} cached proofs + {} bindings + {} ecdsa + {} escrow from {}",
-        proofs.len(), bindings.len(), ecdsa_commitments.len(), escrow.len(), cache_dir.display());
-    LoadedCache { proofs, bindings, ecdsa_commitments, escrow }
+    eprintln!("[cache] Loaded {} cached proofs + {} bindings + {} ecdsa from {}",
+        proofs.len(), bindings.len(), ecdsa_commitments.len(), cache_dir.display());
+    LoadedCache { proofs, bindings, ecdsa_commitments }
 }
 
 fn load_proof_cache_from_value(parsed: &serde_json::Value, source: &str) -> LoadedCache {
@@ -1809,7 +1736,7 @@ fn load_proof_cache_from_value(parsed: &serde_json::Value, source: &str) -> Load
     }
     eprintln!("[cache] Loaded {} cached proofs + {} bindings + {} ecdsa commitments from {}",
         proofs.len(), bindings.len(), ecdsa_commitments.len(), source);
-    LoadedCache { proofs, bindings, ecdsa_commitments, escrow: HashMap::new() }
+    LoadedCache { proofs, bindings, ecdsa_commitments, }
 }
 
 // === Circuit Artifact Serving ===
@@ -2224,6 +2151,83 @@ async fn get_proof_blob(
     ))
 }
 
+// === TSP (Trusted Service Provider) ===
+
+async fn tsp_pubkey(
+    State(state): State<Arc<AppState>>,
+) -> Json<serde_json::Value> {
+    use p256::ecdsa::VerifyingKey;
+    let vk = VerifyingKey::from(&state.tsp_signing_key);
+    let point = vk.to_encoded_point(false);
+    Json(serde_json::json!({
+        "publicKey": hex::encode(point.as_bytes()),
+        "algorithm": "ES256",
+        "curve": "P-256",
+    }))
+}
+
+#[derive(Deserialize)]
+struct AttestRequest {
+    cid: String,
+    predicate: String,
+    #[serde(rename = "credentialType")]
+    credential_type: String,
+}
+
+async fn tsp_attest(
+    State(state): State<Arc<AppState>>,
+    Json(req): Json<AttestRequest>,
+) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
+    use p256::ecdsa::{signature::Signer, Signature, VerifyingKey};
+    use sha2::{Digest, Sha256};
+
+    // 1. Verify proof exists in blob store
+    {
+        let blobs = state.proof_blobs.read().unwrap();
+        blobs.get(&req.cid).ok_or((StatusCode::NOT_FOUND, format!("proof CID {} not found", req.cid)))?;
+    };
+
+    // 2. Build W3C VC attestation
+    let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
+    let vk = VerifyingKey::from(&state.tsp_signing_key);
+    let issuer_pubkey = hex::encode(vk.to_encoded_point(false).as_bytes());
+
+    let vc_without_proof = serde_json::json!({
+        "@context": ["https://www.w3.org/ns/credentials/v2"],
+        "type": ["VerifiableCredential", "ProofAttestation"],
+        "issuer": format!("did:key:{}", &issuer_pubkey[..32]),
+        "issuanceDate": now,
+        "credentialSubject": {
+            "proofCid": req.cid,
+            "predicate": req.predicate,
+            "credentialType": req.credential_type,
+            "verificationResult": "valid",
+            "proofSystem": "longfellow-sumcheck-ligero",
+        },
+    });
+
+    // 3. Sign: SHA-256(canonical JSON) then ECDSA
+    let canonical = serde_json::to_string(&vc_without_proof)
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    let digest = Sha256::digest(canonical.as_bytes());
+    let signature: Signature = state.tsp_signing_key.sign(&digest);
+    let sig_hex = hex::encode(signature.to_bytes());
+
+    Ok(Json(serde_json::json!({
+        "@context": vc_without_proof["@context"],
+        "type": vc_without_proof["type"],
+        "issuer": vc_without_proof["issuer"],
+        "issuanceDate": vc_without_proof["issuanceDate"],
+        "credentialSubject": vc_without_proof["credentialSubject"],
+        "proof": {
+            "type": "DataIntegrityProof",
+            "cryptosuite": "ecdsa-jcs-2019",
+            "verificationMethod": issuer_pubkey,
+            "proofValue": sig_hex,
+        }
+    })))
+}
+
 pub fn build_app(circuits_path: &str) -> Router {
     let api_dir = env!("CARGO_MANIFEST_DIR");
     let loaded = load_proof_cache(api_dir);
@@ -2234,10 +2238,10 @@ pub fn build_app(circuits_path: &str) -> Router {
         proof_cache: loaded.proofs,
         binding_cache: loaded.bindings,
         ecdsa_cache: Arc::new(std::sync::Mutex::new(loaded.ecdsa_commitments)),
-        escrow_cache: loaded.escrow,
         longfellow_circuit: tokio::sync::OnceCell::new(),
         longfellow_circuits: std::array::from_fn(|_| tokio::sync::OnceCell::new()),
         proof_blobs: std::sync::RwLock::new(HashMap::new()),
+        tsp_signing_key: p256::ecdsa::SigningKey::random(&mut rand::thread_rng()),
     });
 
     Router::new()
@@ -2259,6 +2263,9 @@ pub fn build_app(circuits_path: &str) -> Router {
         .route("/circuits/{*rest}", get(serve_circuit_artifact))
         .route("/verifier/presentation-request", post(presentation_request))
         .route("/escrow/decrypt", post(escrow_decrypt))
+        .route("/tsp/pubkey", get(tsp_pubkey))
+        .route("/tsp/attest", post(tsp_attest))
+        .route("/tsp/escrow/decrypt", post(escrow_decrypt))
         .route("/longfellow/demo", get(longfellow_demo))
         .route("/proofs", post(store_proof_blob))
         .route("/proofs/{cid}", get(get_proof_blob))
