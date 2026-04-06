@@ -852,6 +852,66 @@ const translations: Record<string, Record<Locale, string>> = {
   // ── Learn More nav ───────────────────────────────────────────────────
   "nav.learn": { en: "Learn More", uk: "Дізнатися більше" },
 
+  // ── Learn: 7-stage pipeline ─────────────────────────────────────────
+  "learn.pipelineTitle": {
+    en: "How It Works",
+    uk: "Як це працює",
+  },
+  "learn.pipelineSubtitle": {
+    en: "From credential to verified attestation in seven stages.",
+    uk: "Від посвідчення до верифікованої атестації за сім етапів.",
+  },
+  "learn.stage1Title": { en: "1. Credential", uk: "1. Посвідчення" },
+  "learn.stage1Desc": {
+    en: "The input to the system is an mdoc credential (ISO 18013-5) signed with COSE_Sign1. This is the mobile document format used for driving licenses and national IDs across the EU. Each credential contains claims (name, birthdate, nationality) signed by an issuer authority. SD-JWT is not currently supported by the Longfellow proving backend.",
+    uk: "Вхідними даними системи є посвідчення mdoc (ISO 18013-5), підписане COSE_Sign1. Це формат мобільних документів, що використовується для водійських посвідчень та національних ID в ЄС. Кожне посвідчення містить поля (ім'я, дата народження, громадянство), підписані інстанцією-видавцем. SD-JWT наразі не підтримується бекендом доведення Longfellow.",
+  },
+  "learn.stage2Title": { en: "2. Parse", uk: "2. Розбір" },
+  "learn.stage2Desc": {
+    en: "The prover extracts individual claims and the issuer's public key from the CBOR structure. Dates are converted to comparable values, strings become circuit inputs. The parser handles the mdoc DeviceSigned and IssuerSigned data elements as defined in ISO 18013-5.",
+    uk: "Довідник витягує окремі поля та публічний ключ видавця з CBOR-структури. Дати конвертуються у порівнювані значення, рядки стають входами схеми. Парсер обробляє елементи DeviceSigned та IssuerSigned відповідно до ISO 18013-5.",
+  },
+  "learn.stage3Title": { en: "3. Prove", uk: "3. Доведення" },
+  "learn.stage3Desc": {
+    en: "Longfellow (Sumcheck + Ligero) generates a zero-knowledge proof. The COSE signature is verified natively inside the prover — no separate circuit needed. The proof demonstrates that a predicate holds (e.g., age >= 18) without revealing the underlying data. ~350 KB, ~3 seconds on server, no trusted setup required. The proving system is quantum-resistant: all commitments are hash-based, no pairing-based ceremony.",
+    uk: "Longfellow (Sumcheck + Ligero) генерує доказ з нульовим знанням. Підпис COSE перевіряється нативно всередині довідника — без окремої схеми. Доказ демонструє, що предикат виконується (напр., вік >= 18) без розкриття вхідних даних. ~350 КБ, ~3 секунди на сервері, без довіреної ініціалізації. Система доведення квантово-стійка: всі зобов'язання базуються на хешах, без церемонії на основі пейрингів.",
+  },
+  "learn.stage3Nullifier": {
+    en: "Each proof includes a nullifier — a deterministic hash that prevents double-use of the same credential for the same purpose, without revealing the holder's identity. Holder binding ties the proof to a specific device or session.",
+    uk: "Кожен доказ включає нуліфікатор — детерміністичний хеш, що запобігає повторному використанню того ж посвідчення для тієї ж мети, без розкриття ідентичності власника. Прив'язка власника пов'язує доказ з конкретним пристроєм або сесією.",
+  },
+  "learn.stage3Predicates": {
+    en: "Supported predicates: greater-than-or-equal (>=), less-than-or-equal (<=), equality (==), not-equal (!=), range (low <= x <= high), and set membership (x in {a, b, c}).",
+    uk: "Підтримувані предикати: більше-або-дорівнює (>=), менше-або-дорівнює (<=), рівність (==), нерівність (!=), діапазон (low <= x <= high) та належність до множини (x in {a, b, c}).",
+  },
+  "learn.stage4Title": { en: "4. Store", uk: "4. Зберігання" },
+  "learn.stage4Desc": {
+    en: "The proof is content-addressed using SHA-256 and stored by its CID (Content Identifier). At ~350 KB, proofs are too large for QR codes (~3 KB max). The storage layer holds proofs until they are verified and attested. Future: IPFS pinning for decentralized storage.",
+    uk: "Доказ адресується контентом через SHA-256 і зберігається за CID (ідентифікатором контенту). Розміром ~350 КБ, докази занадто великі для QR-кодів (~3 КБ макс). Рівень зберігання утримує докази до їх верифікації та атестації. Майбутнє: IPFS для децентралізованого зберігання.",
+  },
+  "learn.stage5Title": { en: "5. Attest", uk: "5. Атестація" },
+  "learn.stage5Desc": {
+    en: "A Qualified Trust Service Provider verifies the proof and issues a Qualified Electronic Attestation of Attributes (QEAA). The attestation is a W3C Verifiable Credential signed with ECDSA P-256. At ~1-2 KB, it fits in a single QR code. This is the key innovation: the attestation carries legal weight under eIDAS 2.0 Article 45d.",
+    uk: "Кваліфікований довірений постачальник послуг перевіряє доказ і видає Кваліфіковану Електронну Атестацію Атрибутів (QEAA). Атестація — це W3C Verifiable Credential, підписаний ECDSA P-256. Розміром ~1-2 КБ, вона поміщається в один QR-код. Це ключова інновація: атестація має юридичну вагу за статтею 45d eIDAS 2.0.",
+  },
+  "learn.stage6Title": { en: "6. Verify", uk: "6. Верифікація" },
+  "learn.stage6Desc": {
+    en: "Two verification paths: (1) Full re-verification — fetch the proof by CID and re-run the Longfellow verifier. Trustless but requires connectivity. (2) Attestation check — verify the TSP's ECDSA signature on the QEAA. Fast, offline-capable, and legally binding. The QR code on a paper document carries the attestation.",
+    uk: "Два шляхи верифікації: (1) Повна ре-верифікація — отримати доказ за CID і повторно запустити верифікатор Longfellow. Бездовірчо, але потребує з'єднання. (2) Перевірка атестації — перевірити підпис TSP (ECDSA) на QEAA. Швидко, працює офлайн, юридично зобов'язуюче. QR-код на паперовому документі містить атестацію.",
+  },
+  "learn.stage7Title": { en: "7. Escrow Opening", uk: "7. Розкриття ескроу" },
+  "learn.stage7Desc": {
+    en: "Identity escrow provides accountability without day-to-day surveillance. Credential fields are encrypted with AES-256-GCM. The symmetric key is encapsulated with ML-KEM-768 (post-quantum) to the TSP's public key. On court order or arbitration ruling, the TSP decrypts and reveals the holder's identity. Without a court order, the encrypted fields are meaningless — even the TSP cannot read them without the legal authorization to use its private key.",
+    uk: "Ескроу ідентичності забезпечує підзвітність без повсякденного стеження. Поля посвідчення зашифровані AES-256-GCM. Симетричний ключ інкапсульований ML-KEM-768 (пост-квантовий) до публічного ключа TSP. За рішенням суду або арбітражу TSP дешифрує і розкриває ідентичність власника. Без рішення суду зашифровані поля безглузді — навіть TSP не може їх прочитати без юридичного дозволу на використання свого приватного ключа.",
+  },
+  "learn.tocStage1": { en: "Credential", uk: "Посвідчення" },
+  "learn.tocStage2": { en: "Parse", uk: "Розбір" },
+  "learn.tocStage3": { en: "Prove", uk: "Доведення" },
+  "learn.tocStage4": { en: "Store", uk: "Зберігання" },
+  "learn.tocStage5": { en: "Attest", uk: "Атестація" },
+  "learn.tocStage6": { en: "Verify", uk: "Верифікація" },
+  "learn.tocStage7": { en: "Escrow Opening", uk: "Розкриття ескроу" },
+
   // ── Stats ───────────────────────────────────────────────────────────────
   "stats.circuits": { en: "Longfellow Circuits", uk: "Longfellow схеми" },
   "stats.tests": { en: "Tests Passing", uk: "Тестів пройдено" },
