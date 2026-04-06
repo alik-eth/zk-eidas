@@ -2228,7 +2228,7 @@ async fn tsp_attest(
     })))
 }
 
-pub fn build_app(circuits_path: &str) -> Router {
+pub fn build_app(circuits_path: &str) -> (Router, Arc<AppState>) {
     let api_dir = env!("CARGO_MANIFEST_DIR");
     let loaded = load_proof_cache(api_dir);
     let state = Arc::new(AppState {
@@ -2244,7 +2244,7 @@ pub fn build_app(circuits_path: &str) -> Router {
         tsp_signing_key: p256::ecdsa::SigningKey::random(&mut rand::thread_rng()),
     });
 
-    Router::new()
+    let router = Router::new()
         .route("/issuer/issue", post(issue_credential))
         .route("/holder/prove", post(generate_proof))
         .route("/verifier/verify", post(verify_proof))
@@ -2271,7 +2271,8 @@ pub fn build_app(circuits_path: &str) -> Router {
         .route("/proofs/{cid}", get(get_proof_blob))
         .layer(axum::extract::DefaultBodyLimit::max(10 * 1024 * 1024)) // 10MB
         .layer(build_cors_layer())
-        .with_state(state)
+        .with_state(state.clone());
+    (router, state)
 }
 
 // === Main ===
@@ -2292,7 +2293,19 @@ async fn main() {
     let port = std::env::var("PORT").unwrap_or_else(|_| "3001".to_string());
     let bind_addr = format!("0.0.0.0:{port}");
 
-    let app = build_app(&circuits_path);
+    let (app, state) = build_app(&circuits_path);
+
+    // Eagerly compile Longfellow circuits at startup (sequentially to stay within RAM)
+    eprintln!("[startup] Pre-compiling Longfellow circuits (1-4 attrs)...");
+    for n in 1..=4usize {
+        let t0 = std::time::Instant::now();
+        match get_circuit(&state, n).await {
+            Ok(_) => eprintln!("[startup] Circuit {n}-attr ready in {:.1}s", t0.elapsed().as_secs_f64()),
+            Err((_, e)) => eprintln!("[startup] Circuit {n}-attr FAILED: {e}"),
+        }
+    }
+    eprintln!("[startup] All circuits ready.");
+
     let listener = tokio::net::TcpListener::bind(&bind_addr).await.unwrap();
     println!("Demo API running on http://localhost:{port}");
     axum::serve(listener, app).await.unwrap();
@@ -2368,7 +2381,7 @@ mod tests {
                 .build()
                 .unwrap();
             rt.block_on(async {
-                let app = build_app(&circuits_path());
+                let (app, _state) = build_app(&circuits_path());
                 let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
                 let addr = listener.local_addr().unwrap();
                 tx.send(format!("http://{addr}")).unwrap();
@@ -2959,7 +2972,7 @@ mod tests {
                 .build()
                 .unwrap();
             rt.block_on(async {
-                let app = build_app(&circuits_path());
+                let (app, _state) = build_app(&circuits_path());
                 let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
                 let addr = listener.local_addr().unwrap();
                 tx.send(format!("http://{addr}")).unwrap();
