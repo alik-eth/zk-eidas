@@ -308,9 +308,134 @@ fn bench_prove_verify(
     (prove_m, verify_m, proof_size)
 }
 
-// ── Escrow Benchmark (placeholder) ─────────────────────────────────
+// ── Escrow Benchmark ───────────────────────────────────────────────
 
-struct EscrowResult;
+struct EscrowResult {
+    mlkem_keygen: Measurement,
+    field_packing: Measurement,
+    aes_encrypt: Measurement,
+    mlkem_encrypt_k: Measurement,
+    mlkem_decrypt_k: Measurement,
+    aes_decrypt: Measurement,
+}
+
+fn bench_escrow_pipeline() -> EscrowResult {
+    use std::collections::BTreeMap;
+    use zk_eidas::escrow;
+    use zk_eidas_types::credential::{ClaimValue, Credential, SignatureData};
+
+    // Build test credential
+    let mut claims = BTreeMap::new();
+    claims.insert("name".to_string(), ClaimValue::String("Alice".into()));
+    claims.insert("address".to_string(), ClaimValue::String("123 Main St".into()));
+    claims.insert("document_number".to_string(), ClaimValue::String("UA-1234567890".into()));
+    claims.insert("age".to_string(), ClaimValue::Integer(25));
+    let credential = Credential::new(
+        claims,
+        "bench-issuer".into(),
+        SignatureData::Opaque { signature: vec![], public_key: vec![] },
+        BTreeMap::new(),
+    );
+
+    let field_names: Vec<String> = vec![
+        "name".into(),
+        "address".into(),
+        "document_number".into(),
+        "age".into(),
+    ];
+
+    // 1. ML-KEM-768 keygen
+    eprintln!("  ML-KEM-768 keygen ({ITERATIONS} iterations)...");
+    let (mlkem_keygen, (seed, _ek)) = measure_median(ITERATIONS, || {
+        escrow::generate_authority_keypair()
+    });
+
+    // 2. Field packing
+    eprintln!("  field packing ({ITERATIONS} iterations)...");
+    let (field_packing, (packed_data, _claim_idx)) = measure_median(ITERATIONS, || {
+        escrow::pack_credential_fields(&credential, &field_names, "name").unwrap()
+    });
+
+    // 3. AES-256-GCM encrypt
+    let field_bytes: Vec<(&str, [u8; 31])> = field_names
+        .iter()
+        .map(|name| {
+            let cv = credential.claims().get(name).unwrap();
+            (name.as_str(), cv.to_escrow_field())
+        })
+        .collect();
+    let aes_key = [0x42u8; 32];
+    let fields_ref: Vec<(&str, &[u8])> = field_bytes
+        .iter()
+        .map(|(n, v)| (*n, v.as_ref() as &[u8]))
+        .collect();
+
+    eprintln!("  AES-256-GCM encrypt ({ITERATIONS} iterations)...");
+    let (aes_encrypt, (ciphertexts, tags)) = measure_median(ITERATIONS, || {
+        escrow::encrypt_fields_aes_gcm(&fields_ref, &aes_key).unwrap()
+    });
+
+    // 4. Derive escrow key + ML-KEM encrypt K
+    let k = escrow::derive_escrow_key(&packed_data, &seed);
+
+    eprintln!("  ML-KEM encrypt K ({ITERATIONS} iterations)...");
+    let (mlkem_encrypt_k, encrypted_k) = measure_median(ITERATIONS, || {
+        escrow::encrypt_key_to_authority(&k, &seed).unwrap()
+    });
+
+    // 5. ML-KEM decrypt K
+    eprintln!("  ML-KEM decrypt K ({ITERATIONS} iterations)...");
+    let (mlkem_decrypt_k, _decrypted_k) = measure_median(ITERATIONS, || {
+        escrow::decrypt_key(&encrypted_k, &seed).unwrap()
+    });
+
+    // 6. AES-256-GCM decrypt
+    eprintln!("  AES-256-GCM decrypt ({ITERATIONS} iterations)...");
+    let (aes_decrypt, _plaintexts) = measure_median(ITERATIONS, || {
+        escrow::decrypt_fields_aes_gcm(&ciphertexts, &tags, &aes_key).unwrap()
+    });
+
+    EscrowResult {
+        mlkem_keygen,
+        field_packing,
+        aes_encrypt,
+        mlkem_encrypt_k,
+        mlkem_decrypt_k,
+        aes_decrypt,
+    }
+}
+
+fn print_escrow_table(r: &EscrowResult) {
+    println!("--- Identity Escrow Pipeline ---");
+    println!();
+
+    let label_w = 28;
+    let time_w = 14;
+    let rss_w = 14;
+
+    println!("{:<label_w$}{:>time_w$}{:>rss_w$}", "Operation", "Time", "RSS delta");
+    println!("{:<label_w$}{:>time_w$}{:>rss_w$}", "", "──────────", "──────────");
+
+    let rows: &[(&str, &Measurement)] = &[
+        ("ML-KEM-768 keygen",    &r.mlkem_keygen),
+        ("Field packing",        &r.field_packing),
+        ("AES-256-GCM encrypt",  &r.aes_encrypt),
+        ("ML-KEM encrypt K",     &r.mlkem_encrypt_k),
+        ("ML-KEM decrypt K",     &r.mlkem_decrypt_k),
+        ("AES-256-GCM decrypt",  &r.aes_decrypt),
+    ];
+
+    for (name, m) in rows {
+        println!(
+            "{:<label_w$}{:>time_w$}{:>rss_w$}",
+            name,
+            fmt_ms(m.wall_ms),
+            fmt_mb(m.rss_delta_kb),
+        );
+    }
+
+    println!();
+}
 
 // ── Formatting Helpers ─────────────────────────────────────────────
 
@@ -437,7 +562,7 @@ fn print_zk_table(results: &[ZkResult]) {
     println!();
 }
 
-fn print_json(info: &SystemInfo, zk_results: &[ZkResult], _escrow_results: &[EscrowResult]) {
+fn print_json(info: &SystemInfo, zk_results: &[ZkResult], escrow: &EscrowResult) {
     let zk_entries: Vec<String> = zk_results
         .iter()
         .map(|r| {
@@ -476,6 +601,35 @@ fn print_json(info: &SystemInfo, zk_results: &[ZkResult], _escrow_results: &[Esc
         })
         .collect();
 
+    let escrow_json = format!(
+        concat!(
+            "{{",
+            "\"mlkem_keygen_ms\":{kg},",
+            "\"field_packing_ms\":{fp},",
+            "\"aes_encrypt_ms\":{ae},",
+            "\"mlkem_encrypt_k_ms\":{ek},",
+            "\"mlkem_decrypt_k_ms\":{dk},",
+            "\"aes_decrypt_ms\":{ad},",
+            "\"mlkem_keygen_rss_kb\":{kg_r},",
+            "\"aes_encrypt_rss_kb\":{ae_r},",
+            "\"mlkem_encrypt_k_rss_kb\":{ek_r},",
+            "\"mlkem_decrypt_k_rss_kb\":{dk_r},",
+            "\"aes_decrypt_rss_kb\":{ad_r}",
+            "}}"
+        ),
+        kg = round2(escrow.mlkem_keygen.wall_ms),
+        fp = round2(escrow.field_packing.wall_ms),
+        ae = round2(escrow.aes_encrypt.wall_ms),
+        ek = round2(escrow.mlkem_encrypt_k.wall_ms),
+        dk = round2(escrow.mlkem_decrypt_k.wall_ms),
+        ad = round2(escrow.aes_decrypt.wall_ms),
+        kg_r = escrow.mlkem_keygen.rss_delta_kb,
+        ae_r = escrow.aes_encrypt.rss_delta_kb,
+        ek_r = escrow.mlkem_encrypt_k.rss_delta_kb,
+        dk_r = escrow.mlkem_decrypt_k.rss_delta_kb,
+        ad_r = escrow.aes_decrypt.rss_delta_kb,
+    );
+
     let json = format!(
         concat!(
             "{{",
@@ -488,7 +642,7 @@ fn print_json(info: &SystemInfo, zk_results: &[ZkResult], _escrow_results: &[Esc
             "\"rust_version\":{rv}",
             "}},",
             "\"zk_pipeline\":[{zk}],",
-            "\"escrow\":[]",
+            "\"escrow\":{escrow}",
             "}}"
         ),
         cpu = serde_json::to_string(&info.cpu).unwrap(),
@@ -498,6 +652,7 @@ fn print_json(info: &SystemInfo, zk_results: &[ZkResult], _escrow_results: &[Esc
         os = serde_json::to_string(&info.os).unwrap(),
         rv = serde_json::to_string(&info.rust_version).unwrap(),
         zk = zk_entries.join(","),
+        escrow = escrow_json,
     );
 
     println!("{json}");
@@ -521,11 +676,14 @@ fn main() {
     }
 
     let zk_results = bench_zk_pipeline();
-    let escrow_results: Vec<EscrowResult> = Vec::new();
+
+    eprintln!("Running escrow pipeline benchmark...");
+    let escrow_result = bench_escrow_pipeline();
 
     if json_mode {
-        print_json(&info, &zk_results, &escrow_results);
+        print_json(&info, &zk_results, &escrow_result);
     } else {
         print_zk_table(&zk_results);
+        print_escrow_table(&escrow_result);
     }
 }
