@@ -712,7 +712,7 @@ async fn generate_compound_proof(
             eprintln!("[prove-compound] CACHE HIT for key {cache_key}");
             let mut compound_json = cached.compound_proof_json.clone();
             if let Some(ref escrow_req) = req.identity_escrow {
-                let escrow_data = generate_escrow_data(&claims, escrow_req)?;
+                let (escrow_data, _escrow_fields) = generate_escrow_data(&claims, escrow_req)?;
                 let mut compound: serde_json::Value = serde_json::from_str(&compound_json)
                     .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("cache parse: {e}")))?;
                 compound["identity_escrow"] = escrow_data;
@@ -770,6 +770,14 @@ async fn generate_compound_proof(
         (StatusCode::SERVICE_UNAVAILABLE, "proving unavailable".to_string())
     })?;
 
+    // Pre-compute escrow_fields before spawning (needed by the circuit)
+    let (escrow_json_value_opt, escrow_fields) = if let Some(ref escrow_req) = req.identity_escrow {
+        let (json_val, fields) = generate_escrow_data(&claims, escrow_req)?;
+        (Some(json_val), fields)
+    } else {
+        (None, [[0u8; 32]; 8])
+    };
+
     // Clone for the spawn_blocking closure
     let state_clone = Arc::clone(&state);
     let num_attrs = attrs.len();
@@ -796,7 +804,7 @@ async fn generate_compound_proof(
             &attrs_clone,
             &now_clone,
             &[0u8; 8],
-            &[[0u8; 32]; 8],
+            &escrow_fields,
         )
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("prove: {e}")))
     })
@@ -804,12 +812,11 @@ async fn generate_compound_proof(
     .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("join: {e}")))??;
 
     // Serialize MdocProof as the compound proof JSON
-    let compound_proof_json = serde_json::json!({
+    let mut compound_proof_json_val = serde_json::json!({
         "proof_bytes": proof.proof_bytes,
         "nullifier_hash": hex::encode(proof.nullifier_hash),
         "binding_hash": hex::encode(proof.binding_hash),
-    })
-    .to_string();
+    });
 
     let op_label = req.op.clone();
     let sub_proofs_count = req.predicates.len();
@@ -820,21 +827,13 @@ async fn generate_compound_proof(
         .cloned()
         .collect();
 
-    // Identity escrow: encrypt credential fields with AES-256-GCM
-    if let Some(ref escrow_req) = req.identity_escrow {
-        let escrow_data = generate_escrow_data(&claims, escrow_req)?;
-        let mut compound: serde_json::Value = serde_json::from_str(&compound_proof_json)
-            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("compound parse: {e}")))?;
-        compound["identity_escrow"] = escrow_data;
-        let compound_proof_json = compound.to_string();
-        return Ok(Json(CompoundProveResponse {
-            compound_proof_json,
-            op: op_label,
-            sub_proofs_count,
-            hidden_fields,
-            cached: false,
-        }));
+    // Identity escrow: attach escrow data including circuit-computed escrow_digest
+    if let Some(mut escrow_data) = escrow_json_value_opt {
+        escrow_data["escrow_digest"] = serde_json::json!(proof.escrow_digest.to_vec());
+        compound_proof_json_val["identity_escrow"] = escrow_data;
     }
+
+    let compound_proof_json = compound_proof_json_val.to_string();
 
     Ok(Json(CompoundProveResponse {
         compound_proof_json,
@@ -1389,6 +1388,14 @@ async fn contract_prove(
         format!("{year:04}-{month:02}-{day:02}T{hours:02}:{minutes:02}:{seconds:02}Z")
     };
 
+    // Pre-compute escrow_fields before spawning (needed by the circuit)
+    let (escrow_json_value_opt, escrow_fields_contract) = if let Some(ref escrow_req) = req.identity_escrow {
+        let (json_val, fields) = generate_escrow_data(&claims, escrow_req)?;
+        (Some(json_val), fields)
+    } else {
+        (None, [[0u8; 32]; 8])
+    };
+
     // Acquire proving semaphore
     let _permit = state.prove_semaphore.acquire().await.map_err(|_| {
         (StatusCode::SERVICE_UNAVAILABLE, "proving unavailable".to_string())
@@ -1414,7 +1421,7 @@ async fn contract_prove(
             &attrs,
             &now,
             &contract_hash_bytes,
-            &[[0u8; 32]; 8],
+            &escrow_fields_contract,
         )
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("prove: {e}")))
     })
@@ -1454,9 +1461,9 @@ async fn contract_prove(
         }],
     });
 
-    // Identity escrow: encrypt credential fields with AES-256-GCM
-    if let Some(ref escrow_req) = req.identity_escrow {
-        let escrow_data = generate_escrow_data(&claims, escrow_req)?;
+    // Identity escrow: attach escrow data including circuit-computed escrow_digest
+    if let Some(mut escrow_data) = escrow_json_value_opt {
+        escrow_data["escrow_digest"] = serde_json::json!(proof.escrow_digest.to_vec());
         compound["identity_escrow"] = escrow_data;
     }
 
@@ -1643,14 +1650,19 @@ fn escrow_encrypt_key(key: &[u8; 32], authority_pubkey: &[u8]) -> Result<Vec<u8>
 }
 
 /// Generate identity escrow data for the given credential claims and escrow request.
+/// Returns the JSON escrow payload and the packed 32-byte field array for the circuit.
 fn generate_escrow_data(
     claims: &std::collections::BTreeMap<String, zk_eidas_types::credential::ClaimValue>,
     escrow_req: &EscrowRequest,
-) -> Result<serde_json::Value, (StatusCode, String)> {
+) -> Result<(serde_json::Value, [[u8; 32]; 8]), (StatusCode, String)> {
     let authority_pubkey = hex::decode(&escrow_req.authority_pubkey)
         .map_err(|e| (StatusCode::BAD_REQUEST, format!("invalid authority_pubkey hex: {e}")))?;
     let mut field_pairs: Vec<(&str, Vec<u8>)> = Vec::new();
-    for name in &escrow_req.field_names {
+    let mut escrow_fields = [[0u8; 32]; 8];
+    for (i, name) in escrow_req.field_names.iter().enumerate() {
+        if i >= 8 {
+            return Err((StatusCode::BAD_REQUEST, "escrow supports at most 8 fields".into()));
+        }
         let cv = claims.get(name).ok_or_else(|| {
             (StatusCode::BAD_REQUEST, format!("escrow field '{}' not found in credential", name))
         })?;
@@ -1660,6 +1672,9 @@ fn generate_escrow_data(
             zk_eidas_types::credential::ClaimValue::Boolean(b) => b.to_string(),
             zk_eidas_types::credential::ClaimValue::Date { year, month, day } => format!("{year:04}-{month:02}-{day:02}"),
         };
+        let bytes = value_str.as_bytes();
+        let copy_len = bytes.len().min(32);
+        escrow_fields[i][..copy_len].copy_from_slice(&bytes[..copy_len]);
         field_pairs.push((name.as_str(), value_str.into_bytes()));
     }
     let field_value_bytes: Vec<Vec<u8>> = field_pairs.iter().map(|(_, v)| v.clone()).collect();
@@ -1669,13 +1684,13 @@ fn generate_escrow_data(
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("escrow encrypt: {e}")))?;
     let encrypted_key = escrow_encrypt_key(&key, &authority_pubkey)
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("escrow key encrypt: {e}")))?;
-    Ok(serde_json::json!({
+    Ok((serde_json::json!({
         "ciphertexts": ciphertexts,
         "tags": tags,
         "encrypted_key": encrypted_key,
         "authority_pubkey": authority_pubkey,
         "field_names": escrow_req.field_names,
-    }))
+    }), escrow_fields))
 }
 
 fn fnv_hash(data: &[u8]) -> u64 {
