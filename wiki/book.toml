@@ -1,0 +1,16 @@
+[book]
+title = "zk-eidas Knowledge Base"
+description = "Zero-Knowledge Selective Disclosure for eIDAS 2.0 Credentials"
+authors = ["Oleksandr Vovkotrub"]
+language = "en"
+src = "src"
+
+[build]
+build-dir = "book"
+
+[output.html]
+default-theme = "navy"
+preferred-dark-theme = "navy"
+git-repository-url = "https://github.com/alik-eth/zk-eidas"
+edit-url-template = "https://github.com/alik-eth/zk-eidas/edit/main/wiki/{path}"
+no-section-label = false

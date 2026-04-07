@@ -26,3 +26,4 @@ circuits/build/ecdsa_verify_cvm/
 circuits/build/ecdsa_verify_cpp/
 circuits/node_modules/
 circuits/*.ptau
+wiki/book/
