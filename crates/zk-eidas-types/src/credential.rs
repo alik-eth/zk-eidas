@@ -116,39 +116,6 @@ impl ClaimValue {
         }
     }
 
-    /// Encode claim as a recoverable BN254 field element for identity escrow.
-    ///
-    /// Unlike `to_circuit_u64()` (lossy for strings) or `to_field_element()` (SHA-256 hash),
-    /// this encoding preserves raw bytes so the original value can be recovered after
-    /// Poseidon-CTR decryption by the escrow authority.
-    ///
-    /// - Strings: raw UTF-8 bytes, zero-padded to 31 bytes (truncated if >31 bytes).
-    /// - Integers: i64 big-endian placed in the last 8 bytes of a 31-byte buffer.
-    ///   Negative values are supported (two's complement encoding).
-    /// - Booleans/dates: u64 big-endian placed in the last 8 bytes of a 31-byte buffer.
-    pub fn to_escrow_field(&self) -> [u8; 31] {
-        let mut buf = [0u8; 31];
-        match self {
-            ClaimValue::Integer(n) => {
-                buf[23..31].copy_from_slice(&(*n).to_be_bytes());
-            }
-            ClaimValue::Boolean(b) => {
-                buf[30] = *b as u8;
-            }
-            ClaimValue::Date { year, month, day } => {
-                let days =
-                    zk_eidas_utils::date_to_epoch_days(*year as u32, *month as u32, *day as u32);
-                let v = days.max(0) as u64;
-                buf[23..31].copy_from_slice(&v.to_be_bytes());
-            }
-            ClaimValue::String(s) => {
-                let bytes = s.as_bytes();
-                let len = bytes.len().min(31);
-                buf[..len].copy_from_slice(&bytes[..len]);
-            }
-        }
-        buf
-    }
 }
 
 /// Convert the first 8 bytes of a 32-byte array to u64 (big-endian).
@@ -410,54 +377,4 @@ mod tests {
         assert!(cv.to_field_element().is_ok());
     }
 
-    #[test]
-    fn to_escrow_field_string_short() {
-        let cv = ClaimValue::String("Alice".to_string());
-        let buf = cv.to_escrow_field();
-        assert_eq!(&buf[..5], b"Alice");
-        assert_eq!(&buf[5..], &[0u8; 26]);
-    }
-
-    #[test]
-    fn to_escrow_field_string_truncated_at_31() {
-        let long = "A".repeat(50);
-        let cv = ClaimValue::String(long);
-        let buf = cv.to_escrow_field();
-        assert_eq!(&buf[..], &[b'A'; 31]);
-    }
-
-    #[test]
-    fn to_escrow_field_integer() {
-        let cv = ClaimValue::Integer(12345);
-        let buf = cv.to_escrow_field();
-        // i64 big-endian in last 8 bytes
-        assert_eq!(&buf[23..31], &12345i64.to_be_bytes());
-        assert_eq!(&buf[..23], &[0u8; 23]);
-    }
-
-    #[test]
-    fn to_escrow_field_negative_integer() {
-        let cv = ClaimValue::Integer(-42);
-        let buf = cv.to_escrow_field();
-        assert_eq!(&buf[23..31], &(-42i64).to_be_bytes());
-        // Verify it's recoverable
-        let recovered = i64::from_be_bytes(buf[23..31].try_into().unwrap());
-        assert_eq!(recovered, -42);
-    }
-
-    #[test]
-    fn to_escrow_field_date() {
-        let cv = ClaimValue::date(2000, 6, 15).unwrap();
-        let buf = cv.to_escrow_field();
-        let days = zk_eidas_utils::date_to_epoch_days(2000, 6, 15).max(0) as u64;
-        assert_eq!(&buf[23..31], &days.to_be_bytes());
-    }
-
-    #[test]
-    fn to_escrow_field_boolean() {
-        let cv = ClaimValue::Boolean(true);
-        let buf = cv.to_escrow_field();
-        assert_eq!(buf[30], 1);
-        assert_eq!(&buf[..30], &[0u8; 30]);
-    }
 }
