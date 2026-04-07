@@ -496,6 +496,7 @@ async fn generate_proof(
             &attrs_clone,
             &now_clone,
             &[0u8; 8],
+            &[[0u8; 32]; 8],
         )
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("prove: {e}")))
     })
@@ -795,6 +796,7 @@ async fn generate_compound_proof(
             &attrs_clone,
             &now_clone,
             &[0u8; 8],
+            &[[0u8; 32]; 8],
         )
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("prove: {e}")))
     })
@@ -1033,6 +1035,7 @@ async fn prove_binding(
                 &attrs,
                 &now,
                 &[0u8; 8],
+                &[[0u8; 32]; 8],
             )
             .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("prove: {e}")))
         })
@@ -1411,6 +1414,7 @@ async fn contract_prove(
             &attrs,
             &now,
             &contract_hash_bytes,
+            &[[0u8; 32]; 8],
         )
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("prove: {e}")))
     })
