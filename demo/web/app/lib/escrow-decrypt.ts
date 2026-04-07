@@ -4,6 +4,7 @@
  * 1. ML-KEM-768 decapsulate: recover shared secret from ciphertext using authority's seed
  * 2. XOR decrypt: recover symmetric key K = encrypted_k XOR SHA-256(shared_secret)
  * 3. AES-256-GCM decrypt each field using K and a per-field nonce (counter-based)
+ * 4. Verify escrow_digest: SHA-256(field_0[32] || ... || field_7[32]) == expected
  */
 
 export interface DecryptResult {
@@ -19,7 +20,7 @@ export interface DecryptResult {
  * @param ciphertextFields - ciphertext byte arrays per field (from proof public_inputs)
  * @param tags - AES-GCM authentication tags per field (16 bytes each)
  * @param fieldNames - names of the encrypted fields
- * @param expectedBindingHash - optional hex SHA-256 hash of the first field value for integrity check
+ * @param expectedEscrowDigest - hex SHA-256 digest over all 8×32-byte escrow field slots (from ZK proof)
  * @returns map of field name → decrypted value string, plus integrityValid flag
  */
 export async function decryptEscrow(
@@ -28,7 +29,7 @@ export async function decryptEscrow(
   ciphertextFields: number[][],
   tags: number[][],
   fieldNames: string[],
-  expectedBindingHash?: string,
+  expectedEscrowDigest?: string,
 ): Promise<DecryptResult> {
   // Step 1: ML-KEM-768 decapsulate to recover K
   const { MlKem768 } = await import('mlkem')
@@ -64,18 +65,21 @@ export async function decryptEscrow(
     fields[fieldNames[i]] = new TextDecoder().decode(plaintext)
   }
 
-  // Step 3: Verify binding hash if provided (SHA-256 of first field value, zero-padded to 32 bytes)
+  // Step 3: Verify escrow_digest — SHA-256 over 8 × 32-byte slots (same layout as circuit)
   let integrityValid = true
-  if (expectedBindingHash && fieldNames.length > 0) {
-    const firstFieldName = fieldNames[0]
-    const bindingFieldBytes = new TextEncoder().encode(fields[firstFieldName] || '')
-    const padded = new Uint8Array(32)
-    padded.set(bindingFieldBytes.slice(0, 32))
-    const hashBuf = await crypto.subtle.digest('SHA-256', padded)
+  if (expectedEscrowDigest) {
+    // Pack decrypted fields into 8 × 32-byte slots, zero-padded, matching prover packing
+    const packed = new Uint8Array(256) // 8 × 32 = 256 bytes, initialized to 0
+    for (let i = 0; i < fieldNames.length && i < 8; i++) {
+      const valueBytes = new TextEncoder().encode(fields[fieldNames[i]] || '')
+      const copyLen = Math.min(valueBytes.length, 32)
+      packed.set(valueBytes.slice(0, copyLen), i * 32)
+    }
+    const hashBuf = await crypto.subtle.digest('SHA-256', packed)
     const hashHex = Array.from(new Uint8Array(hashBuf))
       .map(b => b.toString(16).padStart(2, '0'))
       .join('')
-    integrityValid = hashHex === expectedBindingHash
+    integrityValid = hashHex === expectedEscrowDigest
   }
 
   return { fields, integrityValid }

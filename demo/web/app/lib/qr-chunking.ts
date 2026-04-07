@@ -40,6 +40,7 @@ export interface EscrowEnvelopeQr {
   field_names: string[]
   authority_pubkey: number[]
   authority_name: string
+  escrow_digest?: number[]
 }
 
 export const enum LogicalOpFlag {

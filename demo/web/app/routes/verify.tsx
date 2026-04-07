@@ -400,12 +400,16 @@ function VerifyPage() {
     setDecryptingEscrow(ci)
     try {
       const { decryptEscrow } = await import('../lib/escrow-decrypt')
+      const digestHex = env.escrow_digest
+        ? env.escrow_digest.map((b: number) => b.toString(16).padStart(2, '0')).join('')
+        : undefined
       const result = await decryptEscrow(
         env.encrypted_key,
         escrowSeedInput.trim(),
         env.ciphertexts,
         env.tags,
         env.field_names,
+        digestHex,
       )
       setDecryptedEscrow(prev => ({ ...prev, [ci]: result }))
     } catch (e: any) {

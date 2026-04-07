@@ -753,6 +753,7 @@ function ProveStep({ state, setState, t }: { state: ContractWizardState; setStat
               field_names: cred.escrowData.field_names,
               authority_pubkey: Array.from(ek),
               authority_name: DEMO_AUTHORITY_NAME,
+              escrow_digest: cred.escrowData.escrow_digest,
             }
 
             const chunks = await encodeEscrowChunks(envelope, ci, escrowCount)
@@ -1315,12 +1316,16 @@ function VerifyStep({ state, t }: { state: ContractWizardState; t: (key: string)
     setDecryptingRole(role)
     try {
       const { decryptEscrow } = await import('../lib/escrow-decrypt')
+      const digestHex = escrowData.escrow_digest
+        ? escrowData.escrow_digest.map((b: number) => b.toString(16).padStart(2, '0')).join('')
+        : undefined
       const result = await decryptEscrow(
         escrowData.encrypted_key,
         DEMO_AUTHORITY_PRIVKEY,
         escrowData.ciphertexts,
         escrowData.tags,
         escrowData.field_names,
+        digestHex,
       )
       setDecryptedByRole(prev => ({ ...prev, [role]: result }))
     } catch (e: any) {
