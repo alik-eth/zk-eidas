@@ -249,6 +249,20 @@ pub fn generate_authority_keypair() -> (Vec<u8>, Vec<u8>) {
     (seed.to_vec(), ek_exported.to_vec())
 }
 
+/// Verify that the escrow digest matches the SHA-256 hash of the concatenated fields.
+///
+/// Used by the escrow authority after decryption to confirm the decrypted fields
+/// match the in-circuit commitment from the ZK proof.
+pub fn verify_escrow_digest(fields: &[[u8; 32]; 8], expected: &[u8; 32]) -> bool {
+    use sha2::{Sha256, Digest};
+    let mut hasher = Sha256::new();
+    for f in fields {
+        hasher.update(f);
+    }
+    let computed: [u8; 32] = hasher.finalize().into();
+    computed == *expected
+}
+
 /// Convert the ECDSA claim_value (u64) to the same decimal string representation
 /// used in the escrow circuit, matching the `to_escrow_field()` encoding.
 pub fn claim_value_to_escrow_decimal(value: &ClaimValue) -> String {
@@ -423,5 +437,27 @@ mod tests {
         let (cts, mut tags) = encrypt_fields_aes_gcm(&fields, &key).unwrap();
         tags[0][0] ^= 0xff;
         assert!(decrypt_fields_aes_gcm(&cts, &tags, &key).is_err());
+    }
+
+    #[test]
+    fn verify_escrow_digest_matches() {
+        use sha2::{Sha256, Digest};
+        let mut fields = [[0u8; 32]; 8];
+        fields[0][..5].copy_from_slice(b"Alice");
+        fields[1][..3].copy_from_slice(b"Bob");
+
+        let mut hasher = Sha256::new();
+        for f in &fields {
+            hasher.update(f);
+        }
+        let expected: [u8; 32] = hasher.finalize().into();
+        assert!(verify_escrow_digest(&fields, &expected));
+    }
+
+    #[test]
+    fn verify_escrow_digest_mismatch() {
+        let fields = [[0u8; 32]; 8];
+        let wrong = [0xFFu8; 32];
+        assert!(!verify_escrow_digest(&fields, &wrong));
     }
 }

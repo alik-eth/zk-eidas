@@ -32,6 +32,7 @@ pub struct MdocProof {
     pub proof_bytes: Vec<u8>,
     pub nullifier_hash: [u8; 32],
     pub binding_hash: [u8; 32],
+    pub escrow_digest: [u8; 32],
     pub circuit_spec_index: usize,
 }
 
@@ -80,7 +81,9 @@ impl MdocCircuit {
 
 /// Prove selective disclosure + predicates on an mdoc credential.
 /// `contract_hash` is an 8-byte domain separator for the nullifier.
-/// The returned proof includes `nullifier_hash = SHA-256(e || contract_hash)`.
+/// `escrow_fields` is 8×32 bytes of encrypted escrow field data.
+/// The returned proof includes `nullifier_hash = SHA-256(e || contract_hash)`
+/// and `escrow_digest` covering the escrow fields.
 pub fn prove(
     circuit: &MdocCircuit,
     mdoc_bytes: &[u8],
@@ -90,6 +93,7 @@ pub fn prove(
     attributes: &[AttributeRequest],
     now: &str,
     contract_hash: &[u8; 8],
+    escrow_fields: &[[u8; 32]; 8],
 ) -> Result<MdocProof, MdocError> {
     if attributes.len() != circuit.num_attributes {
         return Err(MdocError::InvalidInput(format!(
@@ -118,6 +122,7 @@ pub fn prove(
         let mut proof_len: std::os::raw::c_ulong = 0;
         let mut nullifier_hash = [0u8; 32];
         let mut binding_hash = [0u8; 32];
+        let mut escrow_digest = [0u8; 32];
 
         let ret = run_mdoc_prover(
             circuit.bytes.as_ptr(),
@@ -132,10 +137,12 @@ pub fn prove(
             c_attrs.len() as std::os::raw::c_ulong,
             now_c.as_ptr(),
             contract_hash.as_ptr(),
+            escrow_fields.as_ptr() as *const u8,
             &mut proof_ptr,
             &mut proof_len,
             nullifier_hash.as_mut_ptr(),
             binding_hash.as_mut_ptr(),
+            escrow_digest.as_mut_ptr(),
             spec,
         );
 
@@ -150,6 +157,7 @@ pub fn prove(
             proof_bytes,
             nullifier_hash,
             binding_hash,
+            escrow_digest,
             circuit_spec_index: circuit.spec_index,
         })
     }
@@ -197,6 +205,7 @@ pub fn verify(
             contract_hash.as_ptr(),
             proof.nullifier_hash.as_ptr(),
             proof.binding_hash.as_ptr(),
+            proof.escrow_digest.as_ptr(),
             proof.proof_bytes.as_ptr(),
             proof.proof_bytes.len() as std::os::raw::c_ulong,
             doc_type_c.as_ptr(),
@@ -247,6 +256,7 @@ mod tests {
             &attrs,
             "2026-01-01T00:00:00Z",
             &[0u8; 8],
+            &[[0u8; 32]; 8],
         );
 
         assert!(result.is_err());

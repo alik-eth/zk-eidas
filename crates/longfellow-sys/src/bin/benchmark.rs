@@ -281,6 +281,7 @@ fn bench_prove_verify(
             &attributes,
             "2026-01-01T00:00:00Z",
             &[0u8; 8],
+            &[[0u8; 32]; 8],
         )
         .expect("prove failed")
     });

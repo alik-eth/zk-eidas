@@ -152,6 +152,9 @@ pub struct IdentityEscrowData {
     pub authority_pubkey: Vec<u8>,
     /// Names of the encrypted credential fields.
     pub field_names: Vec<String>,
+    /// SHA-256 digest of the concatenated 32-byte packed field values, matching the in-circuit commitment.
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub escrow_digest: Option<[u8; 32]>,
 }
 
 /// A compound proof wrapping multiple sub-proofs with a logical operator.
@@ -470,6 +473,7 @@ mod tests {
             encrypted_key: vec![7, 8, 9],
             authority_pubkey: vec![0x02; 64],
             field_names: vec!["name".into(), "address".into()],
+            escrow_digest: None,
         };
         let json = serde_json::to_string(&escrow).unwrap();
         let decoded: IdentityEscrowData = serde_json::from_str(&json).unwrap();
@@ -486,6 +490,7 @@ mod tests {
             encrypted_key: vec![4],
             authority_pubkey: vec![5u8; 64],
             field_names: vec!["name".into()],
+            escrow_digest: None,
         };
         let compound = CompoundProof::new(vec![], LogicalOp::And)
             .with_identity_escrow(escrow);
@@ -503,5 +508,27 @@ mod tests {
         let json = r#"{"proofs":[],"op":"And"}"#;
         let decoded: CompoundProof = serde_json::from_str(json).unwrap();
         assert!(decoded.identity_escrow().is_none());
+    }
+
+    #[test]
+    fn identity_escrow_data_with_digest_serde_roundtrip() {
+        let escrow = IdentityEscrowData {
+            ciphertexts: vec![vec![10]],
+            tags: vec![vec![0u8; 16]],
+            encrypted_key: vec![7, 8, 9],
+            authority_pubkey: vec![0x02; 64],
+            field_names: vec!["name".into()],
+            escrow_digest: Some([0xAA; 32]),
+        };
+        let json = serde_json::to_string(&escrow).unwrap();
+        let decoded: IdentityEscrowData = serde_json::from_str(&json).unwrap();
+        assert_eq!(decoded.escrow_digest, Some([0xAA; 32]));
+    }
+
+    #[test]
+    fn identity_escrow_data_without_digest_backward_compat() {
+        let json = r#"{"ciphertexts":[[1]],"tags":[[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]],"encrypted_key":[2],"authority_pubkey":[3],"field_names":["x"]}"#;
+        let decoded: IdentityEscrowData = serde_json::from_str(json).unwrap();
+        assert_eq!(decoded.escrow_digest, None);
     }
 }
