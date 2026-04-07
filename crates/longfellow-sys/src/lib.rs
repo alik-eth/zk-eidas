@@ -61,8 +61,10 @@ mod tests {
             let mut proof_len: std::os::raw::c_ulong = 0;
 
             let contract_hash = [0u8; 8];
+            let escrow_fields = [0u8; 256]; // 8 × 32 bytes
             let mut nullifier_hash = [0u8; 32];
             let mut binding_hash = [0u8; 32];
+            let mut escrow_digest = [0u8; 32];
             let ret = run_mdoc_prover(
                 circuit,
                 circuit_len,
@@ -76,10 +78,12 @@ mod tests {
                 0, // no attrs
                 ptr::null(), // null time
                 contract_hash.as_ptr(),
+                escrow_fields.as_ptr(),
                 &mut proof,
                 &mut proof_len,
                 nullifier_hash.as_mut_ptr(),
                 binding_hash.as_mut_ptr(),
+                escrow_digest.as_mut_ptr(),
                 spec,
             );
 
