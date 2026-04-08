@@ -22,7 +22,8 @@
     "qrcode": "^1.5.4",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
-    "vite": "^7.3.1"
+    "vite": "^7.3.1",
+    "zk-eidas-wasm": "file:../../crates/zk-eidas-wasm/pkg"
   },
   "devDependencies": {
     "@playwright/test": "^1.58.2",

@@ -31,6 +31,9 @@ export default defineConfig({
   worker: {
     format: 'es',
   },
+  optimizeDeps: {
+    exclude: ['zk-eidas-wasm'],
+  },
   plugins: [
     tanstackStart({
       srcDirectory: 'app',
