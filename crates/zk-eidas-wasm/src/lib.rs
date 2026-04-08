@@ -5,4 +5,6 @@ pub mod field;
 pub mod ligero;
 pub mod merkle;
 pub mod proof;
+pub mod sumcheck;
 pub mod transcript;
+pub mod zk;
