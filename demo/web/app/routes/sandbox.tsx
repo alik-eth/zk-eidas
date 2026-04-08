@@ -719,7 +719,9 @@ function VerifierStep({ state, setState, t }: { state: WizardState; setState: Re
         })
         if (!res.ok) throw new Error(await res.text())
         const data = await res.json()
-        proofs = [{ predicate: `${logicalOp.toUpperCase()} compound`, op: logicalOp, compressedCbor: data.compressed_cbor_base64 }]
+        const cbor64 = data.compressed_cbor_base64 ?? data.cbor_base64
+        console.log('[handlePrintProof] cbor64 type:', typeof cbor64, 'len:', cbor64?.length)
+        proofs = [{ predicate: `${logicalOp.toUpperCase()} compound`, op: logicalOp, compressedCbor: cbor64 }]
       } else {
         proofs = await Promise.all(state.proofs.map(async (p) => {
           predicates.push({ claim: p.predicate, op: p.op, publicValue: '', disclosed: false })
@@ -1026,7 +1028,10 @@ function PrintStep({ state, t }: { state: WizardState; t: (key: string) => strin
       const sections: typeof qrSections = []
       for (let i = 0; i < state.printProofs.length; i++) {
         const proof = state.printProofs[i]
-        const proofBytes = Uint8Array.from(atob(proof.compressedCbor), c => c.charCodeAt(0))
+        // Decode base64 without atob (handles large strings)
+        const b64 = proof.compressedCbor
+        const raw = await (await fetch(`data:application/octet-stream;base64,${b64}`)).arrayBuffer()
+        const proofBytes = new Uint8Array(raw)
 
         // Store proof in blob store
         const blobRes = await fetch(`${API_URL}/proofs`, { method: 'POST', body: proofBytes })

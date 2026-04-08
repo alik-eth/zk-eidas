@@ -819,6 +819,7 @@ async fn generate_compound_proof(
         "proof_bytes": proof.proof_bytes,
         "nullifier_hash": hex::encode(proof.nullifier_hash),
         "binding_hash": hex::encode(proof.binding_hash),
+        "escrow_digest": proof.escrow_digest.to_vec(),
     });
 
     let op_label = req.op.clone();
@@ -1494,7 +1495,10 @@ async fn contract_prove(
     let mut compound = serde_json::json!({
         "op": "AND",
         "sub_proofs": sub_results,
+        "proof_bytes": proof.proof_bytes,
         "nullifier_hash": hex::encode(proof.nullifier_hash),
+        "binding_hash": hex::encode(proof.binding_hash),
+        "escrow_digest": proof.escrow_digest.to_vec(),
         "contract_hash": hex::encode(&contract_hash_bytes),
         "role": role_str,
         "contract_nullifiers": [{

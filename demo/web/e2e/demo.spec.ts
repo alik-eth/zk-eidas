@@ -128,7 +128,7 @@ test.describe('Sandbox — E2E Proof', () => {
 
 test.describe('Sandbox — Print', () => {
   test.fixme('proof generates QR codes', async ({ page }) => {
-    // FIXME: backend proof-export returns malformed base64, causing atob() error
+    // FIXME: atob error from unknown source — not from PrintStep code (changes to PrintStep don't affect the error)
     await page.goto('/sandbox')
     await issueDefaultPid(page)
     await selectOnlyPredicates(page, ['щонайменше 18|at least 18'])

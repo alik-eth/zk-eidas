@@ -1341,7 +1341,7 @@ function VerifyStep({ state, t }: { state: ContractWizardState; t: (key: string)
   const allProofs = state.credentials.map(c => c.compoundProofJson).filter(Boolean)
 
   useEffect(() => {
-    if (autoVerifyRan.current || allProofs.length === 0) return
+    if (autoVerifyRan.current || allProofs.length === 0 || state.step !== 5) return
     autoVerifyRan.current = true
     ;(async () => {
       setVerifying(true)
@@ -1351,18 +1351,18 @@ function VerifyStep({ state, t }: { state: ContractWizardState; t: (key: string)
       let verificationMethodRef: 'server' | 'client' = 'server'
 
       try {
-        for (let ci = 0; ci < state.credentials.length; ci++) {
-          const cred = state.credentials[ci]
+        // Launch all verifications in parallel (1 worker per proof)
+        const { verifyInBrowser } = await import('../lib/wasm-verifier')
+
+        const verifyPromises = state.credentials.map(async (cred, ci) => {
           const req = template?.credentials[ci]
-          if (!cred.compoundProofJson || !req) continue
+          if (!cred.compoundProofJson || !req) return null
 
           let data: any
           let method: 'client' | 'server' = 'server'
 
-          // Try WASM verification first if verification inputs are available
           if (cred.verificationInputs) {
             try {
-              const { verifyInBrowser } = await import('../lib/wasm-verifier')
               const result = await verifyInBrowser(cred.compoundProofJson!, cred.verificationInputs)
               data = {
                 valid: result.valid,
@@ -1370,7 +1370,6 @@ function VerifyStep({ state, t }: { state: ContractWizardState; t: (key: string)
               }
               method = 'client'
             } catch (wasmErr) {
-              // WASM not available — fall back to server
               console.warn('WASM verification unavailable, falling back to server:', wasmErr)
               const res = await fetch(`${API_URL}/verifier/verify-compound`, {
                 method: 'POST',
@@ -1384,7 +1383,6 @@ function VerifyStep({ state, t }: { state: ContractWizardState; t: (key: string)
               data = await res.json()
             }
           } else {
-            // No verification inputs (e.g., cached proof) — use server
             const res = await fetch(`${API_URL}/verifier/verify-compound`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
@@ -1397,28 +1395,34 @@ function VerifyStep({ state, t }: { state: ContractWizardState; t: (key: string)
             data = await res.json()
           }
 
+          const credResults: typeof subResults = []
           if (data.sub_proofs_verified != null) {
             cred.predicateDescriptions.forEach((desc: string, i: number) => {
-              subResults.push({
+              credResults.push({
                 role: req.role,
                 predicate: desc,
                 valid: i < data.sub_proofs_verified,
               })
             })
           } else {
-            subResults.push({
+            credResults.push({
               role: req.role,
               predicate: `compound[${data.op}]`,
               valid: data.valid,
             })
           }
 
-          // Track which method was used (last one wins for display)
+          // Progressive update as each finishes
+          subResults.push(...credResults)
+          setResults([...subResults])
+
           if (method === 'client') verificationMethodRef = 'client'
-        }
+          return credResults
+        })
+
+        await Promise.all(verifyPromises)
 
         const valid = subResults.every(r => r.valid)
-        setResults(subResults)
         setAllValid(valid)
         setVerificationMethod(verificationMethodRef)
         setVerifyTimeMs(performance.now() - t0)
@@ -1429,7 +1433,7 @@ function VerifyStep({ state, t }: { state: ContractWizardState; t: (key: string)
         setVerifying(false)
       }
     })()
-  }, [allProofs.length]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [allProofs.length, state.step]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Group results by role for display
   const resultsByRole = results.reduce<Record<string, { role: string; predicate: string; valid: boolean }[]>>((acc, r) => {
@@ -1440,26 +1444,16 @@ function VerifyStep({ state, t }: { state: ContractWizardState; t: (key: string)
 
   return (
     <div className="space-y-6">
-      {/* Spinner */}
-      {verifying && (
-        <div className="flex flex-col items-center justify-center gap-4 py-12">
-          <svg className="animate-spin h-8 w-8 text-purple-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-          </svg>
-          <p className="text-sm text-slate-400">{t('contracts.verifying')}</p>
-        </div>
-      )}
-
       {/* Error */}
       {error && !verifying && (
         <div className="bg-red-900/30 border border-red-700 rounded-lg p-4 text-red-300 text-sm">{error}</div>
       )}
 
-      {/* Results */}
-      {verified && !verifying && (
+      {/* Results — show progressively while verifying */}
+      {(verified || verifying || results.length > 0) && (
         <div className="space-y-4">
           {/* Overall result banner */}
+          {verified ? (
           <div className={`flex items-center gap-3 rounded-lg px-5 py-4 border ${
             allValid
               ? 'bg-green-950/30 border-green-700/40 text-green-300'
@@ -1483,6 +1477,20 @@ function VerifyStep({ state, t }: { state: ContractWizardState; t: (key: string)
               )}
             </div>
           </div>
+          ) : verifying && (
+          <div className="flex items-center gap-3 rounded-lg px-5 py-4 border bg-blue-950/20 border-blue-700/30 text-blue-300">
+            <svg className="animate-spin h-5 w-5 shrink-0" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+            </svg>
+            <div className="flex-1">
+              <p className="font-semibold text-sm">{t('contracts.verifying')}</p>
+              <p className="text-xs opacity-70 mt-0.5">
+                {Object.keys(resultsByRole).length} / {state.credentials.length} credentials
+              </p>
+            </div>
+          </div>
+          )}
 
           {/* Per-predicate results grouped by role */}
           <div className="bg-slate-800 rounded-lg border border-slate-700 overflow-hidden">
@@ -1490,14 +1498,23 @@ function VerifyStep({ state, t }: { state: ContractWizardState; t: (key: string)
               <h3 className="text-sm font-semibold text-slate-200">{t('contracts.predicatesProved')}</h3>
             </div>
             <div className="divide-y divide-slate-700">
-              {template?.credentials.map(req => {
+              {template?.credentials.map((req, ci) => {
                 const roleResults = resultsByRole[req.role] || []
+                const isPending = verifying && roleResults.length === 0
                 return (
                   <div key={req.role}>
                     <div className="px-5 py-2 bg-slate-800/80">
                       <span className="text-xs font-semibold text-slate-400">{t(req.roleLabelKey)}</span>
                     </div>
-                    {roleResults.map((r, i) => (
+                    {isPending ? (
+                      <div className="flex items-center gap-2 px-5 py-3">
+                        <svg className="animate-spin h-3.5 w-3.5 text-slate-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                        </svg>
+                        <span className="text-xs text-slate-500">{t('contracts.verifying')}</span>
+                      </div>
+                    ) : roleResults.map((r, i) => (
                       <div key={i} className="flex items-center justify-between px-5 py-3">
                         <span className="text-sm text-slate-300">{r.predicate}</span>
                         {r.valid ? (
