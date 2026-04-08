@@ -22,12 +22,20 @@ FROM circuit-builder AS rust-builder
 COPY demo/api/ demo/api/
 RUN cargo build --release -p zk-eidas-demo-api --bin zk-eidas-demo-api --bin pre-warm
 
+# Stage 1c: Build WASM verifier (parallel with rust-builder)
+FROM circuit-builder AS wasm-builder
+RUN rustup target add wasm32-unknown-unknown && \
+    cargo install wasm-pack --version 0.13.1
+COPY crates/zk-eidas-wasm/ crates/zk-eidas-wasm/
+RUN wasm-pack build --target web --release crates/zk-eidas-wasm
+
 # Stage 2: Build frontend
 FROM node:22-slim AS web-builder
 WORKDIR /app/demo/web
 COPY demo/web/package.json demo/web/package-lock.json* ./
 RUN npm install
 COPY demo/web/ ./
+COPY --from=wasm-builder /app/crates/zk-eidas-wasm/pkg/ /app/crates/zk-eidas-wasm/pkg/
 RUN npm run build
 
 # Stage 3: Runtime
