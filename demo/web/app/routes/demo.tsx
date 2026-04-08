@@ -57,6 +57,7 @@ interface ContractWizardState {
   bundleCborUrl: string | null
   escrowEnabled: boolean
   escrowQrUrls: { role: string; roleLabelKey: string; urls: string[]; escrowIndex: number; escrowCount: number }[]
+  contractText: string
 }
 
 const API_URL = typeof window !== 'undefined' && window.location.hostname === 'localhost' ? 'http://localhost:3001' : ''
@@ -83,6 +84,7 @@ const INITIAL_STATE: ContractWizardState = {
   bundleCborUrl: null,
   escrowEnabled: true,
   escrowQrUrls: [],
+  contractText: '',
 }
 
 export const Route = createFileRoute('/demo')({
@@ -535,14 +537,19 @@ function ProveStep({ state, setState, t }: { state: ContractWizardState; setStat
   const [skipCache, setSkipCache] = useState(false)
   const [escrowEnabled, setEscrowEnabled] = useState(true)
 
-  // Editable contract text with pre-filled salt and timestamp
-  const [contractText, setContractText] = useState(() => {
-    const bodyKey = locale === 'uk' ? template?.bodyKey_uk : template?.bodyKey_en
+  // Initialize contract text once when template becomes available
+  const contractTextInitialized = useRef(false)
+  useEffect(() => {
+    if (contractTextInitialized.current || !template || state.contractText) return
+    contractTextInitialized.current = true
+    const bodyKey = locale === 'uk' ? template.bodyKey_uk : template.bodyKey_en
     const body = bodyKey ? t(bodyKey) : ''
     const salt = crypto.randomUUID()
     const now = new Date().toISOString().replace('T', ' ').slice(0, 19) + ' UTC'
-    return `${body}\n\n---\nDate: ${now}\nSalt: ${salt}`
-  })
+    setState(prev => ({ ...prev, contractText: `${body}\n\n---\n${t('contracts.date')}: ${now}\n${t('contracts.salt')}: ${salt}` }))
+  }, [template]) // eslint-disable-line react-hooks/exhaustive-deps
+  const contractText = state.contractText
+  const setContractText = (v: string) => setState(prev => ({ ...prev, contractText: v }))
 
   // Reset local state when credentials change
   useEffect(() => {
@@ -1073,8 +1080,7 @@ function DocumentStep({ state, setState, t }: { state: ContractWizardState; setS
 
             {/* Bilingual body — always both languages */}
             <div className="space-y-3 mb-6">
-              <p className="text-sm text-gray-800 leading-relaxed">{t(template.bodyKey_en)}</p>
-              <p className="text-sm text-gray-500 italic leading-relaxed">{t(template.bodyKey_uk)}</p>
+              <p className="text-sm text-gray-800 leading-relaxed whitespace-pre-line">{state.contractText}</p>
             </div>
 
             {/* Terms QR — page 1 (for verifier cross-check) */}
@@ -1138,16 +1144,12 @@ function DocumentStep({ state, setState, t }: { state: ContractWizardState; setS
                       </div>
                     ))}
 
-                    {/* Nullifier + salt + issuer (party credentials only) */}
+                    {/* Nullifier + issuer (party credentials only) */}
                     {isParty && party && (
                       <div className="space-y-1.5 mb-3 border-t border-gray-200 pt-3">
                         <div>
                           <span className="text-[10px] text-gray-400 font-medium">{t('contracts.nullifier')}</span>
                           <p className="text-xs text-gray-700 font-mono break-all">{party.nullifier}</p>
-                        </div>
-                        <div>
-                          <span className="text-[10px] text-gray-400 font-medium">{t('contracts.salt')}</span>
-                          <p className="text-xs text-gray-700 font-mono break-all">{party.salt}</p>
                         </div>
                         <div>
                           <span className="text-[10px] text-gray-400 font-medium">{t('contracts.issuer')}</span>
