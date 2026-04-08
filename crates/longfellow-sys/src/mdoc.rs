@@ -66,6 +66,22 @@ impl MdocCircuit {
         self.num_attributes
     }
 
+    /// Return `(block_enc_hash, block_enc_sig)` from the ZkSpec for this circuit.
+    pub fn block_enc(&self) -> (usize, usize) {
+        unsafe {
+            let spec = kZkSpecs.as_ptr().add(self.spec_index);
+            ((*spec).block_enc_hash as usize, (*spec).block_enc_sig as usize)
+        }
+    }
+
+    /// Return the spec version from the ZkSpec for this circuit.
+    pub fn version(&self) -> usize {
+        unsafe {
+            let spec = kZkSpecs.as_ptr().add(self.spec_index);
+            (*spec).version as usize
+        }
+    }
+
     /// Save the serialized circuit bytes to a file.
     pub fn save(&self, path: &std::path::Path) -> std::io::Result<()> {
         std::fs::write(path, &self.bytes)

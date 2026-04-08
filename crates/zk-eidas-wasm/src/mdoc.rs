@@ -440,10 +440,10 @@ pub fn mdoc_verify(
     )?;
 
     let pk_x = fp
-        .of_decimal_string(issuer_pk_x)
+        .of_string(issuer_pk_x)
         .ok_or(VerifyError::InvalidInput("pkX".into()))?;
     let pk_y = fp
-        .of_decimal_string(issuer_pk_y)
+        .of_string(issuer_pk_y)
         .ok_or(VerifyError::InvalidInput("pkY".into()))?;
     let e2 = compute_transcript_hash_fp256(transcript, doc_type, &fp);
 

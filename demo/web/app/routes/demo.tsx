@@ -22,6 +22,7 @@ interface CredentialData {
   predicateDescriptions: string[]
   qrDataUrls: string[]
   escrowData: any | null
+  verificationInputs: any | null
 }
 
 interface BindingResult {
@@ -392,6 +393,7 @@ function CredentialStep({ state, setState, t }: { state: ContractWizardState; se
         predicateDescriptions: [],
         qrDataUrls: [],
         escrowData: null,
+        verificationInputs: null,
       }
 
       const nextIndex = state.credentialIndex + 1
@@ -685,6 +687,7 @@ function ProveStep({ state, setState, t }: { state: ContractWizardState; setStat
           predicateDescriptions,
           qrDataUrls: qrUrlsForThisCredential,
           escrowData: credEscrowData,
+          verificationInputs: proveData.verification_inputs ?? null,
         }
 
         // Store per-party nullifier data
@@ -1296,7 +1299,7 @@ function VerifyStep({ state, t }: { state: ContractWizardState; t: (key: string)
   const [allValid, setAllValid] = useState(false)
   const [results, setResults] = useState<{ role: string; predicate: string; valid: boolean }[]>([])
   const [error, setError] = useState<string | null>(null)
-  const [verificationMethod, setVerificationMethod] = useState<'server' | null>(null)
+  const [verificationMethod, setVerificationMethod] = useState<'server' | 'client' | null>(null)
   const [verifyTimeMs, setVerifyTimeMs] = useState<number | null>(null)
   const [chainDetails, setChainDetails] = useState<{
     ecdsaResults: Record<string, { valid: boolean; commitment: string }>
@@ -1345,6 +1348,7 @@ function VerifyStep({ state, t }: { state: ContractWizardState; t: (key: string)
       setError(null)
       const t0 = performance.now()
       const subResults: { role: string; predicate: string; valid: boolean }[] = []
+      let verificationMethodRef: 'server' | 'client' = 'server'
 
       try {
         for (let ci = 0; ci < state.credentials.length; ci++) {
@@ -1352,16 +1356,46 @@ function VerifyStep({ state, t }: { state: ContractWizardState; t: (key: string)
           const req = template?.credentials[ci]
           if (!cred.compoundProofJson || !req) continue
 
-          const res = await fetch(`${API_URL}/verifier/verify-compound`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              compound_proof_json: cred.compoundProofJson,
-              hidden_fields: cred.hiddenFields,
-            }),
-          })
-          if (!res.ok) throw new Error(await res.text())
-          const data = await res.json()
+          let data: any
+          let method: 'client' | 'server' = 'server'
+
+          // Try WASM verification first if verification inputs are available
+          if (cred.verificationInputs) {
+            try {
+              const { verifyInBrowser } = await import('../lib/wasm-verifier')
+              const result = await verifyInBrowser(cred.compoundProofJson!, cred.verificationInputs)
+              data = {
+                valid: result.valid,
+                sub_proofs_verified: result.valid ? cred.predicateDescriptions.length : 0,
+              }
+              method = 'client'
+            } catch (wasmErr) {
+              // WASM not available — fall back to server
+              console.warn('WASM verification unavailable, falling back to server:', wasmErr)
+              const res = await fetch(`${API_URL}/verifier/verify-compound`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  compound_proof_json: cred.compoundProofJson,
+                  hidden_fields: cred.hiddenFields,
+                }),
+              })
+              if (!res.ok) throw new Error(await res.text())
+              data = await res.json()
+            }
+          } else {
+            // No verification inputs (e.g., cached proof) — use server
+            const res = await fetch(`${API_URL}/verifier/verify-compound`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                compound_proof_json: cred.compoundProofJson,
+                hidden_fields: cred.hiddenFields,
+              }),
+            })
+            if (!res.ok) throw new Error(await res.text())
+            data = await res.json()
+          }
 
           if (data.sub_proofs_verified != null) {
             cred.predicateDescriptions.forEach((desc: string, i: number) => {
@@ -1378,12 +1412,15 @@ function VerifyStep({ state, t }: { state: ContractWizardState; t: (key: string)
               valid: data.valid,
             })
           }
+
+          // Track which method was used (last one wins for display)
+          if (method === 'client') verificationMethodRef = 'client'
         }
 
         const valid = subResults.every(r => r.valid)
         setResults(subResults)
         setAllValid(valid)
-        setVerificationMethod('server')
+        setVerificationMethod(verificationMethodRef)
         setVerifyTimeMs(performance.now() - t0)
         setVerified(true)
       } catch (e) {
@@ -1441,7 +1478,7 @@ function VerifyStep({ state, t }: { state: ContractWizardState; t: (key: string)
               <p className="font-semibold text-sm">{allValid ? t('contracts.verified') : t('contracts.verifyFailed')}</p>
               {verifyTimeMs !== null && (
                 <p className="text-xs opacity-70 mt-0.5">
-                  Server · {Math.round(verifyTimeMs)}ms · {state.credentials.length} credential{state.credentials.length > 1 ? 's' : ''}
+                  {verificationMethod === 'client' ? 'Client (WASM)' : 'Server'} · {Math.round(verifyTimeMs)}ms · {state.credentials.length} credential{state.credentials.length > 1 ? 's' : ''}
                 </p>
               )}
             </div>

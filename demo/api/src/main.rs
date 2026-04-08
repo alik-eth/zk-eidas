@@ -654,6 +654,8 @@ struct CompoundProveResponse {
     hidden_fields: Vec<String>,
     #[serde(skip_serializing_if = "std::ops::Not::not")]
     cached: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    verification_inputs: Option<serde_json::Value>,
 }
 
 async fn generate_compound_proof(
@@ -724,6 +726,7 @@ async fn generate_compound_proof(
                 sub_proofs_count: cached.sub_proofs_count,
                 hidden_fields: cached.hidden_fields.clone(),
                 cached: true,
+                verification_inputs: None,
             }));
         }
     }
@@ -835,12 +838,43 @@ async fn generate_compound_proof(
 
     let compound_proof_json = compound_proof_json_val.to_string();
 
+    // Build verification inputs for client-side WASM verification
+    let (block_enc_hash, block_enc_sig) = state.longfellow_circuits[num_attrs - 1]
+        .get()
+        .map(|c| c.block_enc())
+        .unwrap_or((0, 0));
+    let circuit_version = state.longfellow_circuits[num_attrs - 1]
+        .get()
+        .map(|c| c.version())
+        .unwrap_or(7);
+    let transcript_bytes = b"zk-eidas-demo".to_vec();
+    let contract_hash_zero = vec![0u8; 8];
+    let attr_json: Vec<serde_json::Value> = attrs.iter().map(|a| serde_json::json!({
+        "id": a.identifier,
+        "cbor_value": a.cbor_value,
+        "verification_type": a.verify_type as u8,
+    })).collect();
+    let verification_inputs = serde_json::json!({
+        "issuer_pk_x": pkx_hex,
+        "issuer_pk_y": pky_hex,
+        "transcript": transcript_bytes,
+        "attributes": attr_json,
+        "now": now,
+        "contract_hash": contract_hash_zero,
+        "doc_type": "org.iso.18013.5.1.mDL",
+        "version": circuit_version,
+        "block_enc_hash": block_enc_hash,
+        "block_enc_sig": block_enc_sig,
+        "num_attributes": num_attrs,
+    });
+
     Ok(Json(CompoundProveResponse {
         compound_proof_json,
         op: op_label,
         sub_proofs_count,
         hidden_fields,
         cached: false,
+        verification_inputs: Some(verification_inputs),
     }))
 }
 
@@ -1302,6 +1336,8 @@ struct ContractProveResponse {
     contract_hash: String,
     salt: String,
     role: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    verification_inputs: Option<serde_json::Value>,
 }
 
 async fn contract_prove(
@@ -1404,6 +1440,12 @@ async fn contract_prove(
     let num_attrs = attrs.len();
     let state_clone = Arc::clone(&state);
 
+    // Clone values needed after spawn_blocking for verification_inputs
+    let pkx_hex_kept = pkx_hex.clone();
+    let pky_hex_kept = pky_hex.clone();
+    let now_kept = now.clone();
+    let attrs_kept = attrs.clone();
+
     // Longfellow does it all in ONE call: predicates + nullifier
     let proof = tokio::task::spawn_blocking(move || {
         unsafe { libc::nice(10) };
@@ -1476,6 +1518,36 @@ async fn contract_prove(
 
     let contract_hash_u64 = u64::from_be_bytes(contract_hash_bytes);
 
+    // Build verification inputs for client-side WASM verification
+    let (block_enc_hash, block_enc_sig) = state.longfellow_circuits[num_attrs - 1]
+        .get()
+        .map(|c| c.block_enc())
+        .unwrap_or((0, 0));
+    let circuit_version = state.longfellow_circuits[num_attrs - 1]
+        .get()
+        .map(|c| c.version())
+        .unwrap_or(7);
+    let transcript_bytes = b"zk-eidas-demo".to_vec();
+    let contract_hash_vec = contract_hash_bytes.to_vec();
+    let attr_json: Vec<serde_json::Value> = attrs_kept.iter().map(|a| serde_json::json!({
+        "id": a.identifier,
+        "cbor_value": a.cbor_value,
+        "verification_type": a.verify_type as u8,
+    })).collect();
+    let verification_inputs = serde_json::json!({
+        "issuer_pk_x": pkx_hex_kept,
+        "issuer_pk_y": pky_hex_kept,
+        "transcript": transcript_bytes,
+        "attributes": attr_json,
+        "now": now_kept,
+        "contract_hash": contract_hash_vec,
+        "doc_type": "org.iso.18013.5.1.mDL",
+        "version": circuit_version,
+        "block_enc_hash": block_enc_hash,
+        "block_enc_sig": block_enc_sig,
+        "num_attributes": num_attrs,
+    });
+
     Ok(Json(ContractProveResponse {
         compound_proof_json,
         op: "AND".to_string(),
@@ -1485,6 +1557,7 @@ async fn contract_prove(
         contract_hash: format!("0x{:016x}", contract_hash_u64),
         salt: "0x0000000000000000".to_string(),
         role: role_str,
+        verification_inputs: Some(verification_inputs),
     }))
 }
 

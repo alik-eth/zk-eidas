@@ -440,6 +440,31 @@ impl Fp256 {
         // even if limbs >= p (as long as limbs < 2^256, which is guaranteed by 32 bytes).
         Fp256Elt(to_montgomery(&limbs))
     }
+
+    /// Parse a hex string (with optional `0x` prefix) to a field element.
+    /// The hex string is interpreted as big-endian bytes.
+    pub fn of_hex_string(&self, s: &str) -> Option<Fp256Elt> {
+        let hex_str = s.strip_prefix("0x").or_else(|| s.strip_prefix("0X")).unwrap_or(s);
+        if hex_str.is_empty() || hex_str.len() > 64 {
+            return None;
+        }
+        // Pad to 64 hex chars (32 bytes)
+        let padded = format!("{:0>64}", hex_str);
+        let mut bytes = [0u8; 32];
+        for i in 0..32 {
+            bytes[i] = u8::from_str_radix(&padded[i * 2..i * 2 + 2], 16).ok()?;
+        }
+        Some(self.of_bytes_be(&bytes))
+    }
+
+    /// Parse a string that may be decimal or hex (0x-prefixed) to a field element.
+    pub fn of_string(&self, s: &str) -> Option<Fp256Elt> {
+        if s.starts_with("0x") || s.starts_with("0X") {
+            self.of_hex_string(s)
+        } else {
+            self.of_decimal_string(s)
+        }
+    }
 }
 
 #[cfg(test)]
