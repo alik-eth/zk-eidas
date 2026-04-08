@@ -4,15 +4,6 @@ import { test, expect, type Page } from '@playwright/test'
 // Helpers
 // ---------------------------------------------------------------------------
 
-function enableConsoleLogs(page: Page) {
-  page.on('console', msg => {
-    const text = msg.text()
-    if (text.includes('[chunked-zkey]') || text.includes('[prover]') || text.includes('[worker]')) {
-      console.log(`  [browser] ${text}`)
-    }
-  })
-}
-
 async function issueDefaultPid(page: Page) {
   page.on('dialog', d => d.dismiss())
   // Wait for React hydration
@@ -43,8 +34,7 @@ async function selectOnlyPredicates(page: Page, labels: string[]) {
 }
 
 async function generateProofAndWait(page: Page, timeoutMs = 600_000) {
-  // Match both server ("Згенерувати доказ/Generate") and on-device ("Довести у браузері/Prove in browser") buttons
-  await page.getByRole('button', { name: /Згенерувати доказ|Generate|Довести у браузері|Prove in browser/ }).click()
+  await page.getByRole('button', { name: /Згенерувати доказ|Generate/ }).click()
   await expect(
     page.getByText(/Доказ успішно згенеровано|Proof generated/).first()
   ).toBeVisible({ timeout: timeoutMs })
@@ -59,13 +49,11 @@ test.describe('Landing Page', () => {
     await page.goto('/')
     await expect(page.getByRole('heading', { name: 'zk-eidas', level: 2 })).toBeVisible()
     // Subtitle
-    await expect(page.getByText(/Доведіть, хто ви є|Prove who you are/i).first()).toBeVisible()
-    // Problem section
-    await expect(page.getByText(/Проблема з цифровими ID|problem with EU digital/i).first()).toBeVisible()
-    // Live proof section
-    await expect(page.getByText(/Спробуйте прямо зараз|Try it right now/i).first()).toBeVisible()
-    // Paper contracts section
-    await expect(page.getByText(/Контракти без персональних даних|Contracts without personal data/i).first()).toBeVisible()
+    await expect(page.getByText(/Європа пообіцяла|Europe promised/i).first()).toBeVisible()
+    // Dilemma section
+    await expect(page.getByText(/Дилема|The Dilemma/i).first()).toBeVisible()
+    // Proposal section
+    await expect(page.getByText(/Пропозиція|Proposal/i).first()).toBeVisible()
     // Footer
     await expect(page.getByText(/Apache 2.0/).first()).toBeVisible()
   })
@@ -76,19 +64,21 @@ test.describe('Landing Page', () => {
 // ---------------------------------------------------------------------------
 
 test.describe('Learn Page', () => {
-  test('renders all 8 sections', async ({ page }) => {
+  test('renders all 9 sections', async ({ page }) => {
     await page.goto('/learn')
-    // Section 1: eIDAS problem
-    await expect(page.getByText(/eIDAS 2.0|Доведіть, хто ви є|Prove who you are/).first()).toBeVisible()
-    // Section 3: Comparison table
+    // Pipeline title
+    await expect(page.getByText(/How It Works|Як це працює/).first()).toBeVisible()
+    // Stage 1: Credential
+    await expect(page.getByText(/1\. Credential|1\. Посвідчення/).first()).toBeVisible()
+    // Stage 4: Store
+    await expect(page.getByText(/4\. Store|4\. Зберігання/).first()).toBeVisible()
+    // Comparison table
     await expect(page.getByText(/SD-JWT VC/).first()).toBeVisible()
     await expect(page.getByText(/BBS\+/).first()).toBeVisible()
-    // Section 4: Trust gap
-    await expect(page.getByText(/Trust Gap|Прогалина довіри/).first()).toBeVisible()
-    // Section 7: Standards
+    // Standards
     await expect(page.getByText(/SOG-IS/).first()).toBeVisible()
     await expect(page.getByText(/POTENTIAL/).first()).toBeVisible()
-    // Section 8: GDPR
+    // GDPR
     await expect(page.getByText(/GDPR/).first()).toBeVisible()
     // CTA
     await expect(page.getByRole('link', { name: /Спробувати|Try/ })).toBeVisible()
@@ -133,32 +123,6 @@ test.describe('Sandbox — E2E Proof', () => {
 })
 
 // ---------------------------------------------------------------------------
-// Demo — On-Device Proof (browser-side proving via snarkjs)
-// ---------------------------------------------------------------------------
-
-test.describe('Sandbox — On-Device Proof', () => {
-  // Skip by default: ECDSA proving takes ~3 min in the browser.
-  // Run manually: E2E_ON_DEVICE=1 npx playwright test --grep "On-Device"
-  test.skip(() => !process.env.E2E_ON_DEVICE, 'slow: set E2E_ON_DEVICE=1 to run')
-
-  test('PID: issue → on-device prove age >= 18 → verified', async ({ page }) => {
-    test.setTimeout(600_000) // 10 min — ECDSA circuit is heavy in browser
-    enableConsoleLogs(page)
-    await page.goto('/sandbox')
-    await issueDefaultPid(page)
-
-    // Toggle to "On Device" proving
-    await page.getByRole('button', { name: /On Device/ }).click()
-
-    await selectOnlyPredicates(page, ['щонайменше 18|at least 18'])
-    await generateProofAndWait(page)
-    await expect(page.getByText(/birth_date|age_over_18|Дата народж|Вік понад 18/).first()).toBeVisible()
-    await expect(page.getByText('██████').first()).toBeVisible()
-    await expect(page.getByRole('link', { name: /Зберегти доказ|Save proof/ })).toBeVisible()
-  })
-})
-
-// ---------------------------------------------------------------------------
 // Demo — Print (QR codes)
 // ---------------------------------------------------------------------------
 
@@ -168,7 +132,7 @@ test.describe('Sandbox — Print', () => {
     await issueDefaultPid(page)
     await selectOnlyPredicates(page, ['щонайменше 18|at least 18'])
     await generateProofAndWait(page)
-    await page.getByRole('button', { name: /Сформувати засвідчення|attestation/i }).click()
+    await page.getByRole('button', { name: /Сформувати засвідчення|Generate Certificate/i }).click()
     await expect(page.locator('img[alt*="QR"]').first()).toBeVisible({ timeout: 30_000 })
     expect(await page.locator('img[alt*="QR"]').count()).toBeGreaterThan(0)
     await expect(page.getByRole('button', { name: /Друкувати|Print/i })).toBeVisible()
@@ -219,10 +183,9 @@ test.describe('Contracts', () => {
 // ---------------------------------------------------------------------------
 
 // ---------------------------------------------------------------------------
-// Contracts — E2E (all 4 templates, server + on-device modes with benchmarks)
+// Contracts — E2E (all 4 templates with benchmarks)
 // ---------------------------------------------------------------------------
 
-const ON_DEVICE = !!process.env.E2E_ON_DEVICE
 const CONTRACT_TEMPLATES = [
   // ecdsaProofs = unique predicate claims + nullifier field (if different from predicate claims)
   // escrowCreds = number of PID credentials (only PIDs get identity escrow)
@@ -233,18 +196,10 @@ const CONTRACT_TEMPLATES = [
 ]
 
 for (const tpl of CONTRACT_TEMPLATES) {
-  const mode = ON_DEVICE ? 'on-device' : 'server'
-
-  test.describe(`Contract: ${tpl.name} (${mode})`, () => {
-    if (ON_DEVICE) {
-      test.skip(() => !process.env.E2E_ON_DEVICE, 'slow: set E2E_ON_DEVICE=1 to run')
-    }
-
+  test.describe(`Contract: ${tpl.name}`, () => {
     test(`${tpl.name}: issue ${tpl.creds} cred(s) → prove → document → verify${tpl.escrowCreds > 0 ? ' + escrow decrypt' : ''}`, async ({ page }) => {
-      // Each ECDSA proof takes ~5 min in browser; scale timeout accordingly
-      const timeoutMs = ON_DEVICE ? tpl.ecdsaProofs * 5 * 60_000 : 300_000
+      const timeoutMs = 300_000
       test.setTimeout(timeoutMs)
-      if (ON_DEVICE) enableConsoleLogs(page)
 
       // Collect benchmark timings from browser console
       const timings: string[] = []
@@ -272,24 +227,19 @@ for (const tpl of CONTRACT_TEMPLATES) {
       await expect(page.getByText(/Доведені предикати|Proven predicates/i).first()).toBeVisible({ timeout: 30_000 })
       const issueMs = Date.now() - issueStart
 
-      // 3. Toggle mode if on-device
-      if (ON_DEVICE) {
-        await page.getByRole('button', { name: /On Device/ }).click()
-      }
-
-      // 4. Prove
+      // 3. Prove
       const proveStart = Date.now()
       await generateProofAndWait(page, timeoutMs)
       const proveMs = Date.now() - proveStart
 
-      // 5. Verify document generated
+      // 4. Verify document generated
       await expect(page.getByRole('button', { name: /Друкувати|Print/i })).toBeVisible({ timeout: 600_000 })
 
-      // 6. Navigate to Step 5 (Verify) and check chain-of-trust
-      // The "Verify" button in the document actions bar — use locator to avoid matching template cards
+      // 5. Navigate to Verify step and check chain-of-trust
+      // Use CSS class to target the verify-document button specifically (template cards also contain "Перевірити" in descriptions)
       await page.locator('button.bg-blue-600', { hasText: /Перевірити|Verify/ }).click()
 
-      // 6a. Identity escrow verification (only for contracts with PID credentials)
+      // 5a. Identity escrow verification (only for contracts with PID credentials)
       if (tpl.escrowCreds > 0) {
         await expect(
           page.getByText(/Доказ ескроу-шифрування перевірено|Escrow encryption proof verified/).first()
@@ -298,7 +248,7 @@ for (const tpl of CONTRACT_TEMPLATES) {
           page.getByText(/Integrity verified|Цілісність перевірена/).first()
         ).toBeVisible({ timeout: 10_000 })
 
-        // 6b. Decrypt escrow for each PID credential
+        // 5b. Decrypt escrow for each PID credential
         const decryptButtons = page.getByRole('button', { name: /Розшифрувати як орган|Decrypt as Authority/ })
         const decryptCount = await decryptButtons.count()
         expect(decryptCount).toBe(tpl.escrowCreds)
@@ -310,16 +260,16 @@ for (const tpl of CONTRACT_TEMPLATES) {
           ).toBeVisible({ timeout: 30_000 })
         }
 
-        // 6c. Verify decrypted fields contain expected PID data
+        // 5c. Verify decrypted fields contain expected PID data
         await expect(page.getByText('given_name').first()).toBeVisible()
         await expect(page.getByText('family_name').first()).toBeVisible()
         await expect(page.getByText('document_number').first()).toBeVisible()
         await expect(page.getByText('birth_date').first()).toBeVisible()
       }
 
-      // 7. Print benchmarks
+      // 6. Print benchmarks
       const totalMs = issueMs + proveMs
-      console.log(`\n  ⏱  ${tpl.name} (${mode}) benchmarks:`)
+      console.log(`\n  ⏱  ${tpl.name} (server) benchmarks:`)
       console.log(`     Issuance:  ${(issueMs / 1000).toFixed(1)}s`)
       console.log(`     Proving:   ${(proveMs / 1000).toFixed(1)}s`)
       console.log(`     Total:     ${(totalMs / 1000).toFixed(1)}s`)
@@ -339,8 +289,8 @@ test.describe('i18n', () => {
   test('EN/UA toggle works', async ({ page }) => {
     await page.goto('/')
     await page.waitForTimeout(2000)
-    await expect(page.getByText(/Доведіть, хто ви є/).first()).toBeVisible()
+    await expect(page.getByText(/Європа пообіцяла/).first()).toBeVisible()
     await page.getByRole('button', { name: 'EN' }).click()
-    await expect(page.getByText(/Prove who you are/i).first()).toBeVisible()
+    await expect(page.getByText(/Europe promised/i).first()).toBeVisible()
   })
 })
