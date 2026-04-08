@@ -3,6 +3,7 @@ pub mod circuit;
 pub mod error;
 pub mod field;
 pub mod ligero;
+pub mod mdoc;
 pub mod merkle;
 pub mod proof;
 pub mod sumcheck;

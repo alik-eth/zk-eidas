@@ -418,6 +418,28 @@ impl Fp256 {
 
         Some(Fp256Elt(to_montgomery(&limbs)))
     }
+
+    /// Interpret 32 big-endian bytes as a 256-bit integer and convert to
+    /// Montgomery form, reducing mod p.
+    ///
+    /// This mirrors C++ `nat_from_be<Nat>(hash)` followed by `f_.to_montgomery(nat)`.
+    /// SHA-256 hashes can produce values >= p, so unlike `of_bytes` this does NOT
+    /// reject values >= p — Montgomery multiplication handles the reduction.
+    pub fn of_bytes_be(&self, bytes: &[u8; 32]) -> Fp256Elt {
+        // Reverse from big-endian to little-endian byte order.
+        let mut le = [0u8; 32];
+        for i in 0..32 {
+            le[i] = bytes[31 - i];
+        }
+        // Read into u64 limbs (little-endian).
+        let mut limbs = [0u64; 4];
+        for i in 0..4 {
+            limbs[i] = u64::from_le_bytes(le[i * 8..(i + 1) * 8].try_into().unwrap());
+        }
+        // to_montgomery performs mont_mul(limbs, R^2) which inherently reduces mod p,
+        // even if limbs >= p (as long as limbs < 2^256, which is guaranteed by 32 bytes).
+        Fp256Elt(to_montgomery(&limbs))
+    }
 }
 
 #[cfg(test)]
