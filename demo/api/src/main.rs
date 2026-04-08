@@ -1320,7 +1320,6 @@ struct ContractProveRequest {
     format: String,
     predicates: Vec<PredicateRequest>,
     contract_terms: String,
-    timestamp: String,
     #[serde(default)]
     role: Option<String>,
     #[serde(default)]
@@ -1355,11 +1354,11 @@ async fn contract_prove(
 
     let role_str = req.role.clone().unwrap_or_else(|| "holder".to_string());
 
-    // Compute contract_hash = SHA256(terms || timestamp) → first 8 bytes
+    // Compute contract_hash = SHA256(terms) → first 8 bytes
+    // Timestamp and salt are embedded in the contract text itself.
     use sha2::{Sha256, Digest};
     let mut hasher = Sha256::new();
     hasher.update(req.contract_terms.as_bytes());
-    hasher.update(req.timestamp.as_bytes());
     let hash: [u8; 32] = hasher.finalize().into();
     let contract_hash_bytes: [u8; 8] = hash[..8].try_into().unwrap();
 

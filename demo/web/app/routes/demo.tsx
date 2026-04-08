@@ -535,6 +535,15 @@ function ProveStep({ state, setState, t }: { state: ContractWizardState; setStat
   const [skipCache, setSkipCache] = useState(false)
   const [escrowEnabled, setEscrowEnabled] = useState(true)
 
+  // Editable contract text with pre-filled salt and timestamp
+  const [contractText, setContractText] = useState(() => {
+    const bodyKey = locale === 'uk' ? template?.bodyKey_uk : template?.bodyKey_en
+    const body = bodyKey ? t(bodyKey) : ''
+    const salt = crypto.randomUUID()
+    const now = new Date().toISOString().replace('T', ' ').slice(0, 19) + ' UTC'
+    return `${body}\n\n---\nDate: ${now}\nSalt: ${salt}`
+  })
+
   // Reset local state when credentials change
   useEffect(() => {
     setProved(false)
@@ -560,6 +569,7 @@ function ProveStep({ state, setState, t }: { state: ContractWizardState; setStat
       const partyProofs: PartyProof[] = []
       let sharedContractHash: string | null = null
       const timestamp = new Date().toISOString()
+      const contractTerms = contractText
 
       const { encodeProofChunks, LogicalOpFlag, encodeTermsQr, encodeMetadataQr, encodeEscrowChunks } = await import('../lib/qr-chunking')
       const QRCode = (await import('qrcode')).default
@@ -586,7 +596,6 @@ function ProveStep({ state, setState, t }: { state: ContractWizardState; setStat
         }))
 
         // Prove via /holder/contract-prove (includes nullifier generation)
-        const selectedTemplate = CONTRACT_TEMPLATES.find(tpl => tpl.id === state.templateId)
         const proveRes = await fetch(`${API_URL}/holder/contract-prove`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -594,8 +603,7 @@ function ProveStep({ state, setState, t }: { state: ContractWizardState; setStat
             credential: cred.credential,
             format: cred.format,
             predicates,
-            contract_terms: JSON.stringify(selectedTemplate),
-            timestamp,
+            contract_terms: contractTerms,
             nullifier_field: req.nullifierField,
             role: req.role,
             ...(forceSkipCache ? { skip_cache: true } : {}),
@@ -707,8 +715,7 @@ function ProveStep({ state, setState, t }: { state: ContractWizardState; setStat
       }
 
       // Generate terms QR (page 1)
-      const selectedTemplateForTerms = CONTRACT_TEMPLATES.find(tpl => tpl.id === state.templateId)
-      const termsString = JSON.stringify(selectedTemplateForTerms)
+      const termsString = contractTerms
       const termsQrChunk = await encodeTermsQr(termsString, timestamp, proofCount)
       const termsQrUrl = await QRCode.toDataURL([{ data: termsQrChunk, mode: 'byte' as const }], {
         errorCorrectionLevel: 'L',
@@ -884,6 +891,23 @@ function ProveStep({ state, setState, t }: { state: ContractWizardState; setStat
         <p className="text-sm text-slate-400">{t('contracts.step3Desc')}</p>
       </div>
 
+      {/* Contract terms (editable) */}
+      <div className="bg-slate-800 rounded-lg border border-slate-700 overflow-hidden">
+        <div className="bg-slate-700 px-6 py-3">
+          <h3 className="text-sm font-semibold text-slate-200">{t('contracts.contractText')}</h3>
+        </div>
+        <div className="p-4">
+          <textarea
+            value={contractText}
+            onChange={e => setContractText(e.target.value)}
+            disabled={loading || proved}
+            rows={8}
+            className="w-full bg-slate-900 border border-slate-600 rounded-lg px-4 py-3 text-xs text-slate-300 font-mono leading-relaxed resize-y disabled:opacity-50"
+          />
+          <p className="text-[10px] text-slate-500 mt-2">{t('contracts.contractTextHint')}</p>
+        </div>
+      </div>
+
       {/* Predicates list grouped by credential */}
       <div className="bg-slate-800 rounded-lg border border-slate-700 overflow-hidden">
         <div className="bg-slate-700 px-6 py-3">
@@ -972,8 +996,8 @@ function ProveStep({ state, setState, t }: { state: ContractWizardState; setStat
             </svg>
             <span className="text-blue-300 font-semibold">
               {t('contracts.generating')}{elapsed > 0 ? ` ${elapsed}s` : ''}
-              {currentProvingIndex >= 0 && ` (${currentProvingIndex + 1}/${template.credentials.length + (template.bindings?.length || 0)})`}
-              {currentProvingIndex === -2 && ` (${template.credentials.length + 1}/${template.credentials.length + (template.bindings?.length || 0)})`}
+              {currentProvingIndex >= 0 && currentProvingIndex < template.credentials.length && ` (${t('contracts.credential')} ${currentProvingIndex + 1}/${template.credentials.length})`}
+              {currentProvingIndex === -2 && ` (${t('contracts.binding')})`}
             </span>
           </div>
         </div>
@@ -1298,6 +1322,7 @@ function VerifyStep({ state, t }: { state: ContractWizardState; t: (key: string)
   const [verified, setVerified] = useState(false)
   const [allValid, setAllValid] = useState(false)
   const [results, setResults] = useState<{ role: string; predicate: string; valid: boolean }[]>([])
+  const [perCredTimes, setPerCredTimes] = useState<Record<string, number>>({})
   const [error, setError] = useState<string | null>(null)
   const [verificationMethod, setVerificationMethod] = useState<'server' | 'client' | null>(null)
   const [verifyTimeMs, setVerifyTimeMs] = useState<number | null>(null)
@@ -1358,6 +1383,7 @@ function VerifyStep({ state, t }: { state: ContractWizardState; t: (key: string)
           const req = template?.credentials[ci]
           if (!cred.compoundProofJson || !req) return null
 
+          const ct0 = performance.now()
           let data: any
           let method: 'client' | 'server' = 'server'
 
@@ -1415,6 +1441,7 @@ function VerifyStep({ state, t }: { state: ContractWizardState; t: (key: string)
           // Progressive update as each finishes
           subResults.push(...credResults)
           setResults([...subResults])
+          setPerCredTimes(prev => ({ ...prev, [req.role]: Math.round(performance.now() - ct0) }))
 
           if (method === 'client') verificationMethodRef = 'client'
           return credResults
@@ -1503,8 +1530,11 @@ function VerifyStep({ state, t }: { state: ContractWizardState; t: (key: string)
                 const isPending = verifying && roleResults.length === 0
                 return (
                   <div key={req.role}>
-                    <div className="px-5 py-2 bg-slate-800/80">
+                    <div className="px-5 py-2 bg-slate-800/80 flex items-center justify-between">
                       <span className="text-xs font-semibold text-slate-400">{t(req.roleLabelKey)}</span>
+                      {perCredTimes[req.role] != null && (
+                        <span className="text-[10px] text-slate-500">{(perCredTimes[req.role] / 1000).toFixed(1)}s</span>
+                      )}
                     </div>
                     {isPending ? (
                       <div className="flex items-center gap-2 px-5 py-3">
