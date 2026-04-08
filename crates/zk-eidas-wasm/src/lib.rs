@@ -1,5 +1,8 @@
 pub mod algebra;
+pub mod circuit;
 pub mod error;
 pub mod field;
+pub mod ligero;
 pub mod merkle;
+pub mod proof;
 pub mod transcript;
