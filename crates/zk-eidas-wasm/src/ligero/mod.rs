@@ -10,7 +10,7 @@ pub mod reed_solomon;
 pub mod transcript;
 
 // Re-exports
-pub use reed_solomon::interpolate_at_indices;
+pub use reed_solomon::{batch_invert, interpolate_at_indices, RsPrecomp};
 pub use transcript::write_commitment;
 
 use sha2::Digest;
@@ -67,10 +67,11 @@ fn interpolate_at_extension<F: Field>(
     y: &[F::Elt],
     dblock: usize,
     idx: &[usize],
+    precomp: &RsPrecomp<F>,
     f: &F,
 ) -> Vec<F::Elt> {
     let target_positions: Vec<usize> = idx.iter().map(|&i| dblock + i).collect();
-    interpolate_at_indices(y, &target_positions, f)
+    reed_solomon::interpolate_with_precomp(y, &target_positions, precomp, f)
 }
 
 // ---------------------------------------------------------------------------
@@ -95,10 +96,11 @@ fn merkle_check<F: Field>(
         idx,
         &|col_idx, hasher| {
             // Hash all elements in column col_idx across all rows.
+            let mut buf = [0u8; 32]; // max(Fp256::BYTES=32, Gf2::BYTES=16)
             for row in 0..param.nrow {
                 let elt = proof.req[row * param.nreq + col_idx];
-                let bytes = f.to_bytes(&elt);
-                hasher.update(&bytes);
+                f.write_bytes(&elt, &mut buf);
+                hasher.update(&buf[..F::BYTES]);
             }
         },
     )
@@ -110,6 +112,7 @@ fn low_degree_check<F: Field>(
     proof: &LigeroProof<F>,
     idx: &[usize],
     u_ldt: &[F::Elt],
+    precomp: &RsPrecomp<F>,
     f: &F,
 ) -> bool {
     let nreq = param.nreq;
@@ -127,7 +130,7 @@ fn low_degree_check<F: Field>(
     }
 
     // Interpolate y_ldt (block evaluations) at extension positions.
-    let yp = interpolate_at_extension(&proof.y_ldt, param.dblock, idx, f);
+    let yp = interpolate_at_extension(&proof.y_ldt, param.dblock, idx, precomp, f);
 
     yp == yc
 }
@@ -187,6 +190,8 @@ fn dot_check<F: Field>(
     proof: &LigeroProof<F>,
     idx: &[usize],
     a: &[F::Elt],
+    precomp_block: &RsPrecomp<F>,
+    precomp_dblock: &RsPrecomp<F>,
     f: &F,
 ) -> bool {
     let nreq = param.nreq;
@@ -196,32 +201,84 @@ fn dot_check<F: Field>(
         .map(|j| proof.req[param.idot * nreq + j])
         .collect();
 
+    // Target positions for interpolation (shared across all rows).
+    let target_positions: Vec<usize> = idx.iter().map(|&i| param.dblock + i).collect();
+
     // For each witness+quadratic row i:
     //   Layout A row: [zero(r), A[i*w .. (i+1)*w]]
     //   Interpolate at extension positions
     //   yc += A_interp[j] * W_row[j]
-    for i in 0..param.nwqrow {
-        // Build Aext: r zeros then w values from A.
-        let mut a_block = vec![f.zero(); param.block];
-        let a_start = i * param.w;
-        let a_end = (a_start + param.w).min(a.len());
-        for k in 0..param.w.min(a_end - a_start) {
-            a_block[param.r + k] = a[a_start + k];
+    #[cfg(feature = "parallel")]
+    {
+        use rayon::prelude::*;
+
+        // Compute all row contributions in parallel, then reduce.
+        let row_contributions: Vec<Vec<F::Elt>> = (0..param.nwqrow)
+            .into_par_iter()
+            .map(|i| {
+                let f = f.clone();
+                let mut a_block = vec![f.zero(); param.block];
+                let a_start = i * param.w;
+                let a_end = (a_start + param.w).min(a.len());
+                for k in 0..param.w.min(a_end - a_start) {
+                    a_block[param.r + k] = a[a_start + k];
+                }
+
+                let a_interp = reed_solomon::interpolate_with_precomp(
+                    &a_block,
+                    &target_positions,
+                    precomp_block,
+                    &f,
+                );
+
+                // Compute a_interp[j] * W_opened[j] for each j
+                let mut contrib = vec![f.zero(); nreq];
+                for j in 0..nreq {
+                    let w_val = proof.req[(i + param.iw) * nreq + j];
+                    contrib[j] = f.mul(&a_interp[j], &w_val);
+                }
+                contrib
+            })
+            .collect();
+
+        // Sum all contributions into yc
+        for contrib in &row_contributions {
+            for j in 0..nreq {
+                yc[j] = f.add(&yc[j], &contrib[j]);
+            }
         }
+    }
 
-        // Interpolate A block at extension positions.
-        let a_interp = interpolate_at_extension(&a_block, param.dblock, idx, f);
+    #[cfg(not(feature = "parallel"))]
+    {
+        let mut a_block = vec![f.zero(); param.block];
+        for i in 0..param.nwqrow {
+            for v in a_block.iter_mut() {
+                *v = f.zero();
+            }
+            let a_start = i * param.w;
+            let a_end = (a_start + param.w).min(a.len());
+            for k in 0..param.w.min(a_end - a_start) {
+                a_block[param.r + k] = a[a_start + k];
+            }
 
-        // yc += a_interp[j] * W_opened[j]
-        for j in 0..nreq {
-            let w_val = proof.req[(i + param.iw) * nreq + j];
-            let term = f.mul(&a_interp[j], &w_val);
-            yc[j] = f.add(&yc[j], &term);
+            let a_interp = reed_solomon::interpolate_with_precomp(
+                &a_block,
+                &target_positions,
+                precomp_block,
+                f,
+            );
+
+            for j in 0..nreq {
+                let w_val = proof.req[(i + param.iw) * nreq + j];
+                let term = f.mul(&a_interp[j], &w_val);
+                yc[j] = f.add(&yc[j], &term);
+            }
         }
     }
 
     // Interpolate y_dot (dblock evaluations) at extension positions.
-    let yp = interpolate_at_extension(&proof.y_dot, param.dblock, idx, f);
+    let yp = interpolate_at_extension(&proof.y_dot, param.dblock, idx, precomp_dblock, f);
 
     yp == yc
 }
@@ -232,6 +289,7 @@ fn quadratic_check<F: Field>(
     proof: &LigeroProof<F>,
     idx: &[usize],
     u_quad: &[F::Elt],
+    precomp: &RsPrecomp<F>,
     f: &F,
 ) -> bool {
     let nreq = param.nreq;
@@ -268,7 +326,7 @@ fn quadratic_check<F: Field>(
     yquad[param.block..param.block + yq2_len].copy_from_slice(&proof.y_quad_2);
 
     // Interpolate y_quad at extension positions.
-    let yp = interpolate_at_extension(&yquad, param.dblock, idx, f);
+    let yp = interpolate_at_extension(&yquad, param.dblock, idx, precomp, f);
 
     yp == yc
 }
@@ -316,19 +374,37 @@ pub fn ligero_verify<F: Field>(
     // Generate column indices.
     let idx = gen_idx(ts, param.block_ext, param.nreq);
 
+    // Precompute Lagrange interpolation data once for all checks.
+    // block-size precomp: used for A-matrix interpolation in dot_check.
+    // dblock-size precomp: used for y_ldt, y_dot, y_quad interpolation.
+    #[cfg(feature = "timing")]
+    let tp0 = std::time::Instant::now();
+
+    let precomp_block = RsPrecomp::new(param.block, f);
+    let precomp_dblock = RsPrecomp::new(param.dblock, f);
+
+    #[cfg(feature = "timing")]
+    let tp1 = std::time::Instant::now();
+
     // 2. Merkle check.
     if !merkle_check(param, com, proof, &idx, f) {
         return false;
     }
 
-    // 3. Low-degree check.
-    if !low_degree_check(param, proof, &idx, &u_ldt, f) {
+    #[cfg(feature = "timing")]
+    let tp2 = std::time::Instant::now();
+
+    // 3. Low-degree check (y_ldt has param.block elements).
+    if !low_degree_check(param, proof, &idx, &u_ldt, &precomp_block, f) {
         return false;
     }
 
+    #[cfg(feature = "timing")]
+    let tp3 = std::time::Instant::now();
+
     // 4. Dot-product check (includes inner product value verification).
     let a_matrix = inner_product_vector(param, nl, linear, &alphal, quad, &alphaq, f);
-    if !dot_check(param, proof, &idx, &a_matrix, f) {
+    if !dot_check(param, proof, &idx, &a_matrix, &precomp_block, &precomp_dblock, f) {
         return false;
     }
 
@@ -339,9 +415,19 @@ pub fn ligero_verify<F: Field>(
         return false;
     }
 
+    #[cfg(feature = "timing")]
+    let tp4 = std::time::Instant::now();
+
     // 5. Quadratic check.
-    if !quadratic_check(param, proof, &idx, &u_quad, f) {
+    if !quadratic_check(param, proof, &idx, &u_quad, &precomp_dblock, f) {
         return false;
+    }
+
+    #[cfg(feature = "timing")]
+    {
+        let tp5 = std::time::Instant::now();
+        eprintln!("[timing]     precomp: {:?}, merkle: {:?}, ldt: {:?}, dot: {:?}, quad: {:?}",
+            tp1 - tp0, tp2 - tp1, tp3 - tp2, tp4 - tp3, tp5 - tp4);
     }
 
     true
@@ -449,7 +535,8 @@ mod tests {
         let evals = vec![f.of_scalar(42); 4];
         let dblock = 7; // 2*4-1
         let idx = vec![0, 1, 2];
-        let result = interpolate_at_extension(&evals, dblock, &idx, &f);
+        let precomp = RsPrecomp::new(evals.len(), &f);
+        let result = interpolate_at_extension(&evals, dblock, &idx, &precomp, &f);
         // A constant polynomial evaluates to 42 everywhere.
         for r in result {
             assert_eq!(r, f.of_scalar(42));

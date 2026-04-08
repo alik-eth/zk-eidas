@@ -356,19 +356,36 @@ pub fn lagrange_coefs_3<F: Field>(r: &F::Elt, f: &F) -> [F::Elt; 3] {
     let r_m2 = f.sub(r, &x2);
 
     // Denominators: d_k = prod_{j!=k} (x_k - x_j)
-    let d0 = f.mul(&f.sub(&x0, &x1), &f.sub(&x0, &x2)); // (0-1)(0-x2)
-    let d1 = f.mul(&f.sub(&x1, &x0), &f.sub(&x1, &x2)); // (1-0)(1-x2)
-    let d2 = f.mul(&f.sub(&x2, &x0), &f.sub(&x2, &x1)); // (x2-0)(x2-1)
+    // These are constants (0-1)(0-2)=2, (1-0)(1-2)=-1, (2-0)(2-1)=2
+    // but field-dependent, so compute each time — the inversions are the expense.
+    let d0 = f.mul(&f.sub(&x0, &x1), &f.sub(&x0, &x2));
+    let d1 = f.mul(&f.sub(&x1, &x0), &f.sub(&x1, &x2));
+    let d2 = f.mul(&f.sub(&x2, &x0), &f.sub(&x2, &x1));
 
-    let inv_d0 = f.invert(&d0);
-    let inv_d1 = f.invert(&d1);
-    let inv_d2 = f.invert(&d2);
+    // Batch-invert the 3 denominators (1 inversion + 6 multiplications)
+    let inv_d = batch_invert_3(d0, d1, d2, f);
 
-    let l0 = f.mul(&f.mul(&r_m1, &r_m2), &inv_d0);
-    let l1 = f.mul(&f.mul(&r_m0, &r_m2), &inv_d1);
-    let l2 = f.mul(&f.mul(&r_m0, &r_m1), &inv_d2);
+    let l0 = f.mul(&f.mul(&r_m1, &r_m2), &inv_d[0]);
+    let l1 = f.mul(&f.mul(&r_m0, &r_m2), &inv_d[1]);
+    let l2 = f.mul(&f.mul(&r_m0, &r_m1), &inv_d[2]);
 
     [l0, l1, l2]
+}
+
+/// Batch-invert exactly 3 field elements using Montgomery's trick.
+fn batch_invert_3<F: Field>(a: F::Elt, b: F::Elt, c: F::Elt, f: &F) -> [F::Elt; 3] {
+    let ab = f.mul(&a, &b);
+    let abc = f.mul(&ab, &c);
+    let inv_abc = f.invert(&abc);
+    // inv_c = inv_abc * ab
+    let inv_c = f.mul(&inv_abc, &ab);
+    // inv_ab = inv_abc * c
+    let inv_ab = f.mul(&inv_abc, &c);
+    // inv_b = inv_ab * a
+    let inv_b = f.mul(&inv_ab, &a);
+    // inv_a = inv_ab * b
+    let inv_a = f.mul(&inv_ab, &b);
+    [inv_a, inv_b, inv_c]
 }
 
 // ---------------------------------------------------------------------------
@@ -441,8 +458,15 @@ fn input_constraint<F: Field>(
     ci: usize,
     f: &F,
 ) -> usize {
-    let eq0 = filleq(logv, ninputs, g0, f);
-    let eq1 = filleq(logv, ninputs, g1, f);
+    #[cfg(feature = "parallel")]
+    let (eq0, eq1) = {
+        rayon::join(
+            || filleq(logv, ninputs, g0, &f.clone()),
+            || filleq(logv, ninputs, g1, &f.clone()),
+        )
+    };
+    #[cfg(not(feature = "parallel"))]
+    let (eq0, eq1) = (filleq(logv, ninputs, g0, f), filleq(logv, ninputs, g1, f));
 
     let mut pub_binding = f.zero();
     for i in 0..ninputs {

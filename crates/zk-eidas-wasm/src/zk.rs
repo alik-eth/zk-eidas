@@ -59,6 +59,9 @@ impl<F: Field> ZkVerifier<F> {
         circuit: &Circuit<F>,
         f: &F,
     ) -> bool {
+        #[cfg(feature = "timing")]
+        let t0 = std::time::Instant::now();
+
         // 1. Initialize sumcheck Fiat-Shamir transcript
         sumcheck::initialize_sumcheck_fiat_shamir(ts, circuit, pub_inputs, f);
 
@@ -76,8 +79,11 @@ impl<F: Field> ZkVerifier<F> {
             f,
         );
 
+        #[cfg(feature = "timing")]
+        let t1 = std::time::Instant::now();
+
         // 3. Ligero verify
-        ligero::ligero_verify(
+        let ok = ligero::ligero_verify(
             &self.param,
             &zk_proof.com,
             &zk_proof.com_proof,
@@ -87,7 +93,15 @@ impl<F: Field> ZkVerifier<F> {
             &b,
             &self.lqc,
             f,
-        )
+        );
+
+        #[cfg(feature = "timing")]
+        {
+            let t2 = std::time::Instant::now();
+            eprintln!("[timing]   sumcheck: {:?}, ligero: {:?} (field={})", t1 - t0, t2 - t1, F::FIELD_ID);
+        }
+
+        ok
     }
 }
 

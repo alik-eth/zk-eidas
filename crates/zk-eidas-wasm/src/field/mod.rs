@@ -5,7 +5,7 @@ pub mod gf2_128;
 /// All operations are in the field's internal representation
 /// (Montgomery for Fp256, polynomial for GF2_128).
 pub trait Field: Clone + Send + Sync + 'static {
-    type Elt: Clone + Copy + Default + PartialEq + Eq + std::fmt::Debug;
+    type Elt: Clone + Copy + Default + PartialEq + Eq + std::fmt::Debug + Send + Sync;
 
     const BYTES: usize;
     const SUBFIELD_BYTES: usize;
@@ -28,6 +28,12 @@ pub trait Field: Clone + Send + Sync + 'static {
 
     /// Serialize to BYTES bytes (little-endian, field-canonical form).
     fn to_bytes(&self, elt: &Self::Elt) -> Vec<u8>;
+
+    /// Serialize into a pre-allocated buffer. `buf` must be at least BYTES long.
+    fn write_bytes(&self, elt: &Self::Elt, buf: &mut [u8]) {
+        let v = self.to_bytes(elt);
+        buf[..Self::BYTES].copy_from_slice(&v);
+    }
 
     /// Deserialize from subfield bytes (for run-length decoding).
     fn of_subfield_bytes(&self, bytes: &[u8]) -> Option<Self::Elt>;

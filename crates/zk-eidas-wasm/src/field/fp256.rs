@@ -145,12 +145,54 @@ fn mul4x4(a: &[u64; 4], b: &[u64; 4]) -> [u64; 8] {
     r
 }
 
+/// Schoolbook 4-limb squaring: exploit a[i]*a[j] == a[j]*a[i].
+/// Computes off-diagonal products once and doubles them, then adds diagonals.
+/// 10 multiplications instead of 16 for general mul.
+fn sqr4(a: &[u64; 4]) -> [u64; 8] {
+    // Off-diagonal products (upper triangle): a[i]*a[j] for i<j
+    // Each contributes 2*a[i]*a[j] to the result.
+    let mut r = [0u64; 8];
+
+    // Compute upper-triangle cross-products
+    for i in 0..4 {
+        let mut carry: u64 = 0;
+        for j in (i + 1)..4 {
+            let (lo, hi) = mul_u64(a[i], a[j]);
+            let (s, c1) = adc(r[i + j], lo, carry);
+            r[i + j] = s;
+            carry = hi + c1;
+        }
+        r[i + 4] = carry;
+    }
+
+    // Double the cross-products (left shift by 1 bit across all limbs)
+    let mut top_bit: u64 = 0;
+    for limb in r.iter_mut() {
+        let new_top = *limb >> 63;
+        *limb = (*limb << 1) | top_bit;
+        top_bit = new_top;
+    }
+
+    // Add diagonal products: a[i]*a[i]
+    let mut carry: u64 = 0;
+    for i in 0..4 {
+        let (lo, hi) = mul_u64(a[i], a[i]);
+        let (s, c1) = adc(r[2 * i], lo, carry);
+        r[2 * i] = s;
+        let (s, c2) = adc(r[2 * i + 1], hi, c1);
+        r[2 * i + 1] = s;
+        carry = c2;
+    }
+
+    r
+}
+
 /// Montgomery multiplication: compute (a * b * R^{-1}) mod p.
 ///
 /// Two-phase: schoolbook multiply then Montgomery reduction.
 fn fp256_mont_mul(a: &[u64; 4], b: &[u64; 4]) -> [u64; 4] {
     // Phase 1: full 8-limb product
-    let mut r = [0u64; 9]; // 8 product limbs + 1 overflow for reduction carries
+    let mut r = [0u64; 9];
     let prod = mul4x4(a, b);
     r[..8].copy_from_slice(&prod);
 
@@ -198,6 +240,51 @@ fn fp256_mont_mul(a: &[u64; 4], b: &[u64; 4]) -> [u64; 4] {
     ]
 }
 
+/// Montgomery squaring: compute (a^2 * R^{-1}) mod p.
+/// Uses the optimized sqr4 for the product phase.
+fn fp256_mont_sqr(a: &[u64; 4]) -> [u64; 4] {
+    let mut r = [0u64; 9];
+    let prod = sqr4(a);
+    r[..8].copy_from_slice(&prod);
+
+    // Montgomery reduction (identical to mont_mul)
+    for i in 0..4 {
+        let q = r[i].wrapping_mul(M_PRIME);
+        let mut carry: u64 = 0;
+        for j in 0..4 {
+            let (lo, hi) = mul_u64(q, MODULUS[j]);
+            let (s, c1) = adc(r[i + j], lo, carry);
+            r[i + j] = s;
+            carry = hi + c1;
+        }
+        let mut k = i + 4;
+        loop {
+            if k > 8 || carry == 0 {
+                break;
+            }
+            let (s, c) = adc(r[k], carry, 0);
+            r[k] = s;
+            carry = c;
+            k += 1;
+        }
+    }
+
+    let result = [r[4], r[5], r[6], r[7]];
+    let (s0, bw) = sbb(result[0], MODULUS[0], 0);
+    let (s1, bw) = sbb(result[1], MODULUS[1], bw);
+    let (s2, bw) = sbb(result[2], MODULUS[2], bw);
+    let (s3, bw) = sbb(result[3], MODULUS[3], bw);
+    let (_, bw) = sbb(r[8], 0, bw);
+
+    let mask = bw.wrapping_neg();
+    [
+        s0 ^ (mask & (result[0] ^ s0)),
+        s1 ^ (mask & (result[1] ^ s1)),
+        s2 ^ (mask & (result[2] ^ s2)),
+        s3 ^ (mask & (result[3] ^ s3)),
+    ]
+}
+
 /// Negate: if a == 0, return 0; otherwise return p - a.
 fn fp256_neg(a: &[u64; 4]) -> [u64; 4] {
     let is_zero = (a[0] | a[1] | a[2] | a[3]) == 0;
@@ -220,7 +307,7 @@ fn fp256_invert(a: &[u64; 4]) -> [u64; 4] {
 
     // Scan p-2 from MSB to LSB
     for i in (0..256).rev() {
-        result = fp256_mont_mul(&result, &result);
+        result = fp256_mont_sqr(&result);
         let word = i / 64;
         let bit = i % 64;
         if (P_MINUS_2[word] >> bit) & 1 == 1 {
@@ -320,6 +407,13 @@ impl Field for Fp256 {
             out.extend_from_slice(&limb.to_le_bytes());
         }
         out
+    }
+
+    fn write_bytes(&self, elt: &Fp256Elt, buf: &mut [u8]) {
+        let normal = from_montgomery(&elt.0);
+        for (i, limb) in normal.iter().enumerate() {
+            buf[i * 8..(i + 1) * 8].copy_from_slice(&limb.to_le_bytes());
+        }
     }
 
     fn of_subfield_bytes(&self, bytes: &[u8]) -> Option<Fp256Elt> {

@@ -466,8 +466,22 @@ pub fn mdoc_verify(
     }
 
     // 8. Verify both proofs
+    #[cfg(feature = "timing")]
+    let t0 = std::time::Instant::now();
+
     let ok1 = hash_v.verify(&pr_hash, &pub_hash, &mut tv, &c_hash, &gf);
+
+    #[cfg(feature = "timing")]
+    let t1 = std::time::Instant::now();
+
     let ok2 = sig_v.verify(&pr_sig, &pub_sig, &mut tv, &c_sig, &fp);
+
+    #[cfg(feature = "timing")]
+    {
+        let t2 = std::time::Instant::now();
+        eprintln!("[timing] hash verify: {:?}", t1 - t0);
+        eprintln!("[timing] sig verify:  {:?}", t2 - t1);
+    }
 
     Ok(ok1 && ok2)
 }

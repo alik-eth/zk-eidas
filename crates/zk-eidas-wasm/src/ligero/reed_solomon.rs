@@ -1,5 +1,100 @@
 use crate::field::Field;
 
+/// Precomputed Lagrange interpolation data for a given block size.
+/// Build once per `ligero_verify` call and reuse across all checks.
+pub struct RsPrecomp<F: Field> {
+    pub positions: Vec<F::Elt>,
+    pub inv_denoms: Vec<F::Elt>,
+}
+
+impl<F: Field> RsPrecomp<F> {
+    /// Build precomputed data for block-size `block`.
+    /// Cost: O(block^2) field multiplications + 1 inversion.
+    pub fn new(block: usize, f: &F) -> Self {
+        let positions: Vec<F::Elt> = (0..block).map(|i| f.of_scalar(i as u64)).collect();
+
+        // Compute denominators: denom[i] = prod_{j!=i} (pos[i] - pos[j])
+        #[cfg(feature = "parallel")]
+        let denoms = {
+            use rayon::prelude::*;
+            (0..block)
+                .into_par_iter()
+                .map(|i| {
+                    let f = f.clone();
+                    let mut denom = f.one();
+                    for j in 0..block {
+                        if i != j {
+                            let diff = f.sub(&positions[i], &positions[j]);
+                            denom = f.mul(&denom, &diff);
+                        }
+                    }
+                    denom
+                })
+                .collect::<Vec<_>>()
+        };
+
+        #[cfg(not(feature = "parallel"))]
+        let denoms = {
+            let mut denoms = Vec::with_capacity(block);
+            for i in 0..block {
+                let mut denom = f.one();
+                for j in 0..block {
+                    if i != j {
+                        let diff = f.sub(&positions[i], &positions[j]);
+                        denom = f.mul(&denom, &diff);
+                    }
+                }
+                denoms.push(denom);
+            }
+            denoms
+        };
+
+        // Batch inversion using Montgomery's trick:
+        // 1 inversion + 3*(block-1) multiplications instead of `block` inversions.
+        let inv_denoms = batch_invert(&denoms, f);
+
+        Self {
+            positions,
+            inv_denoms,
+        }
+    }
+}
+
+/// Batch-invert a slice of field elements using Montgomery's trick.
+/// Returns inv[i] = 1/elts[i] for each element.
+/// Cost: 1 inversion + 3*(n-1) multiplications.
+pub fn batch_invert<F: Field>(elts: &[F::Elt], f: &F) -> Vec<F::Elt> {
+    let n = elts.len();
+    if n == 0 {
+        return vec![];
+    }
+    if n == 1 {
+        return vec![f.invert(&elts[0])];
+    }
+
+    // Forward pass: acc[i] = elts[0] * elts[1] * ... * elts[i]
+    let mut acc = Vec::with_capacity(n);
+    acc.push(elts[0]);
+    for i in 1..n {
+        acc.push(f.mul(&acc[i - 1], &elts[i]));
+    }
+
+    // Single inversion of the total product
+    let mut inv = f.invert(&acc[n - 1]);
+
+    // Backward pass: recover individual inverses
+    let mut result = vec![f.zero(); n];
+    for i in (1..n).rev() {
+        // result[i] = inv * acc[i-1] = (1 / (elts[i]*...*elts[n-1])) * (elts[0]*...*elts[i-1])
+        //           = 1 / elts[i]  (after we've already peeled off elts[i+1..n-1])
+        result[i] = f.mul(&inv, &acc[i - 1]);
+        inv = f.mul(&inv, &elts[i]);
+    }
+    result[0] = inv;
+
+    result
+}
+
 /// Reed-Solomon interpolation: given evaluations at systematic positions
 /// 0..block-1, evaluate the polynomial at the given target indices.
 ///
@@ -15,53 +110,48 @@ pub fn interpolate_at_indices<F: Field>(
     indices: &[usize],
     f: &F,
 ) -> Vec<F::Elt> {
+    let precomp = RsPrecomp::new(evals.len(), f);
+    interpolate_with_precomp(evals, indices, &precomp, f)
+}
+
+/// Interpolate using precomputed Lagrange data. Use this when calling
+/// multiple times with the same block size to avoid redundant work.
+pub fn interpolate_with_precomp<F: Field>(
+    evals: &[F::Elt],
+    indices: &[usize],
+    precomp: &RsPrecomp<F>,
+    f: &F,
+) -> Vec<F::Elt> {
     let block = evals.len();
     let mut results = Vec::with_capacity(indices.len());
 
-    // Precompute field-element representations of positions 0..block-1
-    let positions: Vec<F::Elt> = (0..block).map(|i| f.of_scalar(i as u64)).collect();
-
-    // Precompute inverse denominators: inv_denom[i] = 1 / prod_{j!=i} (pos[i] - pos[j])
-    let mut inv_denoms = Vec::with_capacity(block);
-    for i in 0..block {
-        let mut denom = f.one();
-        for j in 0..block {
-            if i != j {
-                let diff = f.sub(&positions[i], &positions[j]);
-                denom = f.mul(&denom, &diff);
-            }
-        }
-        inv_denoms.push(f.invert(&denom));
-    }
+    // Pre-allocate scratch buffers once, reuse across all target indices.
+    let mut t_minus_j = vec![f.zero(); block];
+    let mut left = vec![f.zero(); block];
+    let mut right = vec![f.zero(); block];
 
     for &idx in indices {
-        let t = f.of_scalar(idx as u64);
-
         // If t is one of the systematic positions, return the evaluation directly
         if idx < block {
             results.push(evals[idx]);
             continue;
         }
 
-        // Compute f(t) via Lagrange interpolation.
-        // First compute (t - pos[j]) for all j.
-        let mut t_minus_j = Vec::with_capacity(block);
+        let t = f.of_scalar(idx as u64);
+
+        // Compute (t - pos[j]) for all j.
         for j in 0..block {
-            t_minus_j.push(f.sub(&t, &positions[j]));
+            t_minus_j[j] = f.sub(&t, &precomp.positions[j]);
         }
 
-        // f(t) = sum_i evals[i] * grand_prod / (t - i) * inv_denom[i]
-        // Use prefix/suffix products to avoid per-element inversion:
-        //   prod_{j!=i} (t - j) = left[i] * right[i]
-        // where left[i] = prod_{j<i} (t-j), right[i] = prod_{j>i} (t-j)
-        let mut left = Vec::with_capacity(block);
+        // Prefix products: left[i] = prod_{j<i} (t-j)
         let mut acc = f.one();
         for j in 0..block {
-            left.push(acc);
+            left[j] = acc;
             acc = f.mul(&acc, &t_minus_j[j]);
         }
 
-        let mut right = vec![f.one(); block];
+        // Suffix products: right[i] = prod_{j>i} (t-j)
         acc = f.one();
         for j in (0..block).rev() {
             right[j] = acc;
@@ -70,9 +160,8 @@ pub fn interpolate_at_indices<F: Field>(
 
         let mut result = f.zero();
         for i in 0..block {
-            // prod_{j!=i} (t - j) = left[i] * right[i]
             let numerator = f.mul(&left[i], &right[i]);
-            let basis = f.mul(&numerator, &inv_denoms[i]);
+            let basis = f.mul(&numerator, &precomp.inv_denoms[i]);
             result = f.add(&result, &f.mul(&evals[i], &basis));
         }
 

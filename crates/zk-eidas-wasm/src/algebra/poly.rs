@@ -1,4 +1,5 @@
 use crate::field::Field;
+use crate::ligero::reed_solomon::batch_invert;
 
 /// Polynomial represented by evaluations at 0, 1, ..., N-1.
 #[derive(Clone, Debug)]
@@ -22,8 +23,8 @@ impl<F: Field> SumcheckPoly<F> {
     pub fn eval(&self, r: &F::Elt, f: &F) -> F::Elt {
         let n = self.t.len();
 
-        // Pre-compute inverse denominators: inv_denom[i] = 1 / prod_{j!=i} (i - j)
-        let mut inv_denoms = Vec::with_capacity(n);
+        // Pre-compute denominators: denom[i] = prod_{j!=i} (i - j)
+        let mut denoms = Vec::with_capacity(n);
         for i in 0..n {
             let mut denom = f.one();
             for j in 0..n {
@@ -36,8 +37,9 @@ impl<F: Field> SumcheckPoly<F> {
                     denom = f.mul(&denom, &diff);
                 }
             }
-            inv_denoms.push(f.invert(&denom));
+            denoms.push(denom);
         }
+        let inv_denoms = batch_invert(&denoms, f);
 
         // Lagrange interpolation: p(r) = sum_i t[i] * inv_denom[i] * prod_{j!=i} (r - j)
         let mut result = f.zero();

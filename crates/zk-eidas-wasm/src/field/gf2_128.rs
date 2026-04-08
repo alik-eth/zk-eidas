@@ -176,6 +176,15 @@ fn gf2_128_mul(x: &[u64; 2], y: &[u64; 2]) -> [u64; 2] {
     result
 }
 
+/// Compute x^{2^n} via n repeated squarings.
+fn gf2_sqr_n(x: Gf2Elt, n: usize) -> Gf2Elt {
+    let mut r = x;
+    for _ in 0..n {
+        r = Gf2Elt(gf2_128_mul(&r.0, &r.0));
+    }
+    r
+}
+
 // ---------------------------------------------------------------------------
 // Field trait implementation
 // ---------------------------------------------------------------------------
@@ -215,17 +224,32 @@ impl Field for Gf2_128 {
     }
 
     fn invert(&self, a: &Gf2Elt) -> Gf2Elt {
-        // Fermat's little theorem: a^{-1} = a^{2^128 - 2}
-        // 2^128 - 2 in binary = 1111...1110 (127 ones then a zero)
-        // = (((...((1*a)^2 * a)^2 * a)...)^2 * a)^2
-        //   with 126 square-and-multiply steps, then a final square.
-        let mut result = *a; // a^1
-        for _ in 0..126 {
-            result = self.mul(&result, &result); // square
-            result = self.mul(&result, a); // multiply by a
-        }
-        result = self.mul(&result, &result); // final square (trailing zero bit)
-        result
+        // Addition chain for a^{2^128 - 2} in GF(2^128).
+        //
+        // Key identity: a^{2^(m+n) - 1} = (a^{2^m - 1})^{2^n} * a^{2^n - 1}
+        // where sqr_n(x, k) = x^{2^k} via k repeated squarings.
+        //
+        // We need a^{2^128 - 2} = (a^{2^127 - 1})^2.
+        //
+        // Build a^{2^k - 1} for power-of-2 k:
+        let a1 = *a;
+        let a2 = self.mul(&gf2_sqr_n(a1, 1), &a1);
+        let a4 = self.mul(&gf2_sqr_n(a2, 2), &a2);
+        let a8 = self.mul(&gf2_sqr_n(a4, 4), &a4);
+        let a16 = self.mul(&gf2_sqr_n(a8, 8), &a8);
+        let a32 = self.mul(&gf2_sqr_n(a16, 16), &a16);
+        let a64 = self.mul(&gf2_sqr_n(a32, 32), &a32);
+
+        // Build non-power-of-2 using composition:
+        let a3 = self.mul(&gf2_sqr_n(a2, 1), &a1);
+        let a7 = self.mul(&gf2_sqr_n(a4, 3), &a3);
+        let a15 = self.mul(&gf2_sqr_n(a8, 7), &a7);
+        let a31 = self.mul(&gf2_sqr_n(a16, 15), &a15);
+        let a63 = self.mul(&gf2_sqr_n(a32, 31), &a31);
+        let a127 = self.mul(&gf2_sqr_n(a64, 63), &a63);
+
+        // a^{2^128 - 2} = (a^{2^127 - 1})^2
+        Gf2Elt(gf2_128_mul(&a127.0, &a127.0))
     }
 
     fn of_scalar(&self, s: u64) -> Gf2Elt {
@@ -259,6 +283,11 @@ impl Field for Gf2_128 {
         out.extend_from_slice(&elt.0[0].to_le_bytes());
         out.extend_from_slice(&elt.0[1].to_le_bytes());
         out
+    }
+
+    fn write_bytes(&self, elt: &Gf2Elt, buf: &mut [u8]) {
+        buf[0..8].copy_from_slice(&elt.0[0].to_le_bytes());
+        buf[8..16].copy_from_slice(&elt.0[1].to_le_bytes());
     }
 
     fn of_subfield_bytes(&self, bytes: &[u8]) -> Option<Gf2Elt> {
