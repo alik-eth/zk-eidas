@@ -34,4 +34,12 @@ pub trait Field: Clone + Send + Sync + 'static {
 
     /// Check if an element fits in the subfield.
     fn is_subfield(&self, elt: &Self::Elt) -> bool;
+
+    /// Sample a uniformly random field element from a byte source.
+    ///
+    /// `rng` is called with the number of bytes needed, and returns that many
+    /// random bytes. For GF(2^128) every 16-byte value is valid. For Fp256
+    /// this does rejection sampling: read 32 bytes, interpret as little-endian,
+    /// accept if < modulus, else retry.
+    fn sample(&self, rng: &mut dyn FnMut(usize) -> Vec<u8>) -> Self::Elt;
 }

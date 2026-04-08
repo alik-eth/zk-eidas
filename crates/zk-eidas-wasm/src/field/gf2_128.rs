@@ -201,4 +201,10 @@ impl Field for Gf2_128 {
     fn is_subfield(&self, elt: &Gf2Elt) -> bool {
         elt.0[1] == 0 && elt.0[0] < 256
     }
+
+    fn sample(&self, rng: &mut dyn FnMut(usize) -> Vec<u8>) -> Gf2Elt {
+        // Every 128-bit value is a valid GF(2^128) element.
+        let bytes = rng(16);
+        self.of_bytes(&bytes).unwrap()
+    }
 }
