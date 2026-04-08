@@ -193,28 +193,52 @@ function VerifyPage() {
       const envelope = cbor.decode(bytes)
 
       if (envelope && envelope.version === 2 && Array.isArray(envelope.proof_envelopes)) {
-        // V2 bundle format from /contracts
-        const allProofs: DecodedProof[] = []
-        for (const env of envelope.proof_envelopes) {
-          if (env && Array.isArray(env.proofs)) {
-            for (const p of env.proofs) {
-              allProofs.push({
-                predicate: p.predicate || 'unknown',
-                proofBytes: p.proof_bytes instanceof Uint8Array ? p.proof_bytes : new Uint8Array(p.proof_bytes),
-                publicInputs: (p.public_inputs || []).map((pi: any) => pi instanceof Uint8Array ? pi : new Uint8Array(pi)),
-                op: p.op || 'unknown',
-                valid: null,
-              })
-            }
-          }
-        }
-        setProofs(allProofs)
+        // V2 bundle: each proof_envelope is a Longfellow compound proof JSON
+        // Verify each envelope directly via server, then show results
         const termsData = envelope.terms ?? null
         const metaData = envelope.metadata ?? null
         setContractTerms(termsData)
         setContractMeta(metaData)
-        if (termsData && metaData && allProofs.length > 0) {
-          runVerificationPipeline(allProofs, termsData, metaData)
+
+        // Each envelope is a compound proof — verify each one
+        const compoundProofs = envelope.proof_envelopes.filter((env: any) => env && (env.proof_bytes || env.sub_proofs || Array.isArray(env.proofs)))
+        if (compoundProofs.length > 0) {
+          setVerifying(true)
+          try {
+            const results: DecodedProof[] = []
+            for (const env of compoundProofs) {
+              const compoundJson = JSON.stringify(env)
+              const res = await fetch(`${API_URL}/verifier/verify-compound`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ compound_proof_json: compoundJson, hidden_fields: [] }),
+              })
+              if (!res.ok) throw new Error(await res.text())
+              const data = await res.json()
+              results.push({
+                predicate: env.op === 'AND' ? 'compound (AND)' : env.op || 'proof',
+                proofBytes: new Uint8Array(0),
+                publicInputs: [],
+                op: env.op || 'single',
+                valid: data.valid ?? false,
+              })
+            }
+            setProofs(results)
+
+            // Contract hash cross-check
+            if (termsData && metaData) {
+              const { computeContractHash } = await import('../lib/nullifier-check')
+              const computed = await computeContractHash(termsData.terms, termsData.timestamp)
+              setComputedHash(computed)
+              setHashCheckResult(computed === metaData.contract_hash ? 'match' : 'mismatch')
+            }
+
+            setVerified(true)
+          } catch (e: any) {
+            setError(`Verification failed: ${e.message}`)
+          } finally {
+            setVerifying(false)
+          }
         }
         return
       }

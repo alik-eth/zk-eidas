@@ -284,6 +284,144 @@ for (const tpl of CONTRACT_TEMPLATES) {
 }
 
 // ---------------------------------------------------------------------------
+// Helpers — shared contract proving flow
+// ---------------------------------------------------------------------------
+
+async function proveVehicleSaleContract(page: Page) {
+  await page.goto('/demo')
+  await page.waitForTimeout(2000)
+  await page.locator('button', { hasText: /купівлі-продажу|Vehicle Sale/ }).first().click()
+  await expect(page.getByRole('button', { name: /Почати спочатку|Start over/ })).toBeVisible({ timeout: 10_000 })
+
+  for (let i = 0; i < 3; i++) {
+    const issueBtn = page.getByRole('button', { name: /Видати посвідчення|Issue/ })
+    await issueBtn.scrollIntoViewIfNeeded()
+    await issueBtn.click()
+    if (i < 2) await page.waitForTimeout(1000)
+  }
+  await expect(page.getByText(/Доведені предикати|Proven predicates/i).first()).toBeVisible({ timeout: 15_000 })
+
+  await generateProofAndWait(page)
+
+  // .cbor link only appears after full prove+QR+CBOR pipeline completes
+  await expect(page.locator('a[download*=".cbor"]')).toBeVisible({ timeout: 30_000 })
+}
+
+function assertVerifyPageResults(page: Page) {
+  return Promise.all([
+    expect(
+      page.getByText(/All proofs verified|Всі докази успішно перевірено/).first()
+    ).toBeVisible({ timeout: 30_000 }),
+    expect(
+      page.getByText(/contract_hash matches|contract_hash збігається/).first()
+    ).toBeVisible({ timeout: 30_000 }),
+  ])
+}
+
+// ---------------------------------------------------------------------------
+// Contract → CBOR Download → /verify Upload (Vehicle Sale)
+// ---------------------------------------------------------------------------
+
+test.describe('Contract → Verify via CBOR upload', () => {
+  test('Vehicle Sale: prove → download .cbor → upload on /verify → verified', async ({ page }) => {
+    test.setTimeout(180_000)
+    await proveVehicleSaleContract(page)
+
+    // Store the CBOR data URL in localStorage (persists across navigation)
+    const cborLink = page.locator('a[download*=".cbor"]')
+    const dataUrl = await cborLink.getAttribute('href')
+    expect(dataUrl).toBeTruthy()
+    await page.evaluate((url: string) => localStorage.setItem('__test_cbor', url), dataUrl!)
+    console.log(`  CBOR data URL stored (${Math.round(dataUrl!.length / 1024)}KB)`)
+
+    // Navigate to /verify, wait for hydration
+    await page.goto('/verify')
+    await page.waitForTimeout(2000)
+
+    // Read CBOR from localStorage, decode, and trigger React onChange
+    await page.evaluate(async () => {
+      const cborDataUrl = localStorage.getItem('__test_cbor')!
+      localStorage.removeItem('__test_cbor')
+      const res = await fetch(cborDataUrl)
+      const bytes = new Uint8Array(await res.arrayBuffer())
+      const file = new File([bytes], 'contract.cbor', { type: 'application/cbor' })
+      const input = document.getElementById('file-input')!
+      const propsKey = Object.keys(input).find(k => k.startsWith('__reactProps'))!
+      const props = (input as any)[propsKey]
+      const dt = new DataTransfer()
+      dt.items.add(file)
+      props.onChange({ target: { files: dt.files } })
+    })
+
+    await assertVerifyPageResults(page)
+    await expect(page.getByText(/nullifier:/).first()).toBeVisible({ timeout: 5_000 })
+    console.log('  ✓ Vehicle Sale CBOR verified on /verify page')
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Contract → QR Scan → /verify (Vehicle Sale)
+// ---------------------------------------------------------------------------
+
+test.describe('Contract → Verify via QR scan', () => {
+  test('Vehicle Sale: prove → scan document QRs → verified', async ({ page }) => {
+    test.setTimeout(180_000)
+    await proveVehicleSaleContract(page)
+
+    // Collect all QR image data URLs from the document step
+    const allQrSrcs = await page.evaluate(() => {
+      const imgs = document.querySelectorAll<HTMLImageElement>('img[alt*="QR"], img[alt*="Escrow"]')
+      return Array.from(imgs).map(img => img.src).filter(src => src.startsWith('data:'))
+    })
+    expect(allQrSrcs.length).toBeGreaterThan(0)
+    console.log(`  QR codes in document: ${allQrSrcs.length}`)
+
+    // Navigate to /verify and mock camera with a canvas-based fake stream
+    await page.goto('/verify')
+    await expect(page.getByText(/\.cbor/).first()).toBeVisible({ timeout: 5_000 })
+
+    // Inject fake getUserMedia BEFORE clicking scan — returns a canvas captureStream
+    await page.evaluate((qrSrcs: string[]) => {
+      const fakeCanvas = document.createElement('canvas')
+      fakeCanvas.width = 400
+      fakeCanvas.height = 400
+      ;(window as any).__fakeCanvas = fakeCanvas
+      ;(window as any).__qrSrcs = qrSrcs
+
+      navigator.mediaDevices.getUserMedia = async () => {
+        return fakeCanvas.captureStream(10)
+      }
+    }, allQrSrcs)
+
+    // Click "Scan Paper Proof" — scanner starts reading from fake canvas stream
+    await page.getByRole('button', { name: /Сканувати|Scan/i }).click()
+    await page.waitForTimeout(500)
+
+    // Feed QR images one at a time — scanner RAF loop decodes via jsQR
+    for (let i = 0; i < allQrSrcs.length; i++) {
+      await page.evaluate(async (idx: number) => {
+        const canvas = (window as any).__fakeCanvas as HTMLCanvasElement
+        const ctx = canvas.getContext('2d')!
+        const srcs = (window as any).__qrSrcs as string[]
+
+        const img = new Image()
+        await new Promise<void>(r => { img.onload = () => r(); img.src = srcs[idx] })
+        canvas.width = img.naturalWidth
+        canvas.height = img.naturalHeight
+        ctx.drawImage(img, 0, 0)
+      }, i)
+
+      await page.waitForTimeout(500)
+    }
+
+    // All chunks collected → auto-verify fires
+    await assertVerifyPageResults(page)
+    await expect(page.getByText(/nullifier:/).first()).toBeVisible({ timeout: 5_000 })
+    console.log('  ✓ Vehicle Sale QR scan verified on /verify page')
+  })
+})
+
+// ---------------------------------------------------------------------------
 // i18n
 // ---------------------------------------------------------------------------
 
