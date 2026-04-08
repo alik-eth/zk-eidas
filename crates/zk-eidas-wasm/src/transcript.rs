@@ -140,6 +140,12 @@ impl Transcript {
         self.write_untyped(&bytes);
     }
 
+    /// Write an array of field elements (stride=1, count=elts.len()).
+    /// Convenience wrapper around `write_field_array`.
+    pub fn write_array<F: Field>(&mut self, elts: &[F::Elt], field: &F) {
+        self.write_field_array::<F>(elts, 1, elts.len(), field);
+    }
+
     /// Write an array of field elements (TAG_ARRAY + 8-byte LE count + elements).
     /// `stride` selects every stride-th element from `elts`.
     pub fn write_field_array<F: Field>(
