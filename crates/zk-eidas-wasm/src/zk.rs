@@ -65,7 +65,7 @@ impl<F: Field> ZkVerifier<F> {
         // 2. Derive constraints on the witness
         let mut a: Vec<LinearConstraint<F::Elt>> = Vec::new();
         let mut b: Vec<F::Elt> = Vec::new();
-        let _cn = sumcheck::verifier_constraints(
+        let cn = sumcheck::verifier_constraints(
             circuit,
             pub_inputs,
             &zk_proof.proof,
@@ -82,7 +82,7 @@ impl<F: Field> ZkVerifier<F> {
             &zk_proof.com,
             &zk_proof.com_proof,
             ts,
-            circuit.nl,
+            cn,
             &a,
             &b,
             &self.lqc,

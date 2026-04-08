@@ -262,7 +262,7 @@ impl Field for Fp256 {
     type Elt = Fp256Elt;
 
     const BYTES: usize = 32;
-    const SUBFIELD_BYTES: usize = 1;
+    const SUBFIELD_BYTES: usize = 32;
     const BITS: usize = 256;
     const FIELD_ID: u8 = 1;
 
@@ -323,15 +323,13 @@ impl Field for Fp256 {
     }
 
     fn of_subfield_bytes(&self, bytes: &[u8]) -> Option<Fp256Elt> {
-        if bytes.len() != Self::SUBFIELD_BYTES {
-            return None;
-        }
-        Some(self.of_scalar(bytes[0] as u64))
+        // For Fp256, subfield == full field (kSubFieldBytes == kBytes in C++)
+        self.of_bytes(bytes)
     }
 
-    fn is_subfield(&self, elt: &Fp256Elt) -> bool {
-        let normal = from_montgomery(&elt.0);
-        normal[1] == 0 && normal[2] == 0 && normal[3] == 0 && normal[0] < 256
+    fn is_subfield(&self, _elt: &Fp256Elt) -> bool {
+        // For Fp256, every element is in the subfield (matching C++ in_subfield)
+        true
     }
 
     fn sample(&self, rng: &mut dyn FnMut(usize) -> Vec<u8>) -> Fp256Elt {

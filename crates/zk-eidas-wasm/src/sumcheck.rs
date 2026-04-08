@@ -337,23 +337,36 @@ fn ceilshr(a: usize, n: usize) -> usize {
 /// Compute Lagrange coefficients for a degree-2 polynomial evaluated at
 /// points 0, 1, 2, at challenge point r.
 ///
-/// lag[0] = (r-1)(r-2) / 2
-/// lag[1] = r(2-r)          = -r(r-2)
-/// lag[2] = r(r-1) / 2
+/// Compute Lagrange interpolation coefficients for a degree-2 polynomial
+/// evaluated at the field's 3 evaluation points: x0=of_scalar(0)=0,
+/// x1=of_scalar(1)=1, x2=of_scalar(2).
+///
+/// lag[k] = prod_{j!=k} (r - x_j) / (x_k - x_j)
+///
+/// For Fp (prime fields), x2=2 and the formulas simplify to:
+///   lag[0] = (r-1)(r-2)/2, lag[1] = -r(r-2), lag[2] = r(r-1)/2
+/// For GF(2^128), x2=g (subfield generator) and the denominators differ.
 pub fn lagrange_coefs_3<F: Field>(r: &F::Elt, f: &F) -> [F::Elt; 3] {
-    let one = f.one();
-    let two = f.of_scalar(2);
-    let inv2 = f.invert(&two);
+    let x0 = f.zero();
+    let x1 = f.one();
+    let x2 = f.of_scalar(2);
 
-    let r_m1 = f.sub(r, &one); // r - 1
-    let r_m2 = f.sub(r, &two); // r - 2
+    let r_m0 = f.sub(r, &x0); // = r
+    let r_m1 = f.sub(r, &x1);
+    let r_m2 = f.sub(r, &x2);
 
-    // lag[0] = (r-1)(r-2) / 2
-    let l0 = f.mul(&f.mul(&r_m1, &r_m2), &inv2);
-    // lag[1] = r(2-r) = -r(r-2)
-    let l1 = f.mul(r, &f.neg(&r_m2));
-    // lag[2] = r(r-1) / 2
-    let l2 = f.mul(&f.mul(r, &r_m1), &inv2);
+    // Denominators: d_k = prod_{j!=k} (x_k - x_j)
+    let d0 = f.mul(&f.sub(&x0, &x1), &f.sub(&x0, &x2)); // (0-1)(0-x2)
+    let d1 = f.mul(&f.sub(&x1, &x0), &f.sub(&x1, &x2)); // (1-0)(1-x2)
+    let d2 = f.mul(&f.sub(&x2, &x0), &f.sub(&x2, &x1)); // (x2-0)(x2-1)
+
+    let inv_d0 = f.invert(&d0);
+    let inv_d1 = f.invert(&d1);
+    let inv_d2 = f.invert(&d2);
+
+    let l0 = f.mul(&f.mul(&r_m1, &r_m2), &inv_d0);
+    let l1 = f.mul(&f.mul(&r_m0, &r_m2), &inv_d1);
+    let l2 = f.mul(&f.mul(&r_m0, &r_m1), &inv_d2);
 
     [l0, l1, l2]
 }

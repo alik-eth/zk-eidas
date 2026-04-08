@@ -24,6 +24,63 @@ impl Gf2Elt {
 pub struct Gf2_128;
 
 // ---------------------------------------------------------------------------
+// GF(2^16) subfield basis computation
+// ---------------------------------------------------------------------------
+
+const SUBFIELD_LOG_BITS: usize = 4;
+const SUBFIELD_BITS: usize = 1 << SUBFIELD_LOG_BITS; // 16
+const LOG_BITS: usize = 7; // 2^7 = 128
+
+/// Compute the GF(2^16) subfield generator g.
+///
+/// g = x^{(2^{2^7}-1)/(2^{2^4}-1)} in GF(2^128)
+///
+/// Using the identity:
+///   (2^{128}-1)/(2^{16}-1) = (2^{16}+1)*(2^{32}+1)*(2^{64}+1)
+fn subfield_generator() -> [u64; 2] {
+    let mut r = [0b10u64, 0u64]; // x, the field generator
+    for i in SUBFIELD_LOG_BITS..LOG_BITS {
+        // s = r^{2^{2^i}}
+        let mut s = r;
+        for _ in 0..(1usize << i) {
+            s = gf2_128_mul(&s, &s); // square
+        }
+        // r = r * s = r^{2^{2^i}+1}
+        r = gf2_128_mul(&r, &s);
+    }
+    r
+}
+
+/// Compute the GF(2^16) subfield basis for of_scalar.
+///
+/// Returns 16 GF(2^128) elements: beta = {1, g, g^2, ..., g^15}
+/// where g is the subfield generator. This matches the C++ `beta_[]` array
+/// which is used directly by `of_scalar()` without row-echelon reduction.
+/// (The C++ `beta_ref()` method creates separate `u_[]` and `linv_[]` arrays
+/// for the `solve()` inverse operation, but `beta_[]` itself stays unreduced.)
+fn compute_beta_basis() -> [[u64; 2]; SUBFIELD_BITS] {
+    let g = subfield_generator();
+
+    let mut beta = [[0u64; 2]; SUBFIELD_BITS];
+    beta[0] = [1, 0]; // one
+    for i in 1..SUBFIELD_BITS {
+        beta[i] = gf2_128_mul(&beta[i - 1], &g);
+    }
+
+    beta
+}
+
+/// Pre-computed GF(2^16) subfield basis for of_scalar/of_subfield_bytes.
+///
+/// This is computed once. In a const context this would be ideal,
+/// but since it involves complex arithmetic, we use lazy initialization.
+fn get_beta_basis() -> &'static [[u64; 2]; SUBFIELD_BITS] {
+    use std::sync::OnceLock;
+    static BETA: OnceLock<[[u64; 2]; SUBFIELD_BITS]> = OnceLock::new();
+    BETA.get_or_init(compute_beta_basis)
+}
+
+// ---------------------------------------------------------------------------
 // Carry-less multiplication primitives (ported from sysdep.h generic impl)
 // ---------------------------------------------------------------------------
 
@@ -127,7 +184,7 @@ impl Field for Gf2_128 {
     type Elt = Gf2Elt;
 
     const BYTES: usize = 16;
-    const SUBFIELD_BYTES: usize = 1;
+    const SUBFIELD_BYTES: usize = 2;
     const BITS: usize = 128;
     const FIELD_ID: u8 = 4;
 
@@ -172,7 +229,20 @@ impl Field for Gf2_128 {
     }
 
     fn of_scalar(&self, s: u64) -> Gf2Elt {
-        Gf2Elt([s, 0])
+        let beta = get_beta_basis();
+        let mut result = [0u64; 2];
+        let mut u = s;
+        for k in 0..SUBFIELD_BITS {
+            if u == 0 {
+                break;
+            }
+            if u & 1 == 1 {
+                result[0] ^= beta[k][0];
+                result[1] ^= beta[k][1];
+            }
+            u >>= 1;
+        }
+        Gf2Elt(result)
     }
 
     fn of_bytes(&self, bytes: &[u8]) -> Option<Gf2Elt> {
@@ -195,11 +265,13 @@ impl Field for Gf2_128 {
         if bytes.len() != Self::SUBFIELD_BYTES {
             return None;
         }
-        Some(Gf2Elt([bytes[0] as u64, 0]))
+        // 2-byte little-endian subfield scalar, decoded through beta basis
+        let val = bytes[0] as u64 | ((bytes[1] as u64) << 8);
+        Some(self.of_scalar(val))
     }
 
     fn is_subfield(&self, elt: &Gf2Elt) -> bool {
-        elt.0[1] == 0 && elt.0[0] < 256
+        elt.0[1] == 0 && elt.0[0] < 65536
     }
 
     fn sample(&self, rng: &mut dyn FnMut(usize) -> Vec<u8>) -> Gf2Elt {

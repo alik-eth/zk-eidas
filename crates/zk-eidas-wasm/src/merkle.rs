@@ -45,7 +45,7 @@ pub fn merkle_verify(
 ) -> bool {
     let nreq = positions.len();
     assert!(nreq > 0, "need at least one opened position");
-    assert!(n.is_power_of_two(), "n must be a power of two");
+    assert!(n > 0, "n must be positive");
 
     // 1. Compute leaf hashes: leaf = SHA256(nonce || column_data)
     let mut leaves = vec![[0u8; DIGEST_LEN]; nreq];

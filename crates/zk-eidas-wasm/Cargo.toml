@@ -19,3 +19,6 @@ thiserror = "2"
 [dev-dependencies]
 wasm-bindgen-test = "0.3"
 hex = "0.4"
+longfellow-sys = { path = "../longfellow-sys" }
+zk-eidas-mdoc = { path = "../zk-eidas-mdoc" }
+zk-eidas-types = { path = "../zk-eidas-types" }

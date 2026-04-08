@@ -85,8 +85,8 @@ fn merkle_check<F: Field>(
     idx: &[usize],
     f: &F,
 ) -> bool {
-    // Pad block_ext up to the next power of two for the Merkle tree.
-    let n = param.block_ext.next_power_of_two();
+    // Use block_ext directly as the number of leaves (matches C++ MerkleTreeVerifier).
+    let n = param.block_ext;
 
     merkle_verify(
         n,

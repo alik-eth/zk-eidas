@@ -3016,6 +3016,7 @@ version = "0.1.0"
 dependencies = [
  "aes",
  "hex",
+ "longfellow-sys",
  "ruzstd",
  "serde",
  "serde-wasm-bindgen",
@@ -3024,6 +3025,8 @@ dependencies = [
  "thiserror",
  "wasm-bindgen",
  "wasm-bindgen-test",
+ "zk-eidas-mdoc",
+ "zk-eidas-types",
 ]
 
 [[package]]
