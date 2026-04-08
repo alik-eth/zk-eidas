@@ -83,7 +83,7 @@ fn fill_bit_string<F: Field>(s: &[u8], len: usize, max: usize, f: &F) -> Vec<F::
 
 /// Encode a 32-byte hash as 256 bit-elements using big-endian byte / LSB-first bit mapping.
 /// Matches C++ hash encoding for nullifier, binding, and escrow digest:
-/// ```
+/// ```text
 /// for j in 0..256:
 ///     byte_idx = (255 - j) / 8
 ///     bit_idx = j % 8
