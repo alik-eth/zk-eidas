@@ -166,9 +166,11 @@ We include \textsc{zk-eidas} v1 (the Groth16-based predecessor) as a baseline to
            Proof sizes and timings are representative values from each project's published benchmarks or papers; direct hardware-normalised comparison is not possible across systems.
            PQ = post-quantum security for the proving system.
            ${}^{*}$\,Post-quantum for the proving system and escrow; the issuer ECDSA~P-256 signature remains classical.}\label{tab:comparison}
-  \begin{tabular}{lcccccccl}
+  \small
+  \setlength{\tabcolsep}{4pt}
+  \begin{tabular}{lllclrrcl}
     \toprule
-    System & Proof system & Setup & PQ & Size & Prove & Verify & Escrow & Format \\
+    System & Proof System & Setup & PQ & Size & Prove & Verify & Escrow & Format \\
     \midrule
     \textsc{zk-eidas} v1
       & Groth16 (BN254)

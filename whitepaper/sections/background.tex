@@ -94,23 +94,24 @@ systems.
   \centering
   \caption{Taxonomy of zero-knowledge proof families.}
   \label{tab:zk-families}
-  \begin{tabular}{@{}lllll@{}}
+  \small
+  \setlength{\tabcolsep}{4pt}
+  \begin{tabular}{@{}lllcp{3.5cm}@{}}
     \toprule
-    \textbf{Family} & \textbf{Example} & \textbf{Trusted Setup} &
-    \textbf{PQ-Secure} & \textbf{Core Assumption} \\
+    Family & Example & Setup & PQ & Core Assumption \\
     \midrule
-    Pairing-based       & Groth16~\cite{groth16}
-                        & Yes (circuit-specific)  & No
-                        & DLP on BN254 \\
-    Polynomial (KZG)    & PLONK~\cite{plonk}
-                        & Yes (universal)         & No
-                        & DLP on BN254 \\
-    Polynomial (IPA)    & Halo~2~\cite{halo2}
-                        & No                      & No
-                        & DLOG on Pasta curves \\
-    Hash-based          & Sumcheck+Ligero~\cite{ligero,sumcheck}
-                        & No                      & Yes
-                        & SHA-256 collision resistance \\
+    Pairing-based    & Groth16~\cite{groth16}
+                     & Trusted (per-circuit)  & No
+                     & DLP on BN254 \\
+    Polynomial (KZG) & PLONK~\cite{plonk}
+                     & Trusted (universal)    & No
+                     & DLP on BN254 \\
+    Polynomial (IPA) & Halo~2~\cite{halo2}
+                     & None                   & No
+                     & DLOG on Pasta curves \\
+    Hash-based       & Sumcheck+Ligero~\cite{ligero,sumcheck}
+                     & None                   & Yes
+                     & SHA-256 collision resistance \\
     \bottomrule
   \end{tabular}
 \end{table}
