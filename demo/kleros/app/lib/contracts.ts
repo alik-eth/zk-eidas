@@ -1,0 +1,91 @@
+export const ARBITRUM_SEPOLIA_CHAIN_ID = 421614
+
+// For local dev: deploy with `forge script` and paste address here.
+// For testnet: use the deployed address.
+export const ESCROW_ARBITRABLE_ADDRESS = '0x0000000000000000000000000000000000000000' as const
+
+export const ESCROW_ARBITRABLE_ABI = [
+  {
+    type: 'function',
+    name: 'registerEscrow',
+    inputs: [
+      { name: 'proofHash', type: 'bytes32' },
+      { name: 'escrowDigest', type: 'bytes32' },
+      { name: 'litCipherRef', type: 'string' },
+    ],
+    outputs: [{ name: 'escrowId', type: 'uint256' }],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
+    name: 'createDispute',
+    inputs: [{ name: 'escrowId', type: 'uint256' }],
+    outputs: [],
+    stateMutability: 'payable',
+  },
+  {
+    type: 'function',
+    name: 'canDecrypt',
+    inputs: [
+      { name: 'caller', type: 'address' },
+      { name: 'escrowId', type: 'uint256' },
+    ],
+    outputs: [{ name: '', type: 'bool' }],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    name: 'escrows',
+    inputs: [{ name: '', type: 'uint256' }],
+    outputs: [
+      { name: 'creator', type: 'address' },
+      { name: 'disputant', type: 'address' },
+      { name: 'proofHash', type: 'bytes32' },
+      { name: 'escrowDigest', type: 'bytes32' },
+      { name: 'disputeId', type: 'uint256' },
+      { name: 'ruling', type: 'uint256' },
+      { name: 'status', type: 'uint8' },
+    ],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    name: 'arbitrationCost',
+    inputs: [],
+    outputs: [{ name: '', type: 'uint256' }],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    name: 'getLitCipherRef',
+    inputs: [{ name: 'escrowId', type: 'uint256' }],
+    outputs: [{ name: '', type: 'string' }],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    name: 'escrowCount',
+    inputs: [],
+    outputs: [{ name: '', type: 'uint256' }],
+    stateMutability: 'view',
+  },
+] as const
+
+export const ESCROW_ARBITRABLE_ACC = (escrowId: string) => [{
+  conditionType: 'evmContract' as const,
+  contractAddress: ESCROW_ARBITRABLE_ADDRESS,
+  functionName: 'canDecrypt',
+  functionParams: [':userAddress', escrowId],
+  functionAbi: {
+    name: 'canDecrypt',
+    inputs: [
+      { name: 'caller', type: 'address' },
+      { name: 'escrowId', type: 'uint256' },
+    ],
+    outputs: [{ name: '', type: 'bool' }],
+    stateMutability: 'view',
+    type: 'function',
+  },
+  chain: 'arbitrumSepolia',
+  returnValueTest: { comparator: '=', value: 'true' },
+}]
