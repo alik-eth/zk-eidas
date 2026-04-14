@@ -183,4 +183,54 @@ contract IdentityEscrowArbitrableTest is Test {
         vm.expectRevert(IdentityEscrowArbitrable.ArbitratorOnly.selector);
         escrowContract.rule(0, 2);
     }
+
+    function test_rule_revert_unknown_dispute() public {
+        // Ruling for a dispute ID that was never created should revert, not corrupt escrow 0
+        vm.prank(address(mockArbitrator));
+        vm.expectRevert(IdentityEscrowArbitrable.DisputeNotFound.selector);
+        escrowContract.rule(999, 2);
+    }
+
+    function test_createDispute_revert_insufficient_fee() public {
+        vm.prank(holder);
+        uint256 escrowId = escrowContract.registerEscrow(proofHash, escrowDigest, litCipherRef);
+
+        vm.deal(disputant, 1 ether);
+        vm.prank(disputant);
+        vm.expectRevert(IdentityEscrowArbitrable.InsufficientFee.selector);
+        escrowContract.createDispute{value: 0.001 ether}(escrowId);
+    }
+
+    function test_createDispute_refunds_excess() public {
+        vm.prank(holder);
+        uint256 escrowId = escrowContract.registerEscrow(proofHash, escrowDigest, litCipherRef);
+
+        vm.deal(disputant, 1 ether);
+        uint256 balBefore = disputant.balance;
+        vm.prank(disputant);
+        escrowContract.createDispute{value: 0.05 ether}(escrowId);
+        uint256 balAfter = disputant.balance;
+
+        // Should have paid exactly 0.01 ether (the arbitration cost)
+        assertEq(balBefore - balAfter, 0.01 ether);
+    }
+
+    function test_updateLitCipherRef() public {
+        vm.prank(holder);
+        uint256 escrowId = escrowContract.registerEscrow(proofHash, escrowDigest, "old_ref");
+
+        vm.prank(holder);
+        escrowContract.updateLitCipherRef(escrowId, "new_ref");
+
+        assertEq(escrowContract.getLitCipherRef(escrowId), "new_ref");
+    }
+
+    function test_updateLitCipherRef_revert_not_creator() public {
+        vm.prank(holder);
+        uint256 escrowId = escrowContract.registerEscrow(proofHash, escrowDigest, litCipherRef);
+
+        vm.prank(bystander);
+        vm.expectRevert(IdentityEscrowArbitrable.EscrowNotFound.selector);
+        escrowContract.updateLitCipherRef(escrowId, "hacked");
+    }
 }

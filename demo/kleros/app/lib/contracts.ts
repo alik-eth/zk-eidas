@@ -69,6 +69,24 @@ export const ESCROW_ARBITRABLE_ABI = [
     outputs: [{ name: '', type: 'uint256' }],
     stateMutability: 'view',
   },
+  {
+    type: 'function',
+    name: 'updateLitCipherRef',
+    inputs: [
+      { name: 'escrowId', type: 'uint256' },
+      { name: 'litCipherRef', type: 'string' },
+    ],
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'event',
+    name: 'EscrowRegistered',
+    inputs: [
+      { name: 'escrowId', type: 'uint256', indexed: true },
+      { name: 'creator', type: 'address', indexed: true },
+    ],
+  },
 ] as const
 
 export const ESCROW_ARBITRABLE_ACC = (escrowId: string) => [{

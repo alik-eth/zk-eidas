@@ -20,6 +20,7 @@ contract IdentityEscrowArbitrable is IArbitrableV2 {
     IArbitratorV2 public immutable arbitrator;
     bytes public arbitratorExtraData;
     Escrow[] public escrows;
+    // Store escrowId + 1 to distinguish "not found" (0) from escrowId 0
     mapping(uint256 => uint256) public disputeToEscrow;
     string[] public litCipherRefs;
 
@@ -29,6 +30,9 @@ contract IdentityEscrowArbitrable is IArbitrableV2 {
     error AlreadyResolved();
     error EscrowNotFound();
     error InsufficientFee();
+    error DisputeNotFound();
+
+    event EscrowRegistered(uint256 indexed escrowId, address indexed creator);
 
     constructor(IArbitratorV2 _arbitrator, bytes memory _extraData) {
         arbitrator = _arbitrator;
@@ -51,6 +55,15 @@ contract IdentityEscrowArbitrable is IArbitrableV2 {
             status: Status.Created
         }));
         litCipherRefs.push(litCipherRef);
+        emit EscrowRegistered(escrowId, msg.sender);
+    }
+
+    function updateLitCipherRef(uint256 escrowId, string calldata litCipherRef) external {
+        if (escrowId >= escrows.length) revert EscrowNotFound();
+        Escrow storage e = escrows[escrowId];
+        if (e.creator != msg.sender) revert EscrowNotFound();
+        if (e.status != Status.Created) revert AlreadyDisputed();
+        litCipherRefs[escrowId] = litCipherRef;
     }
 
     function createDispute(uint256 escrowId) external payable {
@@ -62,18 +75,24 @@ contract IdentityEscrowArbitrable is IArbitrableV2 {
         uint256 cost = arbitrator.arbitrationCost(arbitratorExtraData);
         if (msg.value < cost) revert InsufficientFee();
 
-        uint256 disputeId = arbitrator.createDispute{value: msg.value}(2, arbitratorExtraData);
+        uint256 disputeId = arbitrator.createDispute{value: cost}(2, arbitratorExtraData);
+        if (msg.value > cost) {
+            (bool ok,) = msg.sender.call{value: msg.value - cost}("");
+            require(ok);
+        }
         e.disputant = msg.sender;
         e.disputeId = disputeId;
         e.status = Status.Disputed;
-        disputeToEscrow[disputeId] = escrowId;
+        disputeToEscrow[disputeId] = escrowId + 1; // +1 so 0 means "not found"
 
         emit DisputeRequest(arbitrator, disputeId, 0);
     }
 
     function rule(uint256 _disputeID, uint256 _ruling) external override {
         if (msg.sender != address(arbitrator)) revert ArbitratorOnly();
-        uint256 escrowId = disputeToEscrow[_disputeID];
+        uint256 raw = disputeToEscrow[_disputeID];
+        if (raw == 0) revert DisputeNotFound();
+        uint256 escrowId = raw - 1;
         Escrow storage e = escrows[escrowId];
         if (e.status != Status.Disputed) revert NotDisputed();
 
