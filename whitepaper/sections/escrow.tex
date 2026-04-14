@@ -1,0 +1,268 @@
+% !TEX root = ../main.tex
+\section{Identity Escrow Protocol}\label{sec:escrow}
+
+Zero-knowledge credential systems face a fundamental tension:
+privacy requires that presentations reveal nothing beyond the truth
+value of the requested predicates, yet the rule of law demands that,
+under judicial authorisation, the identity behind a fraudulent or
+harmful transaction can be recovered.
+This section presents the \textsc{zk-eidas} identity escrow protocol,
+which resolves this tension by encrypting identifying fields
+\emph{per presentation} under a designated escrow authority's
+post-quantum public key, with an in-circuit binding that
+prevents substitution of the encrypted payload.
+
+%% ───────────────────────────────────────────────────────────────────
+\subsection{Motivation and Regulatory Requirement}\label{sec:escrow-motivation}
+
+Article~5a of the eIDAS~2.0 Regulation requires that member states
+ensure the possibility of identifying natural persons behind
+electronic transactions when mandated by a court order or other
+legitimate judicial authorisation.  An anonymous credential system
+that provides \emph{no} mechanism for accountability creates a legal
+vacuum: it cannot be deployed in any eIDAS-regulated context, because
+no lawful process exists to trace a fraudulent presentation back to
+its holder.
+
+\paragraph{Existing approaches and their limitations.}
+The literature offers several mechanisms for revocable anonymity, each
+with significant drawbacks in the eIDAS setting:
+
+\begin{itemize}
+  \item \textbf{Group signatures}~\cite{camenisch2001}.
+    A group manager can open \emph{any} signature produced by any group
+    member, creating a single point of failure.  If the group manager is
+    compromised, every past and future presentation is deanonymisable.
+    Moreover, the opening power is unconditional --- it is not
+    scoped to a court order or a specific presentation.
+
+  \item \textbf{Trusted third parties (online escrow).}
+    Some designs require the holder to contact an online escrow agent
+    at each presentation to obtain a blinded token.  This introduces an
+    availability risk (the escrow agent becomes a service bottleneck)
+    and a correlation risk (the agent learns the timing and frequency
+    of presentations, even if it does not learn the content).
+
+  \item \textbf{Revocable anonymity via accumulators.}
+    Accumulator-based revocation schemes~\cite{camenisch2001} are
+    designed for credential \emph{revocation} (removing a holder from
+    the valid set), not for per-presentation accountability.  They do
+    not provide a mechanism to recover the identity behind a specific
+    transaction; they can only exclude a known holder from future
+    transactions.
+\end{itemize}
+
+\paragraph{Our approach.}
+We adopt a \emph{per-presentation encryption} strategy.  At each
+proof generation, the holder encrypts a configurable set of
+identifying fields (e.g., name and date of birth) under the escrow
+authority's ML-KEM-768 encapsulation key~\cite{fips203}.  The
+resulting ciphertext is bound to the zero-knowledge proof via an
+in-circuit SHA-256 digest, so that the verifier can later confirm ---
+after a court-ordered decryption --- that the recovered identity
+matches the proof.  Crucially:
+\begin{enumerate}
+  \item Each presentation uses a \emph{fresh} ML-KEM encapsulation,
+    so ciphertexts from different presentations are unlinkable
+    (Theorem~\ref{thm:unlinkability}).
+  \item The escrow authority holds only a decapsulation key; it cannot
+    decrypt without possessing the per-presentation ciphertext, and it
+    learns nothing from observing the proof itself.
+  \item No online interaction with the authority is required at
+    presentation time.
+\end{enumerate}
+
+%% ───────────────────────────────────────────────────────────────────
+\subsection{Construction}\label{sec:escrow-construction}
+
+We describe the escrow protocol as four procedures:
+$\mathsf{KeyGen}$ (authority setup),
+$\mathsf{Escrow}$ (holder encryption during proof generation),
+$\mathsf{Bind}$ (in-circuit digest computation), and
+$\mathsf{Recover}$ (authority decryption upon court order).
+
+\medskip
+
+\begin{algorithm}[t]
+  \caption{$\mathcal{E}.\mathsf{KeyGen}$: Escrow authority key generation}\label{alg:keygen}
+  \begin{algorithmic}[1]
+    \Ensure Encapsulation key $\mathit{ek}$; seed $s$
+    \Statex
+    \State $s \gets\!\!\!\!\$\ \{0,1\}^{512}$
+      \Comment{64-byte random seed}
+    \State $\mathit{dk} \gets \textsf{ML-KEM-768}.\mathsf{DeriveKey}(s)$
+      \Comment{FIPS 203~\cite{fips203}}
+    \State $\mathit{ek} \gets \mathit{dk}.\mathsf{EncapsulationKey}()$
+      \Comment{1184 bytes}
+    \State Publish $\mathit{ek}$
+    \State Store $s$ securely
+      \Comment{offline, hardware-protected}
+    \State \Return $(\mathit{ek}, s)$
+  \end{algorithmic}
+\end{algorithm}
+
+\begin{algorithm}[t]
+  \caption{$\mathcal{H}.\mathsf{Escrow}$: Per-presentation field encryption (holder side)}\label{alg:escrow}
+  \begin{algorithmic}[1]
+    \Require Field values $\{f_i\}_{i=0}^{n-1}$ ($n \leq 8$, each a byte string); encapsulation key $\mathit{ek}$
+    \Ensure Envelope $\mathcal{E}\mathit{nv} = (\mathit{cts}[], \mathit{tags}[], \mathit{ek\_blob}, \mathit{names}[])$
+    \Statex
+    \State $K \gets\!\!\!\!\$\ \{0,1\}^{248}$
+      \Comment{31-byte symmetric key, zero-padded to 32 bytes}
+    \For{$i = 0, \ldots, n-1$}
+      \State $\mathit{nonce}_i \gets 0^{64} \,\|\, i$
+        \Comment{12-byte nonce, counter mode}
+      \State $(\mathit{ct}_i, \mathit{tag}_i) \gets \textsf{AES-256-GCM}.\mathsf{Enc}(K, \mathit{nonce}_i, f_i)$
+    \EndFor
+    \State $(c, \mathit{ss}) \gets \textsf{ML-KEM-768}.\mathsf{Encaps}(\mathit{ek})$
+      \Comment{$c$: 1088 bytes}
+    \State $\mathit{mask} \gets \mathsf{SHA\textnormal{-}256}(\mathit{ss})$
+      \Comment{32-byte mask}
+    \State $\mathit{enc}_K \gets K \oplus \mathit{mask}$
+      \Comment{32 bytes}
+    \State \Return $\bigl(\{\mathit{ct}_i\}, \{\mathit{tag}_i\}, c \,\|\, \mathit{enc}_K, \{\mathit{name}_i\}\bigr)$
+  \end{algorithmic}
+\end{algorithm}
+
+\begin{algorithm}[t]
+  \caption{$\mathsf{Bind}$: In-circuit escrow digest (inside Longfellow hash sub-circuit)}\label{alg:bind}
+  \begin{algorithmic}[1]
+    \Require Escrow field values $\{e_j\}_{j=0}^{7}$, each $\in \{0,1\}^{256}$ (32-byte zero-padded claim values)
+    \Ensure Public output $\delta$ (escrow digest)
+    \Statex
+    \State $\delta \gets \mathsf{SHA\textnormal{-}256}(e_0 \,\|\, e_1 \,\|\, \cdots \,\|\, e_7)$
+      \Comment{256-byte input, single hash}
+    \State \textbf{output} $\delta$ as public
+  \end{algorithmic}
+\end{algorithm}
+
+Algorithm~\ref{alg:bind} is executed within the same Longfellow circuit~\cite{longfellow} that verifies the credential (Algorithm~\ref{alg:prove}).  The escrow digest~$\delta$ appears as a public output alongside the nullifier~$\eta$ and binding hash~$\beta$.  Because the circuit takes the raw claim values as private input and hashes them deterministically, the digest commits to the \emph{actual} credential fields --- not to values chosen by the holder after the fact.
+
+The verifier receives the proof (containing~$\delta$) and the envelope produced by Algorithm~\ref{alg:escrow}.  It stores both.  The binding is verified \emph{only after court-ordered decryption}: the authority decrypts the envelope, pads each recovered field to 32~bytes, computes $\mathsf{SHA\textnormal{-}256}(e_0 \| \cdots \| e_7)$, and checks equality with~$\delta$.  A mismatch indicates tampering.
+
+\begin{algorithm}[t]
+  \caption{$\mathcal{E}.\mathsf{Recover}$: Identity recovery upon court order}\label{alg:recover}
+  \begin{algorithmic}[1]
+    \Require Envelope $\mathcal{E}\mathit{nv}$; authority seed $s$
+    \Ensure Plaintext fields $\{f_i\}_{i=0}^{n-1}$
+    \Statex
+    \State $\mathit{dk} \gets \textsf{ML-KEM-768}.\mathsf{DeriveKey}(s)$
+    \State Parse $c \,\|\, \mathit{enc}_K$ from $\mathcal{E}\mathit{nv}.\mathit{ek\_blob}$
+    \State $\mathit{ss} \gets \textsf{ML-KEM-768}.\mathsf{Decaps}(\mathit{dk}, c)$
+    \State $\mathit{mask} \gets \mathsf{SHA\textnormal{-}256}(\mathit{ss})$
+    \State $K \gets \mathit{enc}_K \oplus \mathit{mask}$
+    \For{$i = 0, \ldots, n-1$}
+      \State $\mathit{nonce}_i \gets 0^{64} \,\|\, i$
+      \State $f_i \gets \textsf{AES-256-GCM}.\mathsf{Dec}(K, \mathit{nonce}_i, \mathit{ct}_i \,\|\, \mathit{tag}_i)$
+    \EndFor
+    \State \Return $\{f_i\}_{i=0}^{n-1}$
+  \end{algorithmic}
+\end{algorithm}
+
+\paragraph{Concrete sizes.}
+For a typical escrow envelope containing two fields (family name and date of birth), the overhead is dominated by the ML-KEM-768 ciphertext: $1088 + 32 = 1120$~bytes for the key blob, plus approximately $2 \times (32 + 16) = 96$~bytes for the AES-256-GCM ciphertexts and tags, totalling roughly 1.2~KB.  This is appended to the proof, which itself is approximately 300~KB (see Section~\ref{sec:benchmarks}).
+
+%% ───────────────────────────────────────────────────────────────────
+\subsection{Security Analysis}\label{sec:escrow-security}
+
+We state four security theorems for the escrow protocol.  Full proofs are deferred to Appendix~\ref{app:games}; we give proof sketches here.
+
+\begin{theorem}[Escrow Correctness]\label{thm:correctness}
+  If the holder $\mathcal{H}$ follows the protocol honestly --- executing
+  $\mathsf{Escrow}$ (Algorithm~\ref{alg:escrow}) with a valid
+  encapsulation key $\mathit{ek}$ and the same field values used as
+  private inputs to the Longfellow circuit --- then the escrow authority
+  $\mathcal{E}$ recovers the correct identity fields via
+  $\mathsf{Recover}$ (Algorithm~\ref{alg:recover}), and the recovered
+  fields satisfy $\mathsf{SHA\textnormal{-}256}(e_0 \| \cdots \| e_7) = \delta$.
+\end{theorem}
+
+\begin{proof}[Proof sketch]
+  Correctness follows from two standard properties.
+  First, ML-KEM-768 \emph{decapsulation correctness} (FIPS~203, Theorem~1~\cite{fips203}):
+  for a correctly generated key pair $(\mathit{dk}, \mathit{ek})$ and
+  ciphertext $(c, \mathit{ss}) \gets \mathsf{Encaps}(\mathit{ek})$,
+  the decapsulation $\mathsf{Decaps}(\mathit{dk}, c)$ returns
+  the same shared secret~$\mathit{ss}$ with probability~$1 - 2^{-138}$.
+  Since $\mathit{mask} = \mathsf{SHA\textnormal{-}256}(\mathit{ss})$ is deterministic,
+  the authority recovers the same mask and hence the same
+  key~$K = \mathit{enc}_K \oplus \mathit{mask}$.
+  Second, AES-256-GCM \emph{decryption correctness}: given the correct
+  key and nonce, decryption inverts encryption exactly.
+  The deterministic nonce derivation ($0^{64} \| i$) ensures each
+  field is decrypted with the correct nonce.
+  The escrow digest check succeeds because the circuit and the
+  encryption operate on identical field values.
+\end{proof}
+
+\begin{theorem}[Non-Frameability]\label{thm:non-frameability}
+  No probabilistic polynomial-time adversary $\mathcal{A}$ (even one
+  controlling the escrow authority $\mathcal{E}^*$ and the verifier
+  $\mathcal{V}^*$) can produce a pair $(\pi, \mathcal{E}\mathit{nv})$
+  such that (a)~the proof $\pi$ is accepted by an honest verifier with
+  escrow digest~$\delta$, and (b)~$\mathcal{E}\mathit{nv}$ decrypts
+  to fields belonging to an honest holder $\mathcal{H}'$ who did not
+  participate, except with negligible probability.  Formally: if
+  $\mathcal{A}$ frames with probability~$\varepsilon$, there exists a
+  reduction to a SHA-256 second-preimage finder with advantage
+  $\geq \varepsilon$.
+\end{theorem}
+
+\begin{proof}[Proof sketch]
+  The escrow digest $\delta$ is computed \emph{inside} the Longfellow
+  circuit over the actual claim values that satisfy the credential
+  verification constraints.  To frame a holder~$\mathcal{H}'$, the
+  adversary must produce an envelope whose decrypted fields
+  $\{f'_i\}$ hash to the same~$\delta$ as the genuine fields
+  $\{e_j\}$, i.e., must find a second preimage for SHA-256 on a
+  256-byte input.  Given such an adversary, we construct a
+  second-preimage finder: run $\mathcal{A}$, extract the framed
+  fields, and output them as the second preimage.  By the
+  second-preimage resistance of SHA-256, this succeeds with
+  negligible probability.
+\end{proof}
+
+\begin{theorem}[Unlinkability Preservation]\label{thm:unlinkability}
+  The escrow ciphertexts do not help a probabilistic polynomial-time
+  adversary link two presentations from the same holder.  That is,
+  the escrow mechanism does not degrade the unlinkability property
+  of Definition~\ref{def:unlinkability}.
+\end{theorem}
+
+\begin{proof}[Proof sketch]
+  Each invocation of $\mathsf{Escrow}$ (Algorithm~\ref{alg:escrow})
+  draws a fresh random coin for $\textsf{ML-KEM-768}.\mathsf{Encaps}$,
+  producing a fresh ciphertext~$c$ and a fresh shared secret~$\mathit{ss}$.
+  From the IND-CCA2 security of ML-KEM-768 under the Module-LWE
+  assumption~\cite{fips203}, the shared secret is computationally
+  indistinguishable from a uniform random value.  Consequently,
+  $\mathit{mask} = \mathsf{SHA\textnormal{-}256}(\mathit{ss})$ is
+  pseudorandom, $\mathit{enc}_K = K \oplus \mathit{mask}$ is
+  one-time-pad--encrypted, and the AES-256-GCM ciphertexts under
+  distinct keys are IND-CCA2 secure.  Even if two presentations
+  encrypt the \emph{same} identity fields, the resulting envelopes
+  are computationally indistinguishable from encryptions of unrelated
+  plaintexts, so no distinguisher can link them.
+\end{proof}
+
+\begin{theorem}[Post-Quantum Escrow Security]\label{thm:pq-security}
+  The escrow envelope is IND-CCA2 secure against quantum adversaries
+  at NIST security Level~3.
+\end{theorem}
+
+\begin{proof}[Proof sketch]
+  The construction follows the KEM/DEM paradigm.
+  The KEM component is ML-KEM-768, which achieves NIST security
+  Level~3 ($\geq$ AES-192 equivalent) under the Module-LWE
+  hardness assumption~\cite{fips203}.
+  The DEM component is AES-256-GCM, which retains at least 128-bit
+  security against quantum adversaries under Grover's bound
+  (i.e., the effective key strength halves from 256 to 128~bits,
+  still exceeding the 128-bit target of NIST Level~3).
+  By the KEM/DEM composition theorem~\cite{cramer2003design}, if
+  the KEM is IND-CCA2 and the DEM is one-time IND-CCA2, the
+  composed scheme is IND-CCA2.  Here, each symmetric key~$K$ is
+  used exactly once (fresh per presentation), so the one-time
+  requirement is satisfied.  The overall scheme therefore inherits
+  the post-quantum security of the Module-LWE assumption.
+\end{proof}
