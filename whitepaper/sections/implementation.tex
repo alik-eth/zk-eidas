@@ -1,2 +1,218 @@
+% !TEX root = ../main.tex
 \section{Implementation}\label{sec:implementation}
-% Content to be written
+
+We describe the open-source implementation of \textsc{zk-eidas}, available under the Apache~2.0
+licence at \url{https://zk-eidas.com}.
+The system is written in Rust with a C++ proving core, a React~19 web frontend, and an Axum
+HTTP API backend.
+We structure the presentation as four subsections covering the crate architecture
+(\S\ref{sec:impl-arch}), the circuit compilation pipeline (\S\ref{sec:impl-circuits}),
+the TSP attestation layer (\S\ref{sec:impl-tsp}), and the deployment model
+(\S\ref{sec:impl-deploy}).
+
+%% ───────────────────────────────────────────────────────────────────
+\subsection{Architecture Overview}\label{sec:impl-arch}
+
+\paragraph{Rust workspace.}
+\textsc{zk-eidas} is organised as a Cargo workspace of eight crates with clearly separated
+responsibilities.
+Table~\ref{tab:crates} summarises each crate.
+
+\begin{table}[t]
+  \centering
+  \caption{Rust workspace crates and their responsibilities.}\label{tab:crates}
+  \begin{tabular}{ll}
+    \toprule
+    Crate & Responsibility \\
+    \midrule
+    \texttt{zk-eidas-types}  & Witness, proof, and credential data structures \\
+    \texttt{zk-eidas-mdoc}   & ISO/IEC~18013-5~\cite{iso18013} CBOR parsing, COSE signature extraction \\
+    \texttt{zk-eidas-utils}  & Date conversion, CBOR encoding utilities \\
+    \texttt{zk-eidas}        & Facade: escrow, predicate builder, proof orchestration \\
+    \texttt{longfellow-sys}  & FFI bindings to Longfellow~\cite{longfellow} C++, circuit management \\
+    \texttt{zk-eidas-wasm}   & WASM verifier (Ligero verification in pure Rust) \\
+    \texttt{cbor-print}      & CBOR debugging and pretty-printing utility \\
+    \texttt{demo-api}        & Axum HTTP API server (issuer, holder, verifier endpoints) \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\paragraph{FFI architecture.}
+The interface between Rust and the Longfellow C++ library is encapsulated entirely within the
+\texttt{longfellow-sys} crate.
+At build time, \texttt{build.rs} invokes CMake to compile Longfellow's \texttt{mdoc\_static}
+target, which links the sumcheck and Ligero backends into a static archive.
+\texttt{bindgen} then generates typed Rust FFI declarations from a thin \texttt{wrapper.h} header.
+Three functions constitute the public FFI surface visible to the rest of the workspace:
+\begin{itemize}
+  \item \texttt{generate\_circuit(spec, \&mut circuit, \&mut len)} --- compiles a \texttt{kZkSpecs}
+        entry into binary circuit bytes and returns them via a heap-allocated buffer.
+  \item \texttt{run\_mdoc\_prover(spec, circuit, attrs, mdoc, \ldots, \&mut proof)} --- executes
+        the Longfellow prover and writes the proof together with the public outputs
+        (nullifier hash, binding hash, escrow digest) into caller-provided buffers.
+  \item \texttt{run\_mdoc\_verifier(spec, circuit, attrs, \ldots, proof)} --- verifies a proof,
+        returning a typed error code on failure.
+\end{itemize}
+All three calls are wrapped by the \texttt{longfellow\_sys::safe} module, which converts raw
+pointers into idiomatic Rust slices, performs bounds checks, and translates C error codes into
+a typed \texttt{MdocError} enum.
+
+\paragraph{End-to-end pipeline.}
+A presentation flows through five stages:
+\begin{enumerate}
+  \item \emph{mdoc parsing}: \texttt{zk-eidas-mdoc} decodes the raw CBOR credential into
+        structured form and extracts the COSE\_Sign1 envelope and MSO.
+  \item \emph{Witness construction}: \texttt{zk-eidas} builds the attribute list (namespace,
+        identifier, CBOR value, predicate type), escrow fields, contract hash, and issuer public
+        key coordinates into a \texttt{ProveRequest}.
+  \item \emph{Circuit lookup}: the API layer retrieves the pre-generated binary circuit matching
+        the requested attribute count from the on-disk cache (see \S\ref{sec:impl-circuits}).
+  \item \emph{Proving}: \texttt{run\_mdoc\_prover} executes the Sumcheck+Ligero prover and
+        returns proof bytes together with the three public hashes.
+  \item \emph{Verification}: \texttt{run\_mdoc\_verifier} re-runs the hash and signature
+        sub-circuits against the supplied public inputs and rejects any mismatch.
+\end{enumerate}
+
+%% ───────────────────────────────────────────────────────────────────
+\subsection{Circuit Specifications}\label{sec:impl-circuits}
+
+\paragraph{Variant table.}
+Longfellow circuits are parameterised by the number of attributes.
+We compile four variants, indexed by \texttt{kZkSpecs[0..3]} (specification version~7):
+
+\begin{table}[t]
+  \centering
+  \caption{Circuit variants by attribute count.
+           Sizes are the on-disk binary blobs as used at runtime (uncompressed, written
+           by \texttt{generate-circuits} and loaded by the API server).}\label{tab:circuits}
+  \begin{tabular}{ccc}
+    \toprule
+    Attributes & \texttt{kZkSpecs} index & Cached file size \\
+    \midrule
+    1 & 0 & 337 KB \\
+    2 & 1 & 349 KB \\
+    3 & 2 & 365 KB \\
+    4 & 3 & 384 KB \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\paragraph{Compilation cost and caching strategy.}
+Generating a circuit from a \texttt{kZkSpecs} entry is computationally expensive: on our
+benchmark hardware (Intel~2.60~GHz, 8~cores), circuit generation takes
+${\approx}17$--$19$~seconds per variant and consumes ${\approx}1.3$--$1.4$~GB of RAM at peak.
+We therefore pre-generate all four circuits \emph{once} during the Docker build (Stage~1a,
+the \texttt{circuit-builder} image) and write the resulting binary blobs to an on-disk cache
+directory.
+At API server startup the cache is memory-mapped with a \texttt{tokio::sync::OnceCell},
+reducing cold-start circuit load time to ${\approx}0.02$~ms per variant across all
+four sizes (Table~\ref{tab:circuits}).
+This separation ensures that a change to the application source triggers a rebuild of
+Stage~1b (\texttt{rust-builder}) without invalidating the circuit cache layer.
+
+\paragraph{DSL extensions.}
+The Longfellow circuit DSL is extended at the boundary between the \texttt{longfellow-sys}
+crate and the C++ backend with four computed outputs that are not part of the vanilla
+Longfellow mdoc spec:
+\begin{itemize}
+  \item \emph{Predicate evaluation}: the four primitive predicate types
+        (equality, $\leq$, $\geq$, $\neq$; see \S\ref{sec:predicates})
+        are encoded as a \texttt{verify\_type} field on each \texttt{RequestedAttribute}
+        and evaluated by the hash sub-circuit using a constant-time MUX gate.
+  \item \emph{Nullifier}: $\eta = \mathsf{SHA\text{-}256}(m \| c)$ computed from the raw mdoc
+        bytes and a caller-supplied 64-byte contract hash (\S\ref{sec:nullifiers}).
+  \item \emph{Holder binding}: $\beta = \mathsf{SHA\text{-}256}(\mathsf{attr}_0[0..31])$
+        derived from the first attribute value (\S\ref{sec:nullifiers}).
+  \item \emph{Escrow digest}: $\delta = \mathsf{SHA\text{-}256}(e_0 \| \cdots \| e_7)$ over the
+        eight zero-padded escrow field values (\S\ref{sec:escrow-construction}).
+\end{itemize}
+All four computations are wired into the \emph{same} hash sub-circuit evaluation pass,
+adding only a constant number of SHA-256 compression calls to the circuit without increasing
+circuit depth.
+
+%% ───────────────────────────────────────────────────────────────────
+\subsection{TSP Attestation Layer}\label{sec:impl-tsp}
+
+To satisfy QEAA-grade (Qualified Electronic Attestation of Attributes) requirements under
+eIDAS~2.0, the API server acts as a lightweight \emph{Trusted Service Provider} (TSP).
+After a proof is verified by the Longfellow verifier, the holder can request a
+\texttt{DataIntegrityProof} attestation from the TSP endpoint.
+
+\paragraph{Attestation construction.}
+The TSP builds a W3C Verifiable Credential document containing the proof CID, the verified
+predicate description, the credential type, and a \texttt{verificationResult} field set to
+\texttt{"valid"}.
+The document body is serialised to canonical JSON and a SHA-256 digest is computed over it.
+The TSP then signs the digest with ECDSA over NIST~P-256, producing a DER-encoded signature
+that is hex-encoded into the \texttt{proofValue} field:
+\begin{equation*}
+  \sigma_{\mathrm{TSP}} \;=\; \mathsf{ECDSA}_{\mathit{sk}_{\mathrm{TSP}}}\!\bigl(\mathsf{SHA\text{-}256}(J)\bigr),
+\end{equation*}
+where $J$ is the canonical JSON serialisation of the VC body and $\mathit{sk}_{\mathrm{TSP}}$
+is an ephemeral P-256 signing key generated at server startup.
+
+\paragraph{Proof object.}
+The \texttt{proof} object attached to the VC follows the \texttt{ecdsa-jcs-2019} cryptosuite
+convention~\cite{w3c-di}:
+\begin{itemize}
+  \item \texttt{type}: \texttt{"DataIntegrityProof"}
+  \item \texttt{cryptosuite}: \texttt{"ecdsa-jcs-2019"}
+  \item \texttt{verificationMethod}: the uncompressed P-256 public key (hex-encoded)
+  \item \texttt{proofValue}: the ECDSA signature bytes (hex-encoded)
+\end{itemize}
+
+\paragraph{Verification flow.}
+A relying party that receives a TSP-attested credential bundle performs two independent checks:
+(i)~it runs \texttt{run\_mdoc\_verifier} to confirm the Sumcheck+Ligero proof is valid against
+the stated predicates and public hashes; and
+(ii)~it verifies $\sigma_{\mathrm{TSP}}$ against the TSP's public key and the canonical JSON
+of the VC body.
+Only a bundle passing both checks is accepted as a QEAA-grade presentation.
+The two-layer design allows the ZK verifier to remain stateless and crypto-agnostic, while
+the TSP signature provides the regulatory non-repudiation guarantee.
+
+%% ───────────────────────────────────────────────────────────────────
+\subsection{Deployment}\label{sec:impl-deploy}
+
+\paragraph{Docker multi-stage build.}
+\textsc{zk-eidas} ships as a single Docker image built from a four-stage \texttt{Dockerfile}:
+
+\begin{description}
+  \item[\texttt{circuit-builder} (Stage~1a).] Compiles the \texttt{generate-circuits} binary and
+    runs it to produce all four circuit cache files.
+    This stage depends only on \texttt{vendor/longfellow-zk/} and the \texttt{crates/} directory;
+    changes to application code do not invalidate this layer, so the ${\approx}70$-second
+    circuit-generation step is paid only when the Longfellow vendor tree or the circuit spec
+    changes.
+
+  \item[\texttt{rust-builder} (Stage~1b, inherits from \texttt{circuit-builder}).] Compiles the
+    \texttt{zk-eidas-demo-api} and \texttt{pre-warm} binaries against the already-linked
+    Longfellow static library.
+
+  \item[\texttt{wasm-builder} (Stage~1c, parallel).] Uses \texttt{wasm-pack} to build the
+    \texttt{zk-eidas-wasm} crate into a WebAssembly module providing pure-Rust Ligero
+    verification in the browser.
+
+  \item[\texttt{web-builder} (Stage~2).] Runs \texttt{npm run build} for the React~19
+    frontend (Vite bundler, TanStack Router, Tailwind~CSS) and consumes the WASM artefact
+    from Stage~1c.
+
+  \item[\texttt{runtime} (Stage~3).] A minimal Ubuntu~24.04 image containing only the API
+    binary, the pre-generated circuit cache, the pre-warmed proof cache, and the compiled
+    frontend static assets.
+    The circuit files are copied from Stage~1a, so the runtime image carries no build
+    toolchain and no Rust source.
+\end{description}
+
+\paragraph{Production deployment.}
+The production instance runs at \url{https://zk-eidas.com} on Fly.io, behind an Nginx
+reverse proxy managed by \texttt{supervisord}.
+The API server and the static frontend are co-located in the same container.
+A pre-warm binary is executed once after each deployment to populate the proof cache with
+reference credentials, so that the demo endpoints respond without incurring a first-time
+proving cost.
+
+\paragraph{Licence and availability.}
+All source code is released under the Apache~2.0 licence.
+The Longfellow C++ library, vendored under \texttt{vendor/longfellow-zk/}, is governed by its
+own Apache~2.0 licence~\cite{longfellow}.

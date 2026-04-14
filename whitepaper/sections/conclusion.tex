@@ -1,2 +1,44 @@
+% !TEX root = ../main.tex
 \section{Conclusion}\label{sec:conclusion}
-% Content to be written
+
+eIDAS~2.0 mandates that citizens can share government-issued credentials with verifiers
+while disclosing only the attributes required for a given transaction.
+The regulatory framework additionally requires that the anonymity afforded by selective
+disclosure can be lifted by a lawful authority when a credential is misused --- a
+requirement that is architecturally in tension with the privacy guarantees of conventional
+zero-knowledge systems.
+
+We presented \textsc{zk-eidas}, a system that resolves this tension for ISO/IEC~18013-5
+mdoc credentials.
+\textsc{zk-eidas} generates Sumcheck+Ligero proofs of selective disclosure --- transparent
+and post-quantum secure, with no trusted setup --- and attaches per-presentation identity
+escrow ciphertexts encrypted under ML-KEM-768 to the public key of a designated escrow
+authority.
+The escrow binding is enforced inside the circuit: a malicious holder cannot submit a
+proof without a correctly formed ciphertext, and cannot substitute a different ciphertext
+after proof generation.
+
+Our benchmarks establish that the construction is practical on commodity server hardware.
+End-to-end proving takes ${\approx}\,1.3$~seconds; proofs are ${\approx}\,365$~KB and
+require no per-circuit trusted setup ceremony.
+The ML-KEM-768 escrow overhead is under 0.5~ms, effectively invisible relative to the
+proving time.
+The implementation requires no modifications to credential issuers and maps directly
+onto the EUDI Architecture Reference Framework: the existing mdoc credential
+infrastructure is reused without change.
+
+To our knowledge, \textsc{zk-eidas} is the first system to combine post-quantum ZK
+proving with court-resolvable identity escrow for eIDAS credentials, delivering both
+properties simultaneously in a single, deployment-ready open-source implementation.
+
+Looking ahead, we identify three directions that would further broaden the system's
+applicability.
+Post-quantum issuer signatures (ML-DSA or SLH-DSA) would close the remaining classical
+assumption introduced by the ISO/IEC~18013-5 mandate for ECDSA~P-256.
+An SD-JWT circuit variant, reusing the existing predicate and escrow sub-circuits, would
+extend coverage to the W3C Verifiable Credential format required by the ARF.
+Finally, recursive proof composition or FRI-based folding could reduce the 365~KB proof
+to a size compatible with offline proximity presentation channels such as NFC and QR
+codes.
+We view these extensions as incremental refinements to an architecture whose core
+security and compliance properties are already established.
