@@ -1,0 +1,143 @@
+% !TEX root = ../main.tex
+\section{Discussion and Future Work}\label{sec:discussion}
+
+We identify five directions in which \textsc{zk-eidas} can be extended or improved,
+discuss the technical challenges each presents, and assess their feasibility given
+the current architecture.
+
+%% ───────────────────────────────────────────────────────────────────
+\subsection{Post-Quantum Issuer Signatures}\label{sec:disc-pq-issuer}
+
+The single remaining classical assumption in \textsc{zk-eidas} is the ECDSA~P-256
+signature over the Mobile Security Object, mandated by ISO/IEC~18013-5~\cite{iso18013}.
+The proving system and escrow subsystem are already post-quantum: the Sumcheck+Ligero
+circuit~\cite{longfellow} uses only hash-based commitments over $\mathsf{GF}(2^{128})$,
+and the escrow layer uses ML-KEM-768~\cite{fips203}.
+Eliminating the classical bottleneck requires that issuers migrate to a
+post-quantum signature algorithm, and that the in-circuit signature verifier be
+updated accordingly.
+
+NIST FIPS~204~\cite{fips204} (ML-DSA, based on CRYSTALS-Dilithium) and
+FIPS~205~\cite{fips205} (SLH-DSA, based on SPHINCS+) are the primary candidates
+under active standardisation for eIDAS~2.0.
+Fortunately, Longfellow's hash-circuit model is structurally well-suited to both
+schemes.
+ML-DSA verification decomposes into matrix-vector multiplication over a quotient ring,
+polynomial norm checks, and a hash evaluation --- all expressible as arithmetic gate
+constraints.
+SLH-DSA verification reduces to a sequence of hash-function evaluations, which maps
+directly onto the SHA-256 hash sub-circuit that already dominates the \textsc{zk-eidas}
+gate count.
+Neither scheme requires elliptic-curve arithmetic inside the circuit, which would be
+far more costly to express as Ligero constraints.
+We therefore anticipate that replacing the ECDSA sub-circuit with an ML-DSA or SLH-DSA
+sub-circuit is feasible without fundamental changes to the circuit architecture, at the
+cost of a larger gate count and correspondingly longer proving times.
+This transition would deliver end-to-end post-quantum security across all system components.
+
+%% ───────────────────────────────────────────────────────────────────
+\subsection{SD-JWT Credential Format}\label{sec:disc-sdjwt}
+
+The eIDAS~2.0 Architecture and Reference Framework mandates support for both the
+ISO/IEC~18013-5 mdoc format and the W3C SD-JWT Verifiable Credential format.
+The current \textsc{zk-eidas} circuit targets mdoc exclusively: the CBOR parsing
+sub-circuit decodes the mdoc structure and traverses the digest chain from the
+issuer-signed Mobile Security Object to the individual attribute values.
+
+Extending \textsc{zk-eidas} to SD-JWT requires replacing the CBOR parsing sub-circuit
+with a JSON parsing and JWT structure sub-circuit.
+This is straightforward in principle: JSON parsing can be expressed as a sequence of
+byte-level comparator and selector gates, analogously to the existing CBOR decoder.
+The cryptographic content --- the issuer signature (ECDSA or a post-quantum successor)
+over a hash of the header and payload, the selective-disclosure hash checks, and the
+predicate evaluation over disclosed claim values --- maps onto the same gate families
+already present in the mdoc circuit.
+Crucially, the predicate system and identity escrow subsystem are format-agnostic: both
+operate on 32-byte field values produced by the parsing sub-circuit, with no structural
+dependence on CBOR versus JSON encoding.
+Only the parsing sub-circuit requires a new variant.
+We therefore expect that an SD-JWT circuit can be implemented as a parallel circuit
+family within the existing \texttt{longfellow-sys} crate, reusing the predicate,
+nullifier, holder-binding, and escrow sub-circuits without modification.
+
+%% ───────────────────────────────────────────────────────────────────
+\subsection{Browser and WASM Proving}\label{sec:disc-wasm}
+
+The Longfellow proving core is implemented in C++ and compiled to a static native library
+linked into the Rust workspace.
+No browser-side proving is currently possible: all ZK proofs are generated server-side
+by the \texttt{demo-api} backend.
+Client-side proving would be preferable from a privacy perspective, since the raw mdoc
+bytes would never leave the holder's device.
+
+Compilation of the Longfellow C++ core to WebAssembly via Emscripten is technically
+viable.
+The core uses standard C++ without OS-specific system calls in the hot path, and the
+Sumcheck+Ligero arithmetic operates over $\mathsf{GF}(2^{128})$ with 64-bit carry-less
+multiplication, which WASM supports via SIMD intrinsics (WASM~SIMD128).
+The \textsc{zk-eidas} workspace already includes a \texttt{zk-eidas-wasm} crate that
+exposes the Ligero verifier in pure Rust compiled to WASM, confirming that the
+verification path works in a browser context.
+Extending this crate to include the prover would enable fully client-side ZK
+presentations.
+The primary engineering challenges are binary size (the current native library is
+several megabytes and would expand further under WASM encoding), memory footprint
+(${\sim}\,1.3$~GB peak RSS), and thread support (the prover is multi-threaded via C++
+STL threads, which map to WASM threads only with \texttt{SharedArrayBuffer} enabled).
+These challenges are not fundamental obstacles, but they imply that client-side proving
+on current mobile browsers would require careful circuit partitioning or incremental
+proving strategies.
+
+%% ───────────────────────────────────────────────────────────────────
+\subsection{Proof Compression}\label{sec:disc-compression}
+
+At ${\sim}\,365$~KB, Sumcheck+Ligero proofs are practical for HTTP-based online
+workflows but present challenges for offline and low-bandwidth scenarios.
+Embedding a 365~KB proof in a QR code or NFC exchange is infeasible with current
+standards: ISO~18013-5 proximity presentation assumes proof payloads of a few kilobytes.
+Reducing proof size is therefore an important direction for offline deployment.
+
+Two complementary techniques are relevant.
+First, \emph{recursive proof composition}: a succinct outer proof (e.g., a Groth16 or
+Nova folding proof) can attest to the validity of the Ligero inner proof, compressing
+the verifiable representation to a constant size.
+The outer proof would verify the Sumcheck+Ligero verification circuit itself, replacing
+the 365~KB payload with a proof of a few hundred bytes.
+The cost is a one-time trusted setup for the outer proof system, which may be acceptable
+if the outer circuit is fixed and small.
+Second, \emph{FRI-based folding}: recent folding constructions such as Protostar or
+HyperNova can aggregate multiple Ligero instances into a single folded accumulator,
+achieving proof sizes that grow logarithmically rather than linearly with the circuit
+size, while preserving the transparency of the underlying proof system.
+Both directions require substantial engineering effort but are compatible with the
+\textsc{zk-eidas} circuit architecture and would not change the security properties of
+the underlying Sumcheck+Ligero construction.
+
+%% ───────────────────────────────────────────────────────────────────
+\subsection{Formal Verification of Circuit Correctness}\label{sec:disc-formal}
+
+Circuit correctness in \textsc{zk-eidas} is currently established by testing: the
+workspace contains over 257 unit and integration tests covering the credential parsing
+pipeline, predicate evaluation logic, escrow digest binding, nullifier computation, and
+the FFI boundary with the Longfellow proving core.
+While this test coverage provides high confidence in the absence of implementation bugs,
+it does not constitute a formal proof that the circuit specification correctly captures
+the intended security policy.
+
+Mechanised formal verification in Lean~4 or Coq would provide the rigour required for
+independent certification under eIDAS~2.0.
+The highest-priority targets are (i)~the \emph{predicate comparator logic}, which
+implements equality, inequality, and lexicographic range checks over 32-byte field
+values, and which would be straightforward to specify as bit-vector arithmetic
+properties; (ii)~the \emph{escrow digest binding}, which enforces that the SHA-256
+commitment over the escrow payload is computed inside the circuit so that a malicious
+holder cannot substitute a different payload after proof generation; and
+(iii)~the \emph{nullifier uniqueness property}, which must be proved to hold across all
+honest prover executions for a given (credential, verifier-scope) pair.
+The Longfellow library's gate representation is sufficiently structured to admit
+extraction into an SMT-compatible intermediate language, and existing tools such as
+Galois's Cryptol or the Jasmin framework have been applied to similar hash-circuit
+verification tasks.
+We view formal verification as a prerequisite for production deployment in
+high-assurance eIDAS~2.0 contexts, and plan to pursue it as a joint effort with
+academic collaborators.
