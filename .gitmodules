@@ -1,3 +1,6 @@
 [submodule "vendor/longfellow-zk"]
 	path = vendor/longfellow-zk
 	url = https://github.com/alik-eth/longfellow-zk.git
+[submodule "demo/kleros/contracts/lib/forge-std"]
+	path = demo/kleros/contracts/lib/forge-std
+	url = https://github.com/foundry-rs/forge-std
