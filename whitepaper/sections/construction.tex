@@ -63,6 +63,7 @@ We consider the following adversarial capabilities:
   \item \emph{Holders} are potentially malicious: they may attempt to prove false statements or use forged credentials.
   \item \emph{The escrow authority} is honest-but-curious: it holds the decapsulation key faithfully but may attempt to learn holder identities from escrowed data without authorisation.
   \item \emph{Collusion}: even if a verifier and the escrow authority collude, they cannot break unlinkability (Definition~\ref{def:unlinkability}) without a court order that triggers decapsulation. The scoped nullifier mechanism ensures that the authority sees only an encrypted blob, and the verifier sees only a nullifier hash --- neither alone nor together suffices to link presentations across different scopes.
+  \item \emph{Issuers} are assumed honest. A malicious or compromised issuer could craft credentials with colliding digests in the MSO or embed subliminal information in the ECDSA signature nonce. These attacks are outside our scope: mitigating them requires issuer-side controls (e.g., deterministic ECDSA nonces per RFC~6979) rather than proving-system changes.
 \end{itemize}
 
 %% ───────────────────────────────────────────────────────────────────
@@ -163,12 +164,12 @@ The multiplexer $\mathsf{MUX}$ selects the appropriate Boolean based on the type
 While the circuit supports only the four primitive types, the API layer composes them into richer predicates before circuit entry:
 \begin{itemize}
   \item \textbf{Range} $[\ell, h]$: decomposed into two attribute requests on the same claim --- one with type $\mathsf{GEQ}(\ell)$ and one with type $\mathsf{LEQ}(h)$.  Both must pass for the proof to succeed.
-  \item \textbf{Set membership} $\{v_1, \ldots, v_k\}$: decomposed into $k$ attribute requests with type $\mathsf{EQ}$, combined with a logical~OR at the API layer (at least one must match).
+  \item \textbf{Set membership} $\{v_1, \ldots, v_k\}$: decomposed into $k$ attribute requests with type $\mathsf{EQ}$, combined with a logical~OR at the API layer (at least one must match).  The cost is linear in~$k$: each element adds one attribute slot to the circuit.  For small sets (e.g., EU nationality among 27~Member States) this is practical; for large sets, a Merkle-based membership proof would amortise the cost to $O(\log k)$ and is a natural extension.
   \item \textbf{Boolean combinators}: arbitrary $\mathsf{AND}$ and $\mathsf{OR}$ trees over sub-predicates, resolved by the facade before generating the attribute list passed to the circuit.
 \end{itemize}
 
 \paragraph{Date handling.}
-CBOR-encoded date attributes in mdoc credentials use ISO~8601 text strings (e.g., \texttt{"1998-09-04"}).  A key observation is that ISO~8601 date strings sort correctly under lexicographic comparison: for dates $d_1 < d_2$ in calendar order, the byte representation satisfies $d_1 <_{\mathrm{lex}} d_2$.  This allows the circuit to perform date comparisons (e.g., ``birth date $\leq$ cutoff date'' for age proofs) using the same $\mathsf{CMP.leq}$ comparator used for all other predicates, without requiring epoch conversion or calendar arithmetic inside the circuit.
+CBOR-encoded date attributes in mdoc credentials use the ISO~8601 \emph{full-date} profile (\texttt{YYYY-MM-DD}), e.g., \texttt{"1998-09-04"}.  A key observation is that strings in this fixed-width format sort correctly under lexicographic comparison: for dates $d_1 < d_2$ in calendar order, the byte representation satisfies $d_1 <_{\mathrm{lex}} d_2$.  (This property does \emph{not} hold for arbitrary ISO~8601 representations that include time-zone offsets.)  This allows the circuit to perform date comparisons (e.g., ``birth date $\leq$ cutoff date'' for age proofs) using the same $\mathsf{CMP.leq}$ comparator used for all other predicates, without requiring epoch conversion or calendar arithmetic inside the circuit.
 
 %% ───────────────────────────────────────────────────────────────────
 \subsection{Nullifiers and Holder Binding}\label{sec:nullifiers}
@@ -186,12 +187,17 @@ This construction satisfies two properties simultaneously:
   \item \textbf{Unlinkability across scopes.}  Presenting the same credential to two different verifiers (distinct $c_0 \neq c_1$) produces distinct nullifiers $\eta_0 \neq \eta_1$.  Since SHA-256 is modelled as a random oracle, no efficient adversary can determine whether $\eta_0$ and $\eta_1$ originate from the same credential, satisfying Definition~\ref{def:unlinkability}.
 \end{enumerate}
 
+\paragraph{Threat-model limitation.}
+Because the nullifier is a deterministic function of the credential bytes~$m$ (not of a holder-held secret), an adversary who obtains~$m$ --- for instance, from a compromised device --- can compute $\eta = \mathsf{SHA\textnormal{-}256}(m \| c)$ for any scope~$c$ and check whether a published nullifier corresponds to that credential.  This is weaker than systems where nullifiers derive from a secret key held by the holder.  Incorporating a holder secret into the nullifier would require an additional private input to the circuit and a corresponding key-management protocol; we leave this extension to future work.
+
 \paragraph{Holder binding.}
 In addition to the nullifier, the circuit computes a \emph{binding hash}:
 \[
   \beta \;=\; \mathsf{SHA\textnormal{-}256}\bigl(\mathsf{attr}_0[0..31]\bigr),
 \]
-where $\mathsf{attr}_0[0..31]$ denotes the first 32~bytes of the first attribute's value.  The binding hash serves two purposes:
+where $\mathsf{attr}_0[0..31]$ denotes the first 32~bytes of the first requested attribute's CBOR-encoded value.  In practice, the holder controls which attribute appears first by choosing the order of the attribute request list; for cross-credential linking, the holder should place the same claim (e.g., the PID unique identifier) first in both requests.  If two credentials from different issuers happen to share the same first attribute value, the binding hashes will collide --- this is an inherent property of binding to a claim value rather than to a holder secret, and mirrors the nullifier limitation discussed above.
+
+The binding hash serves two purposes:
 \begin{enumerate}
   \item It binds the proof to a specific holder identity without revealing \emph{which} attribute was used, since $\beta$ is a one-way hash.
   \item It enables \emph{opt-in cross-credential linking}: if a holder presents two different credentials (e.g., a driving licence and a health insurance card) that share the same first attribute value, the binding hashes will match, allowing a verifier to confirm that both credentials belong to the same person --- but only if the holder chooses to present them.
