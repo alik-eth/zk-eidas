@@ -3,7 +3,8 @@ import { useState } from 'react'
 import { useAccount, useReadContract, useWriteContract, useWaitForTransactionReceipt } from 'wagmi'
 import { formatEther } from 'viem'
 import { StepCard } from '../components/StepCard'
-import { ESCROW_ARBITRABLE_ADDRESS, ESCROW_ARBITRABLE_ABI } from '../lib/contracts'
+import { ESCROW_ARBITRABLE_ADDRESS, ESCROW_ARBITRABLE_ABI, MOCK_ARBITRATOR_ADDRESS, MOCK_ARBITRATOR_ABI } from '../lib/contracts'
+import { LOCAL_MODE } from '../lib/wagmi'
 
 export const Route = createFileRoute('/dispute')({
   component: DisputePage,
@@ -37,6 +38,12 @@ function DisputePage() {
   const { writeContract, data: txHash, isPending: isWriting } = useWriteContract()
   const { isLoading: isConfirming, isSuccess: isConfirmed } = useWaitForTransactionReceipt({
     hash: txHash,
+  })
+
+  // Local mode: trigger ruling via MockArbitrator
+  const { writeContract: writeRuling, data: rulingTxHash, isPending: isRuling } = useWriteContract()
+  const { isLoading: isRulingConfirming, isSuccess: isRulingConfirmed } = useWaitForTransactionReceipt({
+    hash: rulingTxHash,
   })
 
   function handleLookup() {
@@ -223,6 +230,70 @@ function DisputePage() {
             </div>
           )}
         </StepCard>
+
+        {/* Step 3: Trigger Ruling (local mode only) */}
+        {LOCAL_MODE && (
+          <StepCard
+            step={3}
+            title="Trigger Ruling (Local)"
+            description="In local mode, simulate a Kleros ruling via MockArbitrator."
+            status={isRulingConfirmed ? 'complete' : status === 1 ? 'active' : 'pending'}
+          >
+            {status !== 1 && (
+              <p className="text-slate-500 text-sm">File a dispute first (Step 2).</p>
+            )}
+
+            {status === 1 && isConnected && (
+              <div className="flex gap-3">
+                <button
+                  onClick={() => {
+                    const disputeId = escrowData?.[4] as bigint
+                    writeRuling({
+                      address: MOCK_ARBITRATOR_ADDRESS,
+                      abi: MOCK_ARBITRATOR_ABI,
+                      functionName: 'rule',
+                      args: [ESCROW_ARBITRABLE_ADDRESS, disputeId, BigInt(2)],
+                    })
+                  }}
+                  disabled={isRuling || isRulingConfirming || isRulingConfirmed}
+                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-700 disabled:text-slate-500 text-white text-sm font-medium rounded-lg transition-colors"
+                >
+                  {isRuling ? 'Confirm...' : isRulingConfirming ? 'Confirming...' : 'Rule: Reveal Identity'}
+                </button>
+                <button
+                  onClick={() => {
+                    const disputeId = escrowData?.[4] as bigint
+                    writeRuling({
+                      address: MOCK_ARBITRATOR_ADDRESS,
+                      abi: MOCK_ARBITRATOR_ABI,
+                      functionName: 'rule',
+                      args: [ESCROW_ARBITRABLE_ADDRESS, disputeId, BigInt(1)],
+                    })
+                  }}
+                  disabled={isRuling || isRulingConfirming || isRulingConfirmed}
+                  className="px-4 py-2 bg-red-600 hover:bg-red-500 disabled:bg-slate-700 disabled:text-slate-500 text-white text-sm font-medium rounded-lg transition-colors"
+                >
+                  Rule: Keep Sealed
+                </button>
+              </div>
+            )}
+
+            {isRulingConfirmed && rulingTxHash && (
+              <div className="mt-4 bg-slate-800/50 border border-emerald-800 rounded-lg p-4">
+                <p className="text-emerald-400 text-sm font-medium mb-2">Ruling delivered</p>
+                <p className="text-slate-400 text-xs mb-2">
+                  Tx: <code className="text-slate-300 break-all">{rulingTxHash}</code>
+                </p>
+                <a
+                  href="/resolve"
+                  className="text-indigo-400 hover:text-indigo-300 text-sm underline"
+                >
+                  Go to Resolve page &rarr;
+                </a>
+              </div>
+            )}
+          </StepCard>
+        )}
       </div>
     </div>
   )

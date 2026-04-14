@@ -1,8 +1,29 @@
 export const ARBITRUM_SEPOLIA_CHAIN_ID = 421614
 
-// For local dev: deploy with `forge script` and paste address here.
-// For testnet: use the deployed address.
-export const ESCROW_ARBITRABLE_ADDRESS = '0x0000000000000000000000000000000000000000' as const
+// Local Anvil deployment (DeployLocal.s.sol)
+export const MOCK_ARBITRATOR_ADDRESS = '0x5FbDB2315678afecb367f032d93F642f64180aa3' as const
+export const ESCROW_ARBITRABLE_ADDRESS = '0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512' as const
+
+export const MOCK_ARBITRATOR_ABI = [
+  {
+    type: 'function',
+    name: 'rule',
+    inputs: [
+      { name: 'arbitrable', type: 'address' },
+      { name: 'disputeId', type: 'uint256' },
+      { name: 'ruling', type: 'uint256' },
+    ],
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
+    name: 'COST',
+    inputs: [],
+    outputs: [{ name: '', type: 'uint256' }],
+    stateMutability: 'view',
+  },
+] as const
 
 export const ESCROW_ARBITRABLE_ABI = [
   {
