@@ -48,8 +48,8 @@ To our knowledge, no existing construction simultaneously provides:
         CBOR parsing and issuer-signature verification.
   \item Court-resolvable identity escrow that satisfies eIDAS accountability
         requirements without degrading unlinkability during normal use.
-  \item Production-grade performance, with end-to-end proving under 200\,ms for
-        multi-attribute credentials on commodity hardware.
+  \item Practical performance, with end-to-end proving in approximately 1.3\,s
+        for multi-attribute credentials on commodity hardware.
 \end{enumerate}
 
 We present \textsc{zk-eidas}, a system that fills this gap. Our contributions
@@ -95,7 +95,7 @@ Section~\ref{sec:implementation} describes the implementation, including circuit
 design and system architecture.
 Section~\ref{sec:evaluation} reports performance benchmarks and proof-size
 measurements.
-Section~\ref{sec:eudi} maps the construction to EUDI ARF compliance
+Section~\ref{sec:eudi-mapping} maps the construction to EUDI ARF compliance
 requirements.
 Section~\ref{sec:related} surveys related work.
 Section~\ref{sec:discussion} discusses limitations, the post-quantum signature

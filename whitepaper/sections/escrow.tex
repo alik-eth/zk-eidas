@@ -160,7 +160,7 @@ The verifier receives the proof (containing~$\delta$) and the envelope produced 
 \end{algorithm}
 
 \paragraph{Concrete sizes.}
-For a typical escrow envelope containing two fields (family name and date of birth), the overhead is dominated by the ML-KEM-768 ciphertext: $1088 + 32 = 1120$~bytes for the key blob, plus approximately $2 \times (32 + 16) = 96$~bytes for the AES-256-GCM ciphertexts and tags, totalling roughly 1.2~KB.  This is appended to the proof, which itself is approximately 300~KB (see Section~\ref{sec:benchmarks}).
+For a typical escrow envelope containing two fields (family name and date of birth), the overhead is dominated by the ML-KEM-768 ciphertext: $1088 + 32 = 1120$~bytes for the key blob, plus approximately $2 \times (32 + 16) = 96$~bytes for the AES-256-GCM ciphertexts and tags, totalling roughly 1.2~KB.  This is appended to the proof, which itself is approximately 365~KB (see Section~\ref{sec:benchmarks}).
 
 \begin{figure}[t]
 \centering
@@ -172,7 +172,7 @@ For a typical escrow envelope containing two fields (family name and date of bir
 %% ───────────────────────────────────────────────────────────────────
 \subsection{Security Analysis}\label{sec:escrow-security}
 
-We state four security theorems for the escrow protocol.  Full proofs are deferred to Appendix~\ref{app:games}; we give proof sketches here.
+We state four security theorems for the escrow protocol with proof sketches.
 
 \begin{theorem}[Escrow Correctness]\label{thm:correctness}
   If the holder $\mathcal{H}$ follows the protocol honestly --- executing

@@ -48,7 +48,7 @@ Table~\ref{tab:crates} summarises each crate.
 The interface between Rust and the Longfellow C++ library is encapsulated entirely within the
 \texttt{longfellow-sys} crate.
 At build time, \texttt{build.rs} invokes CMake to compile Longfellow's \texttt{mdoc\_static}
-target, which links the sumcheck and Ligero backends into a static archive.
+target, which links the Sumcheck and Ligero backends into a static archive.
 \texttt{bindgen} then generates typed Rust FFI declarations from a thin \texttt{wrapper.h} header.
 Three functions constitute the public FFI surface visible to the rest of the workspace:
 \begin{itemize}
