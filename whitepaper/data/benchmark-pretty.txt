@@ -1,0 +1,33 @@
+=== zk-eidas v2.0 Benchmark ===
+System: Genuine Intel(R) CPU 0000 @ 2.60GHz, 8C/16T, 31GB RAM
+OS: Linux 6.19.10-200.fc43.x86_64 x86_64
+Rust: 1.93.1 (01f6ddf75 2026-02-11), release build
+
+--- ZK Proving Pipeline ---
+
+                              1-attr        2-attr        3-attr        4-attr
+                          ──────────    ──────────    ──────────    ──────────
+Circuit gen (cold)            16.45s        17.15s        18.00s        19.03s
+Circuit load (cache)          0.02ms        0.02ms        0.02ms        0.04ms
+Prove                          1.26s         1.27s         1.31s         1.35s
+Verify                      675.73ms      684.89ms      719.21ms      739.22ms
+Proof size                  363.6 KB      363.1 KB      367.2 KB      369.5 KB
+
+Gen RSS (MB)                    1143          1336          1384          1447
+Gen CPU util                    100%           99%          100%          100%
+Prove RSS (MB)                  1214          1336          1384          1427
+Prove CPU util                   99%           99%          100%          100%
+Verify RSS (MB)                 1214          1336          1384          1427
+Verify CPU util                  99%           99%          100%           99%
+
+--- Identity Escrow Pipeline ---
+
+Operation                             Time
+                                ──────────
+ML-KEM-768 keygen                   0.08ms
+Field packing                       0.00ms
+AES-256-GCM encrypt                 0.00ms
+ML-KEM encrypt K                    0.12ms
+ML-KEM decrypt K                    0.12ms
+AES-256-GCM decrypt                 0.00ms
+
