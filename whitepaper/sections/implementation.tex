@@ -10,6 +10,13 @@ We structure the presentation as four subsections covering the crate architectur
 the TSP attestation layer (\S\ref{sec:impl-tsp}), and the deployment model
 (\S\ref{sec:impl-deploy}).
 
+\begin{figure}[t]
+\centering
+\input{figures/architecture}
+\caption{\textsc{zk-eidas} system architecture. The credential parsing, signature verification, predicate evaluation, and escrow binding all execute within a single Longfellow circuit.}
+\label{fig:architecture}
+\end{figure}
+
 %% ───────────────────────────────────────────────────────────────────
 \subsection{Architecture Overview}\label{sec:impl-arch}
 

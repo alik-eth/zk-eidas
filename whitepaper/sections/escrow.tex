@@ -162,6 +162,13 @@ The verifier receives the proof (containing~$\delta$) and the envelope produced 
 \paragraph{Concrete sizes.}
 For a typical escrow envelope containing two fields (family name and date of birth), the overhead is dominated by the ML-KEM-768 ciphertext: $1088 + 32 = 1120$~bytes for the key blob, plus approximately $2 \times (32 + 16) = 96$~bytes for the AES-256-GCM ciphertexts and tags, totalling roughly 1.2~KB.  This is appended to the proof, which itself is approximately 300~KB (see Section~\ref{sec:benchmarks}).
 
+\begin{figure}[t]
+\centering
+\input{figures/escrow-protocol}
+\caption{Identity escrow protocol flow. The escrow envelope is transmitted alongside the proof. Decryption occurs only upon court order.}
+\label{fig:escrow-protocol}
+\end{figure}
+
 %% ───────────────────────────────────────────────────────────────────
 \subsection{Security Analysis}\label{sec:escrow-security}
 
