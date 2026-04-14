@@ -1,0 +1,375 @@
+% !TEX root = ../main.tex
+\section{EUDI ARF Compliance Mapping}\label{sec:eudi-mapping}
+
+The European Digital Identity Architecture and Reference Framework
+(EUDI ARF)~\cite{eudi-arf} defines the technical requirements that
+identity wallets and credential systems must satisfy to operate within
+the eIDAS~2.0 ecosystem~\cite{eidas2}.
+This section maps each category of ARF requirements to the
+\textsc{zk-eidas} construction, identifying which requirements are
+fully satisfied, which are partially addressed, and which remain
+future work.
+Subsection~\ref{sec:eudi-functional} covers functional requirements;
+Subsection~\ref{sec:eudi-privacy} covers privacy requirements;
+Subsection~\ref{sec:eudi-interop} covers interoperability requirements;
+and Subsection~\ref{sec:eudi-accountability} covers accountability
+requirements, with emphasis on the identity escrow mechanism developed
+in Section~\ref{sec:escrow}.
+
+%% ───────────────────────────────────────────────────────────────────
+\subsection{Functional Requirements}\label{sec:eudi-functional}
+
+The ARF specifies that a conforming wallet must support presentation of
+Person Identification Data (PID), selective disclosure of individual
+attributes, validity period enforcement, revocation checking, and
+multiple credential formats.
+Table~\ref{tab:arf-functional} maps each requirement to
+\textsc{zk-eidas}.
+
+\begin{table}[t]
+  \centering
+  \caption{EUDI ARF functional requirement compliance.
+           \checkmark\ = satisfied; $\sim$ = partially satisfied;
+           --- = not addressed.}\label{tab:arf-functional}
+  \begin{tabular}{p{4.2cm}cp{6.8cm}}
+    \toprule
+    ARF Requirement & Status & Notes \\
+    \midrule
+    PID presentation
+      & \checkmark
+      & mdoc IssuerAuth verified in-circuit; ECDSA~P-256 signature over the
+        Mobile Security Object (MSO) is checked inside the Longfellow hash
+        and signature sub-circuits (Section~\ref{sec:parsing}). \\[4pt]
+    Selective disclosure
+      & \checkmark
+      & Per-claim predicate proofs; the verifier learns only the Boolean
+        result of each requested predicate and no raw attribute values
+        (Section~\ref{sec:predicates}). \\[4pt]
+    Credential validity
+      & \checkmark
+      & The \texttt{validityInfo} block from the MSO is extracted in-circuit
+        and the \texttt{validFrom}/\texttt{validUntil} fields are compared
+        against the verifier-supplied \texttt{now} parameter using the same
+        lexicographic date comparator described in
+        Section~\ref{sec:predicates}. \\[4pt]
+    Revocation checking
+      & $\sim$
+      & Not addressed in-circuit.  An external revocation-list check
+        (e.g., OCSP or a status-list credential) is assumed to be performed
+        by the verifier out-of-band before accepting the proof. \\[4pt]
+    Multiple credential formats
+      & $\sim$
+      & ISO~18013-5 mdoc~\cite{iso18013} is natively supported via the
+        in-circuit CBOR parser.  SD-JWT VC support requires a JSON parsing
+        circuit and is planned as future work. \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\paragraph{PID presentation.}
+The ARF requires that a wallet can present PID in a format that a
+relying party can verify without trusting the wallet software.
+\textsc{zk-eidas} satisfies this by verifying the issuer's ECDSA
+P-256 signature \emph{inside} the Longfellow circuit, so the
+verifier's trust is anchored to the issuer's public key rather than
+to the wallet.
+No issuer-side modifications are required: any mdoc credential issued
+according to ISO/IEC~18013-5~\cite{iso18013} can be used as-is.
+
+\paragraph{Selective disclosure.}
+The ARF requires that only the attributes requested by the verifier
+are disclosed, and that the holder cannot be coerced into revealing
+additional attributes.
+\textsc{zk-eidas} enforces this at the circuit level: the circuit
+evaluates only the predicates over the attributes listed in the
+verifier's request; the raw attribute values remain private inputs
+that never appear in the proof transcript.
+
+\paragraph{Credential validity.}
+Verifying that a credential has not expired is a hard functional
+requirement.
+The circuit checks \texttt{validFrom $\leq$ now $\leq$ validUntil}
+using two predicate assertions (types $\mathsf{LEQ}$ and
+$\mathsf{GEQ}$, respectively), where \texttt{now} is a public input
+chosen by the verifier.
+Because the check occurs inside the circuit, a holder cannot present
+an expired credential without producing a proof that would fail
+verification.
+
+\paragraph{Revocation.}
+In-circuit revocation checking is an open problem in the zero-knowledge
+credential literature.
+Accumulator-based approaches~\cite{camenisch2001} would require
+embedding a dynamic accumulator witness update inside the circuit,
+substantially increasing circuit size and the holder's online
+requirements.
+We leave this integration as future work and require that verifiers
+consult an external revocation list before accepting a proof.
+
+%% ───────────────────────────────────────────────────────────────────
+\subsection{Privacy Requirements}\label{sec:eudi-privacy}
+
+The ARF imposes strict privacy requirements on wallet interactions,
+derived in part from the GDPR and from Article~6 of the eIDAS~2.0
+Regulation~\cite{eidas2}.
+Table~\ref{tab:arf-privacy} maps each requirement to
+\textsc{zk-eidas}.
+
+\begin{table}[t]
+  \centering
+  \caption{EUDI ARF privacy requirement compliance.}\label{tab:arf-privacy}
+  \begin{tabular}{p{3.6cm}cp{4.0cm}p{3.8cm}}
+    \toprule
+    ARF Requirement & Status & \textsc{zk-eidas} Mechanism \\
+    \midrule
+    Unlinkability
+      & \checkmark
+      & Fresh proof per presentation; scoped nullifiers ensure that
+        two presentations to different verifiers cannot be correlated. \\[4pt]
+    Data minimisation
+      & \checkmark
+      & Predicate proofs reveal only Boolean results; no attribute
+        value is transmitted to the verifier. \\[4pt]
+    Holder binding
+      & \checkmark
+      & SHA-256 commitment to the first attribute value ($\beta$
+        computed in-circuit); the proof is bound to the credential
+        without revealing the binding target. \\[4pt]
+    Consent
+      & \checkmark
+      & The holder explicitly selects which claims to disclose and
+        which predicates to apply before proof generation begins. \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\paragraph{Unlinkability.}
+The ARF requires that repeated presentations of the same credential to
+the same or different verifiers cannot be correlated without the
+holder's consent.
+\textsc{zk-eidas} achieves cross-service unlinkability via scoped
+nullifiers (Definition~\ref{def:unlinkability} and
+Section~\ref{sec:nullifiers}): the nullifier
+$\eta = \mathsf{SHA\textnormal{-}256}(m \| c)$ is domain-separated by
+the verifier's contract hash~$c$, so distinct verifiers observe
+distinct nullifiers even when the same credential is used.
+The zero-knowledge property of the Longfellow proof
+(Definition~\ref{def:zk}) ensures that the proof transcript itself
+carries no information beyond the predicate results.
+The identity escrow envelope also does not break unlinkability: each
+presentation draws a fresh ML-KEM encapsulation, producing a
+ciphertext that is computationally indistinguishable from an
+encryption of unrelated plaintext
+(Theorem~\ref{thm:unlinkability}).
+
+\paragraph{Data minimisation.}
+The predicate system (Section~\ref{sec:predicates}) is designed so
+that the verifier's request specifies a \emph{Boolean question} over
+an attribute (e.g., ``is the age at least 18?'') rather than the
+attribute value itself.
+The circuit enforces the predicate and outputs a single bit; the raw
+attribute value is never exposed.
+This is a stronger form of data minimisation than selective-disclosure
+schemes that reveal the attribute in the clear: even the verifier
+cannot infer the attribute value from the predicate result.
+
+\paragraph{Holder binding.}
+The binding hash $\beta = \mathsf{SHA\textnormal{-}256}(\mathsf{attr}_0[0..31])$
+is a public output of the circuit.
+It allows a verifier to confirm that two proofs from the same session
+originate from the same holder (for multi-credential workflows), while
+revealing nothing about the binding attribute to a passive observer.
+
+\paragraph{Consent.}
+Before invoking the \textsc{zk-eidas} proving API, the holder's
+software presents the verifier's predicate request in a human-readable
+form.
+The holder chooses which predicates to accept and authorises proof
+generation only for those predicates.
+Attributes not referenced in any accepted predicate are not processed
+by the circuit and cannot appear in the proof.
+
+%% ───────────────────────────────────────────────────────────────────
+\subsection{Interoperability Requirements}\label{sec:eudi-interop}
+
+The ARF mandates that wallet implementations interoperate with existing
+identity infrastructure, including ISO~18013-5 mdoc readers, OpenID4VP
+relying parties, and cross-border verifiers in other member states.
+Table~\ref{tab:arf-interop} maps each requirement to
+\textsc{zk-eidas}.
+
+\begin{table}[t]
+  \centering
+  \caption{EUDI ARF interoperability requirement compliance.}\label{tab:arf-interop}
+  \begin{tabular}{p{3.6cm}cp{4.0cm}p{3.8cm}}
+    \toprule
+    ARF Requirement & Status & \textsc{zk-eidas} Mechanism \\
+    \midrule
+    ISO~18013-5 mdoc
+      & \checkmark
+      & Native CBOR parsing and COSE\_Sign1 verification performed
+        entirely in-circuit. \\[4pt]
+    SD-JWT VC
+      & Future work
+      & A JSON parsing circuit is planned; not yet implemented. \\[4pt]
+    OpenID4VP
+      & \checkmark
+      & The proof bundle (bytes + public outputs) is compatible with
+        the VP token transport defined by OpenID for Verifiable
+        Presentations. \\[4pt]
+    Cross-border
+      & \checkmark
+      & No country-specific assumptions appear in the circuit design;
+        any ISO~18013-5-conformant issuer is supported. \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\paragraph{ISO 18013-5 mdoc.}
+The \textsc{zk-eidas} circuit ingests raw mdoc CBOR bytes as a private
+input and performs all structural and cryptographic verification
+steps in-circuit: CBOR decoding, MSO extraction, value digest chain
+validation, COSE\_Sign1 unwrapping, and ECDSA~P-256 signature
+verification.
+This in-circuit approach means that no trusted preprocessing step
+transforms the credential before it enters the circuit, preserving the
+integrity guarantees of the issuer's original signature.
+The implementation is compatible with any ISO~18013-5~\cite{iso18013}
+credential without requiring issuer-side modifications.
+
+\paragraph{SD-JWT VC.}
+Selective Disclosure JWT Verifiable Credentials represent the main
+alternative credential format deployed within the EUDI ecosystem.
+Supporting SD-JWT in-circuit requires a JSON parsing circuit over the
+Longfellow hash sub-circuit, which involves substantially different
+structural constraints than CBOR.
+We plan this extension in a future version of \textsc{zk-eidas}; the
+current system supports only mdoc.
+
+\paragraph{OpenID4VP.}
+OpenID for Verifiable Presentations defines how a verifier requests
+and receives credential presentations over a standard OAuth~2.0
+protocol flow.
+The \textsc{zk-eidas} proof bundle --- consisting of the serialised
+proof bytes and the public outputs $(\eta, \beta, \delta)$ --- is
+structured as a self-contained octet string that can be carried in the
+\texttt{vp\_token} field of an OpenID4VP response.
+No changes to the OpenID4VP specification are required; the verifier
+calls the \textsc{zk-eidas} verification API after extracting the
+proof bundle from the token.
+
+\paragraph{Cross-border operation.}
+The circuit contains no country-specific constants, issuer registries,
+or locale-dependent parsing rules.
+The issuer's public key is a public input to the circuit at proving
+time, allowing the holder to use credentials from any member state
+whose issuer public key is known to the verifier.
+Date comparison uses ISO~8601 lexicographic ordering
+(Section~\ref{sec:predicates}), which is locale-independent.
+This design ensures that a French verifier can accept a proof over a
+German PID credential, or vice versa, without any configuration
+changes.
+
+%% ───────────────────────────────────────────────────────────────────
+\subsection{Accountability Requirements}\label{sec:eudi-accountability}
+
+Article~5a of the eIDAS~2.0 Regulation~\cite{eidas2} requires that
+member states maintain the ability to identify the natural person
+behind an electronic transaction when authorised by a court order or
+other legitimate judicial process.
+This requirement creates a fundamental tension with the privacy
+guarantees sought by the EUDI ARF: a system that provides strong
+anonymity must also provide a lawful mechanism for that anonymity to
+be lifted in exceptional circumstances.
+Table~\ref{tab:arf-accountability} maps the relevant ARF requirements
+to \textsc{zk-eidas}.
+
+\begin{table}[t]
+  \centering
+  \caption{EUDI ARF accountability requirement compliance.}\label{tab:arf-accountability}
+  \begin{tabular}{p{3.9cm}cp{4.0cm}p{3.5cm}}
+    \toprule
+    ARF Requirement & Status & \textsc{zk-eidas} Mechanism \\
+    \midrule
+    Judicial identification (Art.\ 5a)
+      & \checkmark
+      & Identity escrow: per-presentation ML-KEM-768 + AES-256-GCM
+        encryption of identity fields, bound to the proof via in-circuit
+        SHA-256 digest (Section~\ref{sec:escrow}). \\[4pt]
+    Proportionality
+      & \checkmark
+      & Per-presentation escrow envelopes; the authority decrypts only
+        the ciphertext attached to the targeted presentation, not all
+        past or future presentations by the same holder. \\[4pt]
+    Audit trail
+      & $\sim$
+      & The scoped nullifier $\eta$ enables presentation counting
+        per scope; a complete audit trail requires the verifier to
+        log nullifiers, which is an operational rather than
+        cryptographic requirement. \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\paragraph{Judicial identification.}
+Identity escrow (Section~\ref{sec:escrow}) is the mechanism by which
+\textsc{zk-eidas} satisfies Article~5a.
+At each proof generation, the holder encrypts a configurable set of
+identifying credential fields (e.g., family name and date of birth)
+under the escrow authority's ML-KEM-768 encapsulation key~\cite{fips203}.
+The resulting ciphertext envelope is bound to the zero-knowledge proof
+via the in-circuit escrow digest
+$\delta = \mathsf{SHA\textnormal{-}256}(e_0 \| \cdots \| e_7)$,
+which appears as a public output of the Longfellow circuit.
+Upon receipt of a court order, the authority decapsulates the envelope
+with its decapsulation key, decrypts the field ciphertexts with
+AES-256-GCM, and verifies that the recovered fields rehash to~$\delta$.
+A mismatch indicates tampering.
+
+This construction is a unique differentiator of \textsc{zk-eidas}
+relative to the other anonymous credential systems surveyed in
+Section~\ref{sec:bench-comparison}.
+OpenAC~\cite{openac}, zk-creds~\cite{zkcreds}, and BBS+~\cite{bbs}
+provide no mechanism for judicial identification: a verifier who
+received a proof from any of these systems would have no lawful
+procedure for recovering the presenter's identity even if ordered to
+do so by a court.
+\textsc{zk-eidas} is, to the best of our knowledge, the only
+zero-knowledge credential system designed from the outset to satisfy
+this eIDAS~2.0 requirement.
+
+\paragraph{Proportionality.}
+The GDPR principle of data minimisation applies to the escrow
+mechanism itself: the authority should be able to recover the identity
+behind a specific transaction without gaining access to the holder's
+full presentation history.
+\textsc{zk-eidas} satisfies this requirement by design.
+Each presentation uses a fresh ML-KEM encapsulation
+(Algorithm~\ref{alg:escrow}), producing a ciphertext that is
+computationally unlinkable from envelopes produced by other
+presentations of the same credential
+(Theorem~\ref{thm:unlinkability}).
+The escrow authority receives a single envelope for the presentation
+under investigation; it cannot use that envelope to decrypt any other
+presentation.
+This per-presentation granularity precisely matches the proportionality
+requirement: the scope of the court order is limited to the single
+transaction it authorises.
+
+\paragraph{Audit trail.}
+The scoped nullifier $\eta$ provides a partial audit capability.
+A verifier that logs the nullifiers it has observed can determine
+whether a particular credential has been presented more than once
+within a given scope (i.e., to the same verifier with the same
+contract hash), enabling detection of replay attacks and statistical
+monitoring of credential usage frequency.
+However, constructing a full cross-scope audit trail requires
+coordinating nullifier logs across multiple verifiers, which is an
+operational and governance challenge outside the scope of the
+cryptographic protocol.
+We note that cross-scope nullifier correlation is deliberately made
+infeasible by the scoped nullifier design
+(Section~\ref{sec:nullifiers}): privacy and auditability are balanced
+such that a single verifier can audit its own interactions, but no
+coalition of verifiers can reconstruct a holder's full presentation
+history without the holder's cooperation.
