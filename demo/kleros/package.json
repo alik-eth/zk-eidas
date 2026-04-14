@@ -1,0 +1,31 @@
+{
+  "name": "kleros-escrow-demo",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite dev",
+    "build": "vite build",
+    "start": "vite preview"
+  },
+  "dependencies": {
+    "@lit-protocol/constants": "^7.4.0",
+    "@lit-protocol/encryption": "^7.4.0",
+    "@lit-protocol/lit-node-client": "^7.4.0",
+    "@tanstack/react-router": "^1.167.0",
+    "@tanstack/react-start": "^1.167.0",
+    "@wagmi/core": "^2.16.0",
+    "mlkem": "^2.7.0",
+    "react": "^19.2.5",
+    "react-dom": "^19.2.5",
+    "viem": "^2.23.0",
+    "vite": "^8.0.0",
+    "wagmi": "^2.14.0"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.2.2",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "tailwindcss": "^4.2.2",
+    "typescript": "^5.8.0"
+  }
+}
