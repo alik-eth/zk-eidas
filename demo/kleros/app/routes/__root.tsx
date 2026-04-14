@@ -1,5 +1,11 @@
 import { Outlet, HeadContent, Scripts, createRootRoute, Link } from '@tanstack/react-router'
+import { WagmiProvider } from 'wagmi'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { config } from '../lib/wagmi'
+import { WalletConnect } from '../components/WalletConnect'
 import '../styles.css'
+
+const queryClient = new QueryClient()
 
 export const Route = createRootRoute({
   head: () => ({
@@ -26,47 +32,52 @@ function RootComponent() {
         />
       </head>
       <body className="bg-slate-900 text-white" style={{ fontFamily: "'Outfit', sans-serif" }}>
-        {/* Navigation */}
-        <header className="border-b border-slate-800 bg-slate-950/80 backdrop-blur-md sticky top-0 z-50">
-          <div className="max-w-5xl mx-auto px-4 sm:px-8 py-4 flex items-center justify-between">
-            <Link to="/" className="flex items-center gap-3">
-              <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-purple-600 to-blue-600 flex items-center justify-center">
-                <span className="text-[10px] font-bold text-white tracking-tighter">zK</span>
-              </div>
-              <div>
-                <h1 className="text-sm font-semibold tracking-tight leading-none">
-                  <span className="text-blue-400">zk-eidas</span>
-                  <span className="text-slate-600 mx-1">x</span>
-                  <span className="text-purple-400">Kleros</span>
-                </h1>
-                <span className="text-[10px] text-slate-600 tracking-wide">Identity Escrow</span>
-              </div>
-            </Link>
+        <WagmiProvider config={config}>
+          <QueryClientProvider client={queryClient}>
+            {/* Navigation */}
+            <header className="border-b border-slate-800 bg-slate-950/80 backdrop-blur-md sticky top-0 z-50">
+              <div className="max-w-5xl mx-auto px-4 sm:px-8 py-4 flex items-center justify-between">
+                <Link to="/" className="flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-purple-600 to-blue-600 flex items-center justify-center">
+                    <span className="text-[10px] font-bold text-white tracking-tighter">zK</span>
+                  </div>
+                  <div>
+                    <h1 className="text-sm font-semibold tracking-tight leading-none">
+                      <span className="text-blue-400">zk-eidas</span>
+                      <span className="text-slate-600 mx-1">x</span>
+                      <span className="text-purple-400">Kleros</span>
+                    </h1>
+                    <span className="text-[10px] text-slate-600 tracking-wide">Identity Escrow</span>
+                  </div>
+                </Link>
 
-            <nav className="flex items-center gap-2 sm:gap-4">
-              <Link
-                to="/escrow"
-                className="text-xs font-medium text-slate-400 hover:text-white transition-colors px-3 py-1.5 rounded-lg hover:bg-slate-800"
-              >
-                Escrow
-              </Link>
-              <Link
-                to="/dispute"
-                className="text-xs font-medium text-slate-400 hover:text-white transition-colors px-3 py-1.5 rounded-lg hover:bg-slate-800"
-              >
-                Dispute
-              </Link>
-              <Link
-                to="/resolve"
-                className="text-xs font-medium text-slate-400 hover:text-white transition-colors px-3 py-1.5 rounded-lg hover:bg-slate-800"
-              >
-                Resolve
-              </Link>
-            </nav>
-          </div>
-        </header>
+                <nav className="flex items-center gap-2 sm:gap-4">
+                  <Link
+                    to="/escrow"
+                    className="text-xs font-medium text-slate-400 hover:text-white transition-colors px-3 py-1.5 rounded-lg hover:bg-slate-800"
+                  >
+                    Escrow
+                  </Link>
+                  <Link
+                    to="/dispute"
+                    className="text-xs font-medium text-slate-400 hover:text-white transition-colors px-3 py-1.5 rounded-lg hover:bg-slate-800"
+                  >
+                    Dispute
+                  </Link>
+                  <Link
+                    to="/resolve"
+                    className="text-xs font-medium text-slate-400 hover:text-white transition-colors px-3 py-1.5 rounded-lg hover:bg-slate-800"
+                  >
+                    Resolve
+                  </Link>
+                  <WalletConnect />
+                </nav>
+              </div>
+            </header>
 
-        <Outlet />
+            <Outlet />
+          </QueryClientProvider>
+        </WagmiProvider>
         <Scripts />
       </body>
     </html>

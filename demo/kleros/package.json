@@ -11,6 +11,7 @@
     "@lit-protocol/constants": "^7.4.0",
     "@lit-protocol/encryption": "^7.4.0",
     "@lit-protocol/lit-node-client": "^7.4.0",
+    "@tanstack/react-query": "^5.99.0",
     "@tanstack/react-router": "^1.167.0",
     "@tanstack/react-start": "^1.167.0",
     "@wagmi/core": "^2.16.0",
