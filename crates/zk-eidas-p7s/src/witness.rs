@@ -55,7 +55,7 @@ pub struct P7sOffsets {
     pub content_sig_len: usize,
 
     // --- JSON fields inside signed_content ---
-    /// Raw hex body of `"pk"` field, 128 hex chars (64 bytes uncompressed pubkey).
+    /// Raw hex body of `"pk"` field, 130 hex chars (65 bytes uncompressed SEC1 secp256k1 point: 0x04 || X[32] || Y[32]).
     pub json_pk_start: usize,
     pub json_pk_len: usize,
     /// Raw hex body of `"nonce"` field, 64 hex chars (32 bytes).
