@@ -8,11 +8,14 @@ use hex_literal::hex;
 use sha2::{Digest, Sha256};
 use zk_eidas_p7s::{build_witness, compute_outputs};
 
-/// Placeholder trust anchor for tests. Real DIIA root key is not yet
-/// wired in; this test focuses on offset extraction and output derivation.
-/// When `host_verify` is called, it will fail against this dummy anchor —
-/// that's expected until we plug in the real DIIA root.
-const DUMMY_ROOT_PK: [u8; 65] = [0x04; 65];
+/// DIIA QTSP 2311 root pubkey — the issuer of the signer cert in our fixture.
+/// Extracted from `diia-qtsp-2311.der` (DIIA Ukrainian Trust List, Nov 2023 key).
+/// Subject: `"DIIA" Qualified Trust Services Provider, serialNumber=UA-43395033-2311`.
+/// Uncompressed SEC1 P-256 point: 0x04 || X[32] || Y[32].
+const DIIA_ROOT_PK: [u8; 65] = hex!(
+    "048500048265e919c1738e873572c1f6443895a0c03985fc71bd96a6f62a53bc"
+    "c869d23ca6e6a2a7dc443bbb2a0b914ee35f1c74e282ecd8e6c5287c7a3d4aee10"
+);
 
 const FIXTURE: &[u8] = include_bytes!("../fixtures/binding.qkb.p7s");
 
@@ -32,7 +35,7 @@ const EXPECTED_NONCE: [u8; 32] = hex!(
 
 #[test]
 fn offsets_extract_correct_stable_id() {
-    let witness = build_witness(FIXTURE, b"0x", DUMMY_ROOT_PK).expect("parse");
+    let witness = build_witness(FIXTURE, b"0x", DIIA_ROOT_PK).expect("parse");
     let off = &witness.offsets;
 
     let got = &witness.p7s_bytes[off.subject_sn_start..off.subject_sn_start + off.subject_sn_len];
@@ -41,7 +44,7 @@ fn offsets_extract_correct_stable_id() {
 
 #[test]
 fn offsets_extract_correct_pk_hex() {
-    let witness = build_witness(FIXTURE, b"0x", DUMMY_ROOT_PK).expect("parse");
+    let witness = build_witness(FIXTURE, b"0x", DIIA_ROOT_PK).expect("parse");
     let off = &witness.offsets;
 
     let pk_hex = &witness.p7s_bytes[off.json_pk_start..off.json_pk_start + off.json_pk_len];
@@ -53,7 +56,7 @@ fn offsets_extract_correct_pk_hex() {
 #[test]
 fn public_outputs_match_expected() {
     let context = b"0x";
-    let witness = build_witness(FIXTURE, context, DUMMY_ROOT_PK).expect("parse");
+    let witness = build_witness(FIXTURE, context, DIIA_ROOT_PK).expect("parse");
     let out = compute_outputs(&witness).expect("compute outputs");
 
     assert_eq!(out.pk, EXPECTED_PK, "pk extraction");
@@ -76,10 +79,16 @@ fn public_outputs_match_expected() {
 #[test]
 fn context_mismatch_is_detected() {
     // Witness says "wrong" but the JSON has "0x" — compute_outputs must catch this
-    let witness = build_witness(FIXTURE, b"wrong", DUMMY_ROOT_PK).expect("parse");
+    let witness = build_witness(FIXTURE, b"wrong", DIIA_ROOT_PK).expect("parse");
     let err = compute_outputs(&witness).expect_err("should fail");
     assert!(
         matches!(err, zk_eidas_p7s::P7sError::ContextMismatch { .. }),
         "expected ContextMismatch, got {err:?}"
     );
+}
+
+#[test]
+fn host_verify_succeeds_with_real_diia_root() {
+    let witness = build_witness(FIXTURE, b"0x", DIIA_ROOT_PK).expect("parse");
+    zk_eidas_p7s::host_verify(&witness).expect("host_verify must succeed against real DIIA 2311 root");
 }
