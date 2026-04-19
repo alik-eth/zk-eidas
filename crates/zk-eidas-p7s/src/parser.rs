@@ -186,6 +186,12 @@ pub(crate) fn locate_offsets(p7s: &[u8]) -> Result<P7sOffsets, P7sError> {
     let (json_context_start_rel, json_context_len) =
         locator::locate_string_field(json_bytes, b"context")
             .ok_or(P7sError::JsonFieldMissing("context"))?;
+    let (json_declaration_start_rel, json_declaration_len) =
+        locator::locate_string_field(json_bytes, b"declaration")
+            .ok_or(P7sError::JsonFieldMissing("declaration"))?;
+    let (json_timestamp_start_rel, json_timestamp_len) =
+        locator::locate_integer_field(json_bytes, b"timestamp")
+            .ok_or(P7sError::JsonFieldMissing("timestamp"))?;
 
     Ok(P7sOffsets {
         signed_content_start,
@@ -211,6 +217,10 @@ pub(crate) fn locate_offsets(p7s: &[u8]) -> Result<P7sOffsets, P7sError> {
         json_nonce_len,
         json_context_start: signed_content_start + json_context_start_rel,
         json_context_len,
+        json_declaration_start: signed_content_start + json_declaration_start_rel,
+        json_declaration_len,
+        json_timestamp_start: signed_content_start + json_timestamp_start_rel,
+        json_timestamp_len,
     })
 }
 

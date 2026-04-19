@@ -74,6 +74,14 @@ pub struct P7sOffsets {
     /// Text body of `"context"` field.
     pub json_context_start: usize,
     pub json_context_len: usize,
+    /// Text body of `"declaration"` field (raw JSON string contents).
+    /// Consumed by the Phase 2 DeclarationWhitelist invariant.
+    pub json_declaration_start: usize,
+    pub json_declaration_len: usize,
+    /// ASCII digits of the `"timestamp"` integer field (no quotes).
+    /// Exposed as a public output for frontend-policy anti-replay.
+    pub json_timestamp_start: usize,
+    pub json_timestamp_len: usize,
 }
 
 /// Public outputs the verifier sees after the ZK proof passes.
