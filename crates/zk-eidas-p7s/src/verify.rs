@@ -48,7 +48,29 @@ fn verify_content_signature(witness: &P7sWitness) -> Result<(), P7sError> {
     let off = &witness.offsets;
     let bytes = &witness.p7s_bytes;
 
+    // 1. messageDigest inside signedAttrs must equal SHA-256(signed_content)
     let content = &bytes[off.signed_content_start..off.signed_content_start + off.signed_content_len];
+    let md_claimed = &bytes[off.message_digest_start..off.message_digest_start + off.message_digest_len];
+    let md_computed: [u8; 32] = Sha256::digest(content).into();
+    if md_claimed != md_computed.as_slice() {
+        return Err(P7sError::BadSignature(
+            "messageDigest does not equal SHA-256(signed_content)",
+        ));
+    }
+
+    // 2. Reconstruct the bytes the signature was computed over:
+    //    signedAttrs DER but with [0] IMPLICIT tag 0xA0 rewritten to SET tag 0x31.
+    let mut signed_attrs = bytes
+        [off.signed_attrs_start..off.signed_attrs_start + off.signed_attrs_len]
+        .to_vec();
+    if signed_attrs.is_empty() || signed_attrs[0] != 0xA0 {
+        return Err(P7sError::BadSignature(
+            "signedAttrs at offset does not start with [0] IMPLICIT tag",
+        ));
+    }
+    signed_attrs[0] = 0x31;
+
+    // 3. ECDSA-verify the signature over SHA-256(signed_attrs_as_set_der)
     let sig_der = &bytes[off.content_sig_start..off.content_sig_start + off.content_sig_len];
     let user_pk = &bytes[off.user_signing_pk_start..off.user_signing_pk_start + 65];
 
@@ -57,9 +79,7 @@ fn verify_content_signature(witness: &P7sWitness) -> Result<(), P7sError> {
     let sig = DerSignature::try_from(sig_der)
         .map_err(|e| P7sError::BadSignature(string_leak(format!("content sig der: {e}"))))?;
 
-    // For QKB documents without signedAttrs, the signature is over SHA-256(content)
-    let _digest = Sha256::digest(content);
-    vk.verify(content, &sig)
+    vk.verify(&signed_attrs, &sig)
         .map_err(|_| P7sError::BadSignature("content signature does not verify"))?;
 
     Ok(())
