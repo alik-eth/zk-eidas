@@ -38,6 +38,28 @@ pub(crate) fn locate_string_field(json: &[u8], key: &[u8]) -> Option<(usize, usi
     Some((body_start, rel_end))
 }
 
+/// Locate an unquoted integer field of the form `"<key>":<digits>`.
+/// Returns `(start, len)` of the digit sequence; the body terminates at the
+/// first non-ASCII-digit byte (typically `,`, `}`, or whitespace in JCS).
+/// Returns `None` if the key is absent or the body contains no leading digit.
+pub(crate) fn locate_integer_field(json: &[u8], key: &[u8]) -> Option<(usize, usize)> {
+    let prefix = key_prefix_integer(key);
+    let start_relative = find_subslice(json, &prefix)?;
+    let body_start = start_relative + prefix.len();
+    let mut len = 0usize;
+    while let Some(&b) = json.get(body_start + len) {
+        if b.is_ascii_digit() {
+            len += 1;
+        } else {
+            break;
+        }
+    }
+    if len == 0 {
+        return None;
+    }
+    Some((body_start, len))
+}
+
 /// Build `"<key>":"0x` as a byte sequence.
 fn key_prefix_hex(key: &[u8]) -> Vec<u8> {
     let mut v = Vec::with_capacity(key.len() + 8);
@@ -53,6 +75,15 @@ fn key_prefix_string(key: &[u8]) -> Vec<u8> {
     v.push(b'"');
     v.extend_from_slice(key);
     v.extend_from_slice(b"\":\"");
+    v
+}
+
+/// Build `"<key>":` as a byte sequence (no trailing quote — integer bodies are unquoted).
+fn key_prefix_integer(key: &[u8]) -> Vec<u8> {
+    let mut v = Vec::with_capacity(key.len() + 4);
+    v.push(b'"');
+    v.extend_from_slice(key);
+    v.extend_from_slice(b"\":");
     v
 }
 
@@ -88,5 +119,18 @@ mod tests {
     fn missing_key_returns_none() {
         assert!(locate_hex_field(SAMPLE, b"missing", 8).is_none());
         assert!(locate_string_field(SAMPLE, b"missing").is_none());
+    }
+
+    #[test]
+    fn finds_integer_field() {
+        let sample = br#"{"a":"x","timestamp":1776621679,"version":"QKB/1.0"}"#;
+        let (start, len) = locate_integer_field(sample, b"timestamp").unwrap();
+        assert_eq!(&sample[start..start + len], b"1776621679");
+    }
+
+    #[test]
+    fn missing_integer_key_returns_none() {
+        let sample = br#"{"a":"x"}"#;
+        assert!(locate_integer_field(sample, b"missing").is_none());
     }
 }
