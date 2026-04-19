@@ -54,6 +54,16 @@ pub struct P7sOffsets {
     pub content_sig_start: usize,
     pub content_sig_len: usize,
 
+    // --- CMS signedAttrs (CAdES-BES style) ---
+    /// Full DER bytes of signedAttrs as they appear in the p7s (with [0] IMPLICIT tag 0xA0).
+    /// For signature verification, rewrite byte 0 from 0xA0 to 0x31 (SET tag) before hashing.
+    pub signed_attrs_start: usize,
+    pub signed_attrs_len: usize,
+    /// The 32-byte digest inside the messageDigest attribute (OID 1.2.840.113549.1.9.4).
+    /// Must equal SHA-256(signed_content) — asserted by verify_content_signature.
+    pub message_digest_start: usize,
+    pub message_digest_len: usize,
+
     // --- JSON fields inside signed_content ---
     /// Raw hex body of `"pk"` field, 130 hex chars (65 bytes uncompressed SEC1 secp256k1 point: 0x04 || X[32] || Y[32]).
     pub json_pk_start: usize,

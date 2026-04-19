@@ -122,6 +122,61 @@ pub(crate) fn locate_offsets(p7s: &[u8]) -> Result<P7sOffsets, P7sError> {
         .ok_or(P7sError::OffsetNotFound("content signature"))?;
     let content_sig_len = content_sig_bytes.len();
 
+    // ── SignerInfo signedAttrs (CAdES / CMS authenticated attributes) ─
+    // DIIA p7s uses signedAttrs, so the signature covers SHA-256 of the
+    // DER-encoded signedAttrs SET (with [0] IMPLICIT 0xA0 rewritten to
+    // 0x31). Locate its byte range in the p7s.
+    let signed_attrs = signer_info
+        .signed_attrs
+        .as_ref()
+        .ok_or(P7sError::Cms("signerInfo has no signedAttrs (not a CAdES-BES doc)".into()))?;
+    let signed_attrs_set_der = signed_attrs
+        .to_der()
+        .map_err(|e| P7sError::Cms(format!("signedAttrs encode: {e}")))?;
+    // Rewrite 0x31 (SET) → 0xA0 ([0] IMPLICIT) to match the form in p7s
+    let mut signed_attrs_implicit = signed_attrs_set_der.clone();
+    if signed_attrs_implicit.is_empty() || signed_attrs_implicit[0] != 0x31 {
+        return Err(P7sError::Cms("signedAttrs DER did not start with SET tag".into()));
+    }
+    signed_attrs_implicit[0] = 0xA0;
+    let signed_attrs_start = find_subslice_unique(p7s, &signed_attrs_implicit)
+        .ok_or(P7sError::OffsetNotFound("signedAttrs"))?;
+    let signed_attrs_len = signed_attrs_implicit.len();
+
+    // Locate the messageDigest attribute value (OCTET STRING content, 32 bytes for SHA-256).
+    const OID_MESSAGE_DIGEST: ObjectIdentifier =
+        ObjectIdentifier::new_unwrap("1.2.840.113549.1.9.4");
+    let md_attr = signed_attrs
+        .iter()
+        .find(|a| a.oid == OID_MESSAGE_DIGEST)
+        .ok_or(P7sError::Cms("messageDigest attribute not found in signedAttrs".into()))?;
+    // Attribute value is a SET containing one Any wrapping an OCTET STRING.
+    let md_value_any = md_attr
+        .values
+        .iter()
+        .next()
+        .ok_or(P7sError::Cms("messageDigest has no values".into()))?;
+    let md_any_der = md_value_any
+        .to_der()
+        .map_err(|e| P7sError::Der(format!("messageDigest value encode: {e}")))?;
+    // Strip OCTET STRING tag+length to get the 32-byte digest
+    let md_bytes = strip_tag_and_length(&md_any_der)?;
+    if md_bytes.len() != 32 {
+        return Err(P7sError::Cms(format!(
+            "messageDigest length {} != 32 (not SHA-256)",
+            md_bytes.len()
+        )));
+    }
+    // The 32-byte digest may appear twice (also inside signingCertificateV2).
+    // Locate the unique messageDigest attribute DER, then offset to its OCTET STRING content.
+    let md_attr_der = md_attr
+        .to_der()
+        .map_err(|e| P7sError::Cms(format!("messageDigest attr encode: {e}")))?;
+    let md_attr_pos = find_subslice_unique(p7s, &md_attr_der)
+        .ok_or(P7sError::OffsetNotFound("messageDigest attribute"))?;
+    let message_digest_start = md_attr_pos + md_attr_der.len() - md_bytes.len();
+    let message_digest_len = md_bytes.len();
+
     // ── JSON fields inside signed_content ─────────────────────────────
     let (json_pk_start_rel, json_pk_len) = locator::locate_hex_field(json_bytes, b"pk", 130)
         .ok_or(P7sError::JsonFieldMissing("pk"))?;
@@ -146,6 +201,10 @@ pub(crate) fn locate_offsets(p7s: &[u8]) -> Result<P7sOffsets, P7sError> {
         user_signing_pk_start,
         content_sig_start,
         content_sig_len,
+        signed_attrs_start,
+        signed_attrs_len,
+        message_digest_start,
+        message_digest_len,
         json_pk_start: signed_content_start + json_pk_start_rel,
         json_pk_len,
         json_nonce_start: signed_content_start + json_nonce_start_rel,
