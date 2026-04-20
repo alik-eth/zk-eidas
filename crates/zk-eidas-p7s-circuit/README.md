@@ -16,9 +16,11 @@ academic framing and paper-section invariant table.
 
 ## Invariants landed in Phase 2a
 
-The eleven binding invariants enumerated in the umbrella design
-(`docs/superpowers/specs/2026-04-20-eidas1-p7s-umbrella-design.md`) split
-across Phase 2a (landed here) and Phase 2b (deferred). Eleven landed:
+Thirteen binding invariants are enumerated in the umbrella design
+(`docs/superpowers/specs/2026-04-20-eidas1-p7s-umbrella-design.md`),
+split across Phase 2a (ten landed here — 1, 2a, 2b, 2c, 4, 5, 6, 9, 10,
+11; SPKI binding folded into 2a's circuit changes) and Phase 2b (three
+deferred: invariants 3, 7, 8). The ten Phase-2a invariants:
 
 | # | Invariant | Task | What it binds |
 |---|-----------|------|---------------|
@@ -158,6 +160,11 @@ machine (ECDSA sig-circuit is memory-heavy).
 - **In-circuit anchor-only test coverage.** Feature-gated negative
   tests for invariants 11 and 2c paired against invariants 1 and 2a
   (the asymmetry reviewer flagged in #31).
+- **Cross-holder fixture coverage.** See the "Same-holder fixtures"
+  caveat above — both bundled fixtures share a subject, so SPKI-offset
+  variance is structurally exercised but not empirically covered.
+  Acquiring a third DIIA cert from a different holder would add an
+  empirical negative-test data point.
 
 ## Architecture pointers
 
