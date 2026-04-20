@@ -1,0 +1,730 @@
+   Compiling longfellow-sys v2.0.0 (/data/Develop/zk-eidas/crates/longfellow-sys)
+    Finished `release` profile [optimized] target(s) in 2.01s
+     Running `target/release/benchmark --json`
+[ZK] Benchmarking 1-attribute circuit...
+  circuit generate (5 iterations)...
+[INFO][+  780.698 ms] Compiled circuit: sig
+[INFO][+    0.016 ms]  depth: 22 wires: 223876 in: 3739 out:90 use:166479 ovh:57397 t:481833 cse:26852 notn:353423
+[INFO][+  180.630 ms] sig bytes: 5834530 id:2845210af05740e6e3e054762f9e35ff5fc4fb23088716e369f7cf73eb61df2d
+[INFO][+13348.378 ms] Compiled circuit: hash
+[INFO][+    0.023 ms]  depth: 21 wires: 4009314 in: 99326 out:1 use:3782555 ovh:226759 t:8998742 cse:8786376 notn:7142621
+[INFO][+ 1983.339 ms] hash bytes:113826999 id:0e97237126e750bdfffd0c5d3d9b5ef8b487dd907c3f869ce79de95b4c865df3
+[INFO][+ 1662.913 ms] zstd from 113826999 --> 337383
+[INFO][+  669.315 ms] Compiled circuit: sig
+[INFO][+    0.015 ms]  depth: 22 wires: 223876 in: 3739 out:90 use:166479 ovh:57397 t:481833 cse:26852 notn:353423
+[INFO][+  174.011 ms] sig bytes: 5834530 id:2845210af05740e6e3e054762f9e35ff5fc4fb23088716e369f7cf73eb61df2d
+[INFO][+12340.417 ms] Compiled circuit: hash
+[INFO][+    0.016 ms]  depth: 21 wires: 4009314 in: 99326 out:1 use:3782555 ovh:226759 t:8998742 cse:8786376 notn:7142621
+[INFO][+ 1987.161 ms] hash bytes:113826999 id:0e97237126e750bdfffd0c5d3d9b5ef8b487dd907c3f869ce79de95b4c865df3
+[INFO][+ 1640.007 ms] zstd from 113826999 --> 337383
+[INFO][+  656.857 ms] Compiled circuit: sig
+[INFO][+    0.015 ms]  depth: 22 wires: 223876 in: 3739 out:90 use:166479 ovh:57397 t:481833 cse:26852 notn:353423
+[INFO][+  168.869 ms] sig bytes: 5834530 id:2845210af05740e6e3e054762f9e35ff5fc4fb23088716e369f7cf73eb61df2d
+[INFO][+12957.261 ms] Compiled circuit: hash
+[INFO][+    0.017 ms]  depth: 21 wires: 4009314 in: 99326 out:1 use:3782555 ovh:226759 t:8998742 cse:8786376 notn:7142621
+[INFO][+ 1982.566 ms] hash bytes:113826999 id:0e97237126e750bdfffd0c5d3d9b5ef8b487dd907c3f869ce79de95b4c865df3
+[INFO][+ 1660.720 ms] zstd from 113826999 --> 337383
+[INFO][+  679.009 ms] Compiled circuit: sig
+[INFO][+    0.014 ms]  depth: 22 wires: 223876 in: 3739 out:90 use:166479 ovh:57397 t:481833 cse:26852 notn:353423
+[INFO][+  178.522 ms] sig bytes: 5834530 id:2845210af05740e6e3e054762f9e35ff5fc4fb23088716e369f7cf73eb61df2d
+[INFO][+12892.267 ms] Compiled circuit: hash
+[INFO][+    0.020 ms]  depth: 21 wires: 4009314 in: 99326 out:1 use:3782555 ovh:226759 t:8998742 cse:8786376 notn:7142621
+[INFO][+ 2078.174 ms] hash bytes:113826999 id:0e97237126e750bdfffd0c5d3d9b5ef8b487dd907c3f869ce79de95b4c865df3
+[INFO][+ 1875.582 ms] zstd from 113826999 --> 337383
+[INFO][+  776.938 ms] Compiled circuit: sig
+[INFO][+    0.026 ms]  depth: 22 wires: 223876 in: 3739 out:90 use:166479 ovh:57397 t:481833 cse:26852 notn:353423
+[INFO][+  173.109 ms] sig bytes: 5834530 id:2845210af05740e6e3e054762f9e35ff5fc4fb23088716e369f7cf73eb61df2d
+[INFO][+13075.436 ms] Compiled circuit: hash
+[INFO][+    0.018 ms]  depth: 21 wires: 4009314 in: 99326 out:1 use:3782555 ovh:226759 t:8998742 cse:8786376 notn:7142621
+[INFO][+ 1984.238 ms] hash bytes:113826999 id:0e97237126e750bdfffd0c5d3d9b5ef8b487dd907c3f869ce79de95b4c865df3
+[INFO][+ 1638.996 ms] zstd from 113826999 --> 337383
+  circuit load (5 iterations)...
+  prove + verify (5 iterations each)...
+[INFO][+   25.996 ms] bytes len: 113826999
+[INFO][+  206.746 ms] circuit created. h[in:99326 q:20], s[in:3739 q:21]
+[INFO][+    3.712 ms] ZK Commit start
+[INFO][+  116.175 ms] ZK Commitment done
+[INFO][+    0.013 ms] ZK Commit start
+[INFO][+  118.245 ms] ZK Commitment done
+[INFO][+    0.020 ms] commit created. h[nl:20, ni:99326], s[nl:21, ni:3739] hc[b:461 r:307] sc[b:455 r:19]
+[INFO][+  511.910 ms] ZK sumcheck done
+[INFO][+    2.087 ms] ZK constraints done
+[INFO][+   11.935 ms] Prover Done: flag
+[INFO][+    0.021 ms] ZK hash proof done
+[INFO][+  245.947 ms] ZK sumcheck done
+[INFO][+    1.983 ms] ZK constraints done
+[INFO][+   17.647 ms] Prover Done: flag
+[INFO][+    0.020 ms] ZK signature proof done
+[INFO][+    6.632 ms] com:32, sc:19648, com_proof:153232 [922 el, 40524 el, 501 d in 307 rows]: 172912b
+[INFO][+    0.158 ms] com:32, sc:36032, com_proof:163180 [910 el, 2508 el, 509 d in 19 rows]: 199244b
+[INFO][+    0.003 ms] proof_len: 372252 
+[INFO][+   15.445 ms] bytes len: 113826999
+[INFO][+  220.117 ms] circuit created. h[in:99326 q:20], s[in:3739 q:21]
+[INFO][+    2.583 ms] ZK Commit start
+[INFO][+  115.073 ms] ZK Commitment done
+[INFO][+    0.014 ms] ZK Commit start
+[INFO][+  128.691 ms] ZK Commitment done
+[INFO][+    0.013 ms] commit created. h[nl:20, ni:99326], s[nl:21, ni:3739] hc[b:461 r:307] sc[b:455 r:19]
+[INFO][+  515.608 ms] ZK sumcheck done
+[INFO][+    2.120 ms] ZK constraints done
+[INFO][+    5.724 ms] Prover Done: flag
+[INFO][+    0.016 ms] ZK hash proof done
+[INFO][+  259.746 ms] ZK sumcheck done
+[INFO][+    2.245 ms] ZK constraints done
+[INFO][+   20.668 ms] Prover Done: flag
+[INFO][+    0.026 ms] ZK signature proof done
+[INFO][+    7.492 ms] com:32, sc:19648, com_proof:153648 [922 el, 40524 el, 514 d in 307 rows]: 173328b
+[INFO][+    0.196 ms] com:32, sc:36032, com_proof:163372 [910 el, 2508 el, 515 d in 19 rows]: 199436b
+[INFO][+    0.002 ms] proof_len: 372860 
+[INFO][+   16.854 ms] bytes len: 113826999
+[INFO][+  218.967 ms] circuit created. h[in:99326 q:20], s[in:3739 q:21]
+[INFO][+    3.069 ms] ZK Commit start
+[INFO][+  121.770 ms] ZK Commitment done
+[INFO][+    0.014 ms] ZK Commit start
+[INFO][+  118.165 ms] ZK Commitment done
+[INFO][+    0.015 ms] commit created. h[nl:20, ni:99326], s[nl:21, ni:3739] hc[b:461 r:307] sc[b:455 r:19]
+[INFO][+  518.272 ms] ZK sumcheck done
+[INFO][+    2.067 ms] ZK constraints done
+[INFO][+    5.693 ms] Prover Done: flag
+[INFO][+    0.017 ms] ZK hash proof done
+[INFO][+  254.506 ms] ZK sumcheck done
+[INFO][+    1.519 ms] ZK constraints done
+[INFO][+   18.934 ms] Prover Done: flag
+[INFO][+    0.028 ms] ZK signature proof done
+[INFO][+    6.691 ms] com:32, sc:19648, com_proof:152784 [922 el, 40524 el, 487 d in 307 rows]: 172464b
+[INFO][+    0.151 ms] com:32, sc:36032, com_proof:163020 [910 el, 2508 el, 504 d in 19 rows]: 199084b
+[INFO][+    0.002 ms] proof_len: 371644 
+[INFO][+   16.053 ms] bytes len: 113826999
+[INFO][+  209.459 ms] circuit created. h[in:99326 q:20], s[in:3739 q:21]
+[INFO][+    2.668 ms] ZK Commit start
+[INFO][+  116.644 ms] ZK Commitment done
+[INFO][+    0.013 ms] ZK Commit start
+[INFO][+  122.234 ms] ZK Commitment done
+[INFO][+    0.017 ms] commit created. h[nl:20, ni:99326], s[nl:21, ni:3739] hc[b:461 r:307] sc[b:455 r:19]
+[INFO][+  500.101 ms] ZK sumcheck done
+[INFO][+    2.445 ms] ZK constraints done
+[INFO][+    5.925 ms] Prover Done: flag
+[INFO][+    0.020 ms] ZK hash proof done
+[INFO][+  250.282 ms] ZK sumcheck done
+[INFO][+    1.520 ms] ZK constraints done
+[INFO][+   17.269 ms] Prover Done: flag
+[INFO][+    0.021 ms] ZK signature proof done
+[INFO][+    6.567 ms] com:32, sc:19648, com_proof:153648 [922 el, 40524 el, 514 d in 307 rows]: 173328b
+[INFO][+    0.152 ms] com:32, sc:36032, com_proof:163052 [910 el, 2508 el, 505 d in 19 rows]: 199116b
+[INFO][+    0.002 ms] proof_len: 372540 
+[INFO][+   17.069 ms] bytes len: 113826999
+[INFO][+  224.531 ms] circuit created. h[in:99326 q:20], s[in:3739 q:21]
+[INFO][+    2.577 ms] ZK Commit start
+[INFO][+  114.844 ms] ZK Commitment done
+[INFO][+    0.012 ms] ZK Commit start
+[INFO][+  117.848 ms] ZK Commitment done
+[INFO][+    0.028 ms] commit created. h[nl:20, ni:99326], s[nl:21, ni:3739] hc[b:461 r:307] sc[b:455 r:19]
+[INFO][+  497.223 ms] ZK sumcheck done
+[INFO][+    2.055 ms] ZK constraints done
+[INFO][+   11.604 ms] Prover Done: flag
+[INFO][+    0.018 ms] ZK hash proof done
+[INFO][+  259.418 ms] ZK sumcheck done
+[INFO][+    1.529 ms] ZK constraints done
+[INFO][+   17.490 ms] Prover Done: flag
+[INFO][+    0.019 ms] ZK signature proof done
+[INFO][+    6.558 ms] com:32, sc:19648, com_proof:154128 [922 el, 40524 el, 529 d in 307 rows]: 173808b
+[INFO][+    0.146 ms] com:32, sc:36032, com_proof:162604 [910 el, 2508 el, 491 d in 19 rows]: 198668b
+[INFO][+    0.002 ms] proof_len: 372572 
+[INFO][+   16.058 ms] bytes len: 113826999
+[INFO][+  214.837 ms] circuit created. h[in:99326], s[in:3739]
+[INFO][+    0.075 ms] proof params: h[nl:20, ni:99326], s[nl:21, ni:3739] hc[b:461 r:307] sc[b:455 r:19]
+[INFO][+    2.235 ms] proofs read
+[INFO][+    0.021 ms] verifier: recv commit
+[INFO][+    0.001 ms] verifier: recv commit
+[INFO][+    0.051 ms] verifier: verify
+[INFO][+  205.631 ms] verify done: ok
+[INFO][+    0.014 ms] verifier: verify
+[INFO][+  235.702 ms] verify done: ok
+[INFO][+   19.897 ms] bytes len: 113826999
+[INFO][+  208.372 ms] circuit created. h[in:99326], s[in:3739]
+[INFO][+    0.076 ms] proof params: h[nl:20, ni:99326], s[nl:21, ni:3739] hc[b:461 r:307] sc[b:455 r:19]
+[INFO][+    2.230 ms] proofs read
+[INFO][+    0.022 ms] verifier: recv commit
+[INFO][+    0.001 ms] verifier: recv commit
+[INFO][+    0.051 ms] verifier: verify
+[INFO][+  206.782 ms] verify done: ok
+[INFO][+    0.014 ms] verifier: verify
+[INFO][+  241.251 ms] verify done: ok
+[INFO][+   16.034 ms] bytes len: 113826999
+[INFO][+  217.202 ms] circuit created. h[in:99326], s[in:3739]
+[INFO][+    0.065 ms] proof params: h[nl:20, ni:99326], s[nl:21, ni:3739] hc[b:461 r:307] sc[b:455 r:19]
+[INFO][+    2.226 ms] proofs read
+[INFO][+    0.025 ms] verifier: recv commit
+[INFO][+    0.001 ms] verifier: recv commit
+[INFO][+    0.058 ms] verifier: verify
+[INFO][+  203.919 ms] verify done: ok
+[INFO][+    0.014 ms] verifier: verify
+[INFO][+  233.101 ms] verify done: ok
+[INFO][+   15.400 ms] bytes len: 113826999
+[INFO][+  202.487 ms] circuit created. h[in:99326], s[in:3739]
+[INFO][+    0.119 ms] proof params: h[nl:20, ni:99326], s[nl:21, ni:3739] hc[b:461 r:307] sc[b:455 r:19]
+[INFO][+    2.729 ms] proofs read
+[INFO][+    0.028 ms] verifier: recv commit
+[INFO][+    0.001 ms] verifier: recv commit
+[INFO][+    0.053 ms] verifier: verify
+[INFO][+  217.605 ms] verify done: ok
+[INFO][+    0.014 ms] verifier: verify
+[INFO][+  235.179 ms] verify done: ok
+[INFO][+   16.334 ms] bytes len: 113826999
+[INFO][+  231.004 ms] circuit created. h[in:99326], s[in:3739]
+[INFO][+    0.077 ms] proof params: h[nl:20, ni:99326], s[nl:21, ni:3739] hc[b:461 r:307] sc[b:455 r:19]
+[INFO][+    2.586 ms] proofs read
+[INFO][+    0.027 ms] verifier: recv commit
+[INFO][+    0.001 ms] verifier: recv commit
+[INFO][+    0.052 ms] verifier: verify
+[INFO][+  215.705 ms] verify done: ok
+[INFO][+    0.018 ms] verifier: verify
+[INFO][+  251.338 ms] verify done: ok
+[ZK] 1-attribute done.
+[ZK] Benchmarking 2-attribute circuit...
+  circuit generate (5 iterations)...
+[INFO][+  664.163 ms] Compiled circuit: sig
+[INFO][+    0.015 ms]  depth: 22 wires: 223876 in: 3739 out:90 use:166479 ovh:57397 t:481833 cse:26852 notn:353423
+[INFO][+  167.917 ms] sig bytes: 5834530 id:2845210af05740e6e3e054762f9e35ff5fc4fb23088716e369f7cf73eb61df2d
+[INFO][+13656.482 ms] Compiled circuit: hash
+[INFO][+    0.023 ms]  depth: 21 wires: 4204413 in: 104230 out:2 use:3959061 ovh:245352 t:9445341 cse:9150010 notn:7588575
+[INFO][+ 2117.299 ms] hash bytes:119186187 id:a7952193980a53e800c360b913984fbc036be5d5421155cf4e5fc364b014679f
+[INFO][+ 1715.872 ms] zstd from 119186187 --> 349267
+[INFO][+  639.744 ms] Compiled circuit: sig
+[INFO][+    0.017 ms]  depth: 22 wires: 223876 in: 3739 out:90 use:166479 ovh:57397 t:481833 cse:26852 notn:353423
+[INFO][+  165.448 ms] sig bytes: 5834530 id:2845210af05740e6e3e054762f9e35ff5fc4fb23088716e369f7cf73eb61df2d
+[INFO][+14342.491 ms] Compiled circuit: hash
+[INFO][+    0.017 ms]  depth: 21 wires: 4204413 in: 104230 out:2 use:3959061 ovh:245352 t:9445341 cse:9150010 notn:7588575
+[INFO][+ 2134.194 ms] hash bytes:119186187 id:a7952193980a53e800c360b913984fbc036be5d5421155cf4e5fc364b014679f
+[INFO][+ 1702.438 ms] zstd from 119186187 --> 349267
+[INFO][+  649.608 ms] Compiled circuit: sig
+[INFO][+    0.015 ms]  depth: 22 wires: 223876 in: 3739 out:90 use:166479 ovh:57397 t:481833 cse:26852 notn:353423
+[INFO][+  169.556 ms] sig bytes: 5834530 id:2845210af05740e6e3e054762f9e35ff5fc4fb23088716e369f7cf73eb61df2d
+[INFO][+13331.729 ms] Compiled circuit: hash
+[INFO][+    0.018 ms]  depth: 21 wires: 4204413 in: 104230 out:2 use:3959061 ovh:245352 t:9445341 cse:9150010 notn:7588575
+[INFO][+ 2135.589 ms] hash bytes:119186187 id:a7952193980a53e800c360b913984fbc036be5d5421155cf4e5fc364b014679f
+[INFO][+ 1895.930 ms] zstd from 119186187 --> 349267
+[INFO][+  719.990 ms] Compiled circuit: sig
+[INFO][+    0.041 ms]  depth: 22 wires: 223876 in: 3739 out:90 use:166479 ovh:57397 t:481833 cse:26852 notn:353423
+[INFO][+  197.004 ms] sig bytes: 5834530 id:2845210af05740e6e3e054762f9e35ff5fc4fb23088716e369f7cf73eb61df2d
+[INFO][+13869.818 ms] Compiled circuit: hash
+[INFO][+    0.022 ms]  depth: 21 wires: 4204413 in: 104230 out:2 use:3959061 ovh:245352 t:9445341 cse:9150010 notn:7588575
+[INFO][+ 2135.416 ms] hash bytes:119186187 id:a7952193980a53e800c360b913984fbc036be5d5421155cf4e5fc364b014679f
+[INFO][+ 1690.879 ms] zstd from 119186187 --> 349267
+[INFO][+  654.492 ms] Compiled circuit: sig
+[INFO][+    0.014 ms]  depth: 22 wires: 223876 in: 3739 out:90 use:166479 ovh:57397 t:481833 cse:26852 notn:353423
+[INFO][+  177.495 ms] sig bytes: 5834530 id:2845210af05740e6e3e054762f9e35ff5fc4fb23088716e369f7cf73eb61df2d
+[INFO][+13129.139 ms] Compiled circuit: hash
+[INFO][+    0.019 ms]  depth: 21 wires: 4204413 in: 104230 out:2 use:3959061 ovh:245352 t:9445341 cse:9150010 notn:7588575
+[INFO][+ 2056.032 ms] hash bytes:119186187 id:a7952193980a53e800c360b913984fbc036be5d5421155cf4e5fc364b014679f
+[INFO][+ 1639.766 ms] zstd from 119186187 --> 349267
+  circuit load (5 iterations)...
+  prove + verify (5 iterations each)...
+[INFO][+   32.786 ms] bytes len: 119186187
+[INFO][+  226.880 ms] circuit created. h[in:104230 q:20], s[in:3739 q:21]
+[INFO][+    3.907 ms] ZK Commit start
+[INFO][+  117.545 ms] ZK Commitment done
+[INFO][+    0.014 ms] ZK Commit start
+[INFO][+  119.000 ms] ZK Commitment done
+[INFO][+    0.015 ms] commit created. h[nl:20, ni:104230], s[nl:21, ni:3739] hc[b:474 r:307] sc[b:455 r:19]
+[INFO][+  537.727 ms] ZK sumcheck done
+[INFO][+    2.177 ms] ZK constraints done
+[INFO][+    5.766 ms] Prover Done: flag
+[INFO][+    0.022 ms] ZK hash proof done
+[INFO][+  269.562 ms] ZK sumcheck done
+[INFO][+    1.618 ms] ZK constraints done
+[INFO][+   18.135 ms] Prover Done: flag
+[INFO][+    0.029 ms] ZK signature proof done
+[INFO][+    6.869 ms] com:32, sc:19968, com_proof:152280 [948 el, 40524 el, 503 d in 307 rows]: 172280b
+[INFO][+    0.168 ms] com:32, sc:36032, com_proof:163564 [910 el, 2508 el, 521 d in 19 rows]: 199628b
+[INFO][+    0.003 ms] proof_len: 372004 
+[INFO][+   18.462 ms] bytes len: 119186187
+[INFO][+  217.157 ms] circuit created. h[in:104230 q:20], s[in:3739 q:21]
+[INFO][+    2.642 ms] ZK Commit start
+[INFO][+  114.593 ms] ZK Commitment done
+[INFO][+    0.014 ms] ZK Commit start
+[INFO][+  117.287 ms] ZK Commitment done
+[INFO][+    0.015 ms] commit created. h[nl:20, ni:104230], s[nl:21, ni:3739] hc[b:474 r:307] sc[b:455 r:19]
+[INFO][+  523.460 ms] ZK sumcheck done
+[INFO][+    2.678 ms] ZK constraints done
+[INFO][+    5.982 ms] Prover Done: flag
+[INFO][+    0.023 ms] ZK hash proof done
+[INFO][+  247.995 ms] ZK sumcheck done
+[INFO][+    1.524 ms] ZK constraints done
+[INFO][+   17.460 ms] Prover Done: flag
+[INFO][+    0.021 ms] ZK signature proof done
+[INFO][+    6.559 ms] com:32, sc:19968, com_proof:152664 [948 el, 40524 el, 515 d in 307 rows]: 172664b
+[INFO][+    0.141 ms] com:32, sc:36032, com_proof:163116 [910 el, 2508 el, 507 d in 19 rows]: 199180b
+[INFO][+    0.002 ms] proof_len: 371940 
+[INFO][+   16.955 ms] bytes len: 119186187
+[INFO][+  216.380 ms] circuit created. h[in:104230 q:20], s[in:3739 q:21]
+[INFO][+    2.801 ms] ZK Commit start
+[INFO][+  112.822 ms] ZK Commitment done
+[INFO][+    0.013 ms] ZK Commit start
+[INFO][+  118.226 ms] ZK Commitment done
+[INFO][+    0.015 ms] commit created. h[nl:20, ni:104230], s[nl:21, ni:3739] hc[b:474 r:307] sc[b:455 r:19]
+[INFO][+  526.519 ms] ZK sumcheck done
+[INFO][+    2.161 ms] ZK constraints done
+[INFO][+    5.613 ms] Prover Done: flag
+[INFO][+    0.018 ms] ZK hash proof done
+[INFO][+  250.409 ms] ZK sumcheck done
+[INFO][+    1.561 ms] ZK constraints done
+[INFO][+   17.282 ms] Prover Done: flag
+[INFO][+    0.032 ms] ZK signature proof done
+[INFO][+    6.651 ms] com:32, sc:19968, com_proof:152120 [948 el, 40524 el, 498 d in 307 rows]: 172120b
+[INFO][+    0.155 ms] com:32, sc:36032, com_proof:162604 [910 el, 2508 el, 491 d in 19 rows]: 198668b
+[INFO][+    0.001 ms] proof_len: 370884 
+[INFO][+   16.959 ms] bytes len: 119186187
+[INFO][+  213.011 ms] circuit created. h[in:104230 q:20], s[in:3739 q:21]
+[INFO][+    2.638 ms] ZK Commit start
+[INFO][+  114.708 ms] ZK Commitment done
+[INFO][+    0.013 ms] ZK Commit start
+[INFO][+  119.373 ms] ZK Commitment done
+[INFO][+    0.013 ms] commit created. h[nl:20, ni:104230], s[nl:21, ni:3739] hc[b:474 r:307] sc[b:455 r:19]
+[INFO][+  522.207 ms] ZK sumcheck done
+[INFO][+    2.173 ms] ZK constraints done
+[INFO][+    6.384 ms] Prover Done: flag
+[INFO][+    0.023 ms] ZK hash proof done
+[INFO][+  253.873 ms] ZK sumcheck done
+[INFO][+    1.554 ms] ZK constraints done
+[INFO][+   24.408 ms] Prover Done: flag
+[INFO][+    0.020 ms] ZK signature proof done
+[INFO][+    6.578 ms] com:32, sc:19968, com_proof:152568 [948 el, 40524 el, 512 d in 307 rows]: 172568b
+[INFO][+    0.146 ms] com:32, sc:36032, com_proof:163276 [910 el, 2508 el, 512 d in 19 rows]: 199340b
+[INFO][+    0.001 ms] proof_len: 372004 
+[INFO][+   17.218 ms] bytes len: 119186187
+[INFO][+  232.057 ms] circuit created. h[in:104230 q:20], s[in:3739 q:21]
+[INFO][+    2.618 ms] ZK Commit start
+[INFO][+  114.131 ms] ZK Commitment done
+[INFO][+    0.012 ms] ZK Commit start
+[INFO][+  119.334 ms] ZK Commitment done
+[INFO][+    0.014 ms] commit created. h[nl:20, ni:104230], s[nl:21, ni:3739] hc[b:474 r:307] sc[b:455 r:19]
+[INFO][+  532.106 ms] ZK sumcheck done
+[INFO][+    2.108 ms] ZK constraints done
+[INFO][+    6.231 ms] Prover Done: flag
+[INFO][+    0.025 ms] ZK hash proof done
+[INFO][+  263.186 ms] ZK sumcheck done
+[INFO][+    1.531 ms] ZK constraints done
+[INFO][+   18.075 ms] Prover Done: flag
+[INFO][+    0.022 ms] ZK signature proof done
+[INFO][+    6.643 ms] com:32, sc:19968, com_proof:152472 [948 el, 40524 el, 509 d in 307 rows]: 172472b
+[INFO][+    0.145 ms] com:32, sc:36032, com_proof:163244 [910 el, 2508 el, 511 d in 19 rows]: 199308b
+[INFO][+    0.001 ms] proof_len: 371876 
+[INFO][+   18.249 ms] bytes len: 119186187
+[INFO][+  230.930 ms] circuit created. h[in:104230], s[in:3739]
+[INFO][+    0.073 ms] proof params: h[nl:20, ni:104230], s[nl:21, ni:3739] hc[b:474 r:307] sc[b:455 r:19]
+[INFO][+    2.207 ms] proofs read
+[INFO][+    0.021 ms] verifier: recv commit
+[INFO][+    0.001 ms] verifier: recv commit
+[INFO][+    0.052 ms] verifier: verify
+[INFO][+  231.827 ms] verify done: ok
+[INFO][+    0.014 ms] verifier: verify
+[INFO][+  238.084 ms] verify done: ok
+[INFO][+   17.738 ms] bytes len: 119186187
+[INFO][+  222.646 ms] circuit created. h[in:104230], s[in:3739]
+[INFO][+    0.075 ms] proof params: h[nl:20, ni:104230], s[nl:21, ni:3739] hc[b:474 r:307] sc[b:455 r:19]
+[INFO][+    2.220 ms] proofs read
+[INFO][+    0.023 ms] verifier: recv commit
+[INFO][+    0.001 ms] verifier: recv commit
+[INFO][+    0.053 ms] verifier: verify
+[INFO][+  231.127 ms] verify done: ok
+[INFO][+    0.014 ms] verifier: verify
+[INFO][+  243.809 ms] verify done: ok
+[INFO][+   16.540 ms] bytes len: 119186187
+[INFO][+  225.959 ms] circuit created. h[in:104230], s[in:3739]
+[INFO][+    0.073 ms] proof params: h[nl:20, ni:104230], s[nl:21, ni:3739] hc[b:474 r:307] sc[b:455 r:19]
+[INFO][+    2.234 ms] proofs read
+[INFO][+    0.022 ms] verifier: recv commit
+[INFO][+    0.001 ms] verifier: recv commit
+[INFO][+    0.060 ms] verifier: verify
+[INFO][+  237.769 ms] verify done: ok
+[INFO][+    0.014 ms] verifier: verify
+[INFO][+  234.905 ms] verify done: ok
+[INFO][+   17.042 ms] bytes len: 119186187
+[INFO][+  223.233 ms] circuit created. h[in:104230], s[in:3739]
+[INFO][+    0.079 ms] proof params: h[nl:20, ni:104230], s[nl:21, ni:3739] hc[b:474 r:307] sc[b:455 r:19]
+[INFO][+    2.265 ms] proofs read
+[INFO][+    0.022 ms] verifier: recv commit
+[INFO][+    0.001 ms] verifier: recv commit
+[INFO][+    0.051 ms] verifier: verify
+[INFO][+  229.296 ms] verify done: ok
+[INFO][+    0.014 ms] verifier: verify
+[INFO][+  241.560 ms] verify done: ok
+[INFO][+   16.846 ms] bytes len: 119186187
+[INFO][+  218.206 ms] circuit created. h[in:104230], s[in:3739]
+[INFO][+    0.073 ms] proof params: h[nl:20, ni:104230], s[nl:21, ni:3739] hc[b:474 r:307] sc[b:455 r:19]
+[INFO][+    2.258 ms] proofs read
+[INFO][+    0.027 ms] verifier: recv commit
+[INFO][+    0.001 ms] verifier: recv commit
+[INFO][+    0.053 ms] verifier: verify
+[INFO][+  223.851 ms] verify done: ok
+[INFO][+    0.014 ms] verifier: verify
+[INFO][+  231.606 ms] verify done: ok
+[ZK] 2-attribute done.
+[ZK] Benchmarking 3-attribute circuit...
+  circuit generate (5 iterations)...
+[INFO][+  636.914 ms] Compiled circuit: sig
+[INFO][+    0.015 ms]  depth: 22 wires: 223876 in: 3739 out:90 use:166479 ovh:57397 t:481833 cse:26852 notn:353423
+[INFO][+  168.424 ms] sig bytes: 5834530 id:2845210af05740e6e3e054762f9e35ff5fc4fb23088716e369f7cf73eb61df2d
+[INFO][+13711.978 ms] Compiled circuit: hash
+[INFO][+    0.016 ms]  depth: 21 wires: 4399512 in: 109134 out:3 use:4135567 ovh:263945 t:9891940 cse:9513644 notn:8034529
+[INFO][+ 2165.891 ms] hash bytes:124545375 id:1a99813232f5e5b1ab32e28e96ceee5ad0138a9ce462c7f08d12739b2fcf9265
+[INFO][+ 1741.269 ms] zstd from 124545375 --> 365238
+[INFO][+  626.286 ms] Compiled circuit: sig
+[INFO][+    0.020 ms]  depth: 22 wires: 223876 in: 3739 out:90 use:166479 ovh:57397 t:481833 cse:26852 notn:353423
+[INFO][+  164.876 ms] sig bytes: 5834530 id:2845210af05740e6e3e054762f9e35ff5fc4fb23088716e369f7cf73eb61df2d
+[INFO][+13588.459 ms] Compiled circuit: hash
+[INFO][+    0.016 ms]  depth: 21 wires: 4399512 in: 109134 out:3 use:4135567 ovh:263945 t:9891940 cse:9513644 notn:8034529
+[INFO][+ 2119.218 ms] hash bytes:124545375 id:1a99813232f5e5b1ab32e28e96ceee5ad0138a9ce462c7f08d12739b2fcf9265
+[INFO][+ 1742.781 ms] zstd from 124545375 --> 365238
+[INFO][+  627.344 ms] Compiled circuit: sig
+[INFO][+    0.014 ms]  depth: 22 wires: 223876 in: 3739 out:90 use:166479 ovh:57397 t:481833 cse:26852 notn:353423
+[INFO][+  167.862 ms] sig bytes: 5834530 id:2845210af05740e6e3e054762f9e35ff5fc4fb23088716e369f7cf73eb61df2d
+[INFO][+13983.503 ms] Compiled circuit: hash
+[INFO][+    0.018 ms]  depth: 21 wires: 4399512 in: 109134 out:3 use:4135567 ovh:263945 t:9891940 cse:9513644 notn:8034529
+[INFO][+ 2180.927 ms] hash bytes:124545375 id:1a99813232f5e5b1ab32e28e96ceee5ad0138a9ce462c7f08d12739b2fcf9265
+[INFO][+ 1778.456 ms] zstd from 124545375 --> 365238
+[INFO][+  642.009 ms] Compiled circuit: sig
+[INFO][+    0.014 ms]  depth: 22 wires: 223876 in: 3739 out:90 use:166479 ovh:57397 t:481833 cse:26852 notn:353423
+[INFO][+  189.677 ms] sig bytes: 5834530 id:2845210af05740e6e3e054762f9e35ff5fc4fb23088716e369f7cf73eb61df2d
+[INFO][+14565.340 ms] Compiled circuit: hash
+[INFO][+    0.011 ms]  depth: 21 wires: 4399512 in: 109134 out:3 use:4135567 ovh:263945 t:9891940 cse:9513644 notn:8034529
+[INFO][+ 2454.404 ms] hash bytes:124545375 id:1a99813232f5e5b1ab32e28e96ceee5ad0138a9ce462c7f08d12739b2fcf9265
+[INFO][+ 1848.493 ms] zstd from 124545375 --> 365238
+[INFO][+  711.309 ms] Compiled circuit: sig
+[INFO][+    0.011 ms]  depth: 22 wires: 223876 in: 3739 out:90 use:166479 ovh:57397 t:481833 cse:26852 notn:353423
+[INFO][+  169.503 ms] sig bytes: 5834530 id:2845210af05740e6e3e054762f9e35ff5fc4fb23088716e369f7cf73eb61df2d
+[INFO][+14874.924 ms] Compiled circuit: hash
+[INFO][+    0.020 ms]  depth: 21 wires: 4399512 in: 109134 out:3 use:4135567 ovh:263945 t:9891940 cse:9513644 notn:8034529
+[INFO][+ 2333.600 ms] hash bytes:124545375 id:1a99813232f5e5b1ab32e28e96ceee5ad0138a9ce462c7f08d12739b2fcf9265
+[INFO][+ 1779.234 ms] zstd from 124545375 --> 365238
+  circuit load (5 iterations)...
+  prove + verify (5 iterations each)...
+[INFO][+   87.594 ms] bytes len: 124545375
+[INFO][+  219.873 ms] circuit created. h[in:109134 q:20], s[in:3739 q:21]
+[INFO][+   11.189 ms] ZK Commit start
+[INFO][+  126.035 ms] ZK Commitment done
+[INFO][+    0.022 ms] ZK Commit start
+[INFO][+  124.204 ms] ZK Commitment done
+[INFO][+    0.014 ms] commit created. h[nl:20, ni:109134], s[nl:21, ni:3739] hc[b:478 r:316] sc[b:455 r:19]
+[INFO][+  588.126 ms] ZK sumcheck done
+[INFO][+    2.303 ms] ZK constraints done
+[INFO][+    6.331 ms] Prover Done: flag
+[INFO][+    0.029 ms] ZK hash proof done
+[INFO][+  260.379 ms] ZK sumcheck done
+[INFO][+    1.561 ms] ZK constraints done
+[INFO][+   17.455 ms] Prover Done: flag
+[INFO][+    0.020 ms] ZK signature proof done
+[INFO][+    6.760 ms] com:32, sc:20096, com_proof:156472 [956 el, 41712 el, 494 d in 316 rows]: 176600b
+[INFO][+    0.151 ms] com:32, sc:36032, com_proof:162572 [910 el, 2508 el, 490 d in 19 rows]: 198636b
+[INFO][+    0.003 ms] proof_len: 375332 
+[INFO][+   70.110 ms] bytes len: 124545375
+[INFO][+  235.615 ms] circuit created. h[in:109134 q:20], s[in:3739 q:21]
+[INFO][+   10.356 ms] ZK Commit start
+[INFO][+  118.211 ms] ZK Commitment done
+[INFO][+    0.013 ms] ZK Commit start
+[INFO][+  119.816 ms] ZK Commitment done
+[INFO][+    0.014 ms] commit created. h[nl:20, ni:109134], s[nl:21, ni:3739] hc[b:478 r:316] sc[b:455 r:19]
+[INFO][+  551.000 ms] ZK sumcheck done
+[INFO][+    2.193 ms] ZK constraints done
+[INFO][+    5.948 ms] Prover Done: flag
+[INFO][+    0.022 ms] ZK hash proof done
+[INFO][+  250.987 ms] ZK sumcheck done
+[INFO][+    1.980 ms] ZK constraints done
+[INFO][+   17.752 ms] Prover Done: flag
+[INFO][+    0.021 ms] ZK signature proof done
+[INFO][+    6.797 ms] com:32, sc:20096, com_proof:157304 [956 el, 41712 el, 520 d in 316 rows]: 177432b
+[INFO][+    0.149 ms] com:32, sc:36032, com_proof:162956 [910 el, 2508 el, 502 d in 19 rows]: 199020b
+[INFO][+    0.002 ms] proof_len: 376548 
+[INFO][+   67.506 ms] bytes len: 124545375
+[INFO][+  236.779 ms] circuit created. h[in:109134 q:20], s[in:3739 q:21]
+[INFO][+    9.617 ms] ZK Commit start
+[INFO][+  120.860 ms] ZK Commitment done
+[INFO][+    0.016 ms] ZK Commit start
+[INFO][+  120.763 ms] ZK Commitment done
+[INFO][+    0.014 ms] commit created. h[nl:20, ni:109134], s[nl:21, ni:3739] hc[b:478 r:316] sc[b:455 r:19]
+[INFO][+  620.719 ms] ZK sumcheck done
+[INFO][+    2.265 ms] ZK constraints done
+[INFO][+    5.853 ms] Prover Done: flag
+[INFO][+    0.019 ms] ZK hash proof done
+[INFO][+  261.743 ms] ZK sumcheck done
+[INFO][+    1.526 ms] ZK constraints done
+[INFO][+   17.303 ms] Prover Done: flag
+[INFO][+    0.020 ms] ZK signature proof done
+[INFO][+    6.753 ms] com:32, sc:20096, com_proof:156760 [956 el, 41712 el, 503 d in 316 rows]: 176888b
+[INFO][+    0.146 ms] com:32, sc:36032, com_proof:162636 [910 el, 2508 el, 492 d in 19 rows]: 198700b
+[INFO][+    0.002 ms] proof_len: 375684 
+[INFO][+   73.290 ms] bytes len: 124545375
+[INFO][+  254.884 ms] circuit created. h[in:109134 q:20], s[in:3739 q:21]
+[INFO][+    9.868 ms] ZK Commit start
+[INFO][+  123.806 ms] ZK Commitment done
+[INFO][+    0.014 ms] ZK Commit start
+[INFO][+  124.301 ms] ZK Commitment done
+[INFO][+    0.018 ms] commit created. h[nl:20, ni:109134], s[nl:21, ni:3739] hc[b:478 r:316] sc[b:455 r:19]
+[INFO][+  595.876 ms] ZK sumcheck done
+[INFO][+    3.633 ms] ZK constraints done
+[INFO][+    7.035 ms] Prover Done: flag
+[INFO][+    0.030 ms] ZK hash proof done
+[INFO][+  261.728 ms] ZK sumcheck done
+[INFO][+    1.532 ms] ZK constraints done
+[INFO][+   17.277 ms] Prover Done: flag
+[INFO][+    0.020 ms] ZK signature proof done
+[INFO][+    6.781 ms] com:32, sc:20096, com_proof:157240 [956 el, 41712 el, 518 d in 316 rows]: 177368b
+[INFO][+    0.145 ms] com:32, sc:36032, com_proof:163052 [910 el, 2508 el, 505 d in 19 rows]: 199116b
+[INFO][+    0.002 ms] proof_len: 376580 
+[INFO][+   67.843 ms] bytes len: 124545375
+[INFO][+  237.709 ms] circuit created. h[in:109134 q:20], s[in:3739 q:21]
+[INFO][+    8.644 ms] ZK Commit start
+[INFO][+  122.137 ms] ZK Commitment done
+[INFO][+    0.017 ms] ZK Commit start
+[INFO][+  118.449 ms] ZK Commitment done
+[INFO][+    0.018 ms] commit created. h[nl:20, ni:109134], s[nl:21, ni:3739] hc[b:478 r:316] sc[b:455 r:19]
+[INFO][+  580.324 ms] ZK sumcheck done
+[INFO][+    3.112 ms] ZK constraints done
+[INFO][+    5.815 ms] Prover Done: flag
+[INFO][+    0.019 ms] ZK hash proof done
+[INFO][+  251.485 ms] ZK sumcheck done
+[INFO][+    1.528 ms] ZK constraints done
+[INFO][+   17.716 ms] Prover Done: flag
+[INFO][+    0.019 ms] ZK signature proof done
+[INFO][+    6.868 ms] com:32, sc:20096, com_proof:157176 [956 el, 41712 el, 516 d in 316 rows]: 177304b
+[INFO][+    0.209 ms] com:32, sc:36032, com_proof:163052 [910 el, 2508 el, 505 d in 19 rows]: 199116b
+[INFO][+    0.004 ms] proof_len: 376516 
+[INFO][+   66.535 ms] bytes len: 124545375
+[INFO][+  243.011 ms] circuit created. h[in:109134], s[in:3739]
+[INFO][+    0.073 ms] proof params: h[nl:20, ni:109134], s[nl:21, ni:3739] hc[b:478 r:316] sc[b:455 r:19]
+[INFO][+    2.528 ms] proofs read
+[INFO][+    0.027 ms] verifier: recv commit
+[INFO][+    0.001 ms] verifier: recv commit
+[INFO][+    0.053 ms] verifier: verify
+[INFO][+  238.204 ms] verify done: ok
+[INFO][+    0.014 ms] verifier: verify
+[INFO][+  242.861 ms] verify done: ok
+[INFO][+   72.112 ms] bytes len: 124545375
+[INFO][+  249.026 ms] circuit created. h[in:109134], s[in:3739]
+[INFO][+    0.080 ms] proof params: h[nl:20, ni:109134], s[nl:21, ni:3739] hc[b:478 r:316] sc[b:455 r:19]
+[INFO][+    2.644 ms] proofs read
+[INFO][+    0.034 ms] verifier: recv commit
+[INFO][+    0.002 ms] verifier: recv commit
+[INFO][+    0.056 ms] verifier: verify
+[INFO][+  294.293 ms] verify done: ok
+[INFO][+    0.011 ms] verifier: verify
+[INFO][+  259.294 ms] verify done: ok
+[INFO][+   72.889 ms] bytes len: 124545375
+[INFO][+  232.730 ms] circuit created. h[in:109134], s[in:3739]
+[INFO][+    0.074 ms] proof params: h[nl:20, ni:109134], s[nl:21, ni:3739] hc[b:478 r:316] sc[b:455 r:19]
+[INFO][+    2.274 ms] proofs read
+[INFO][+    0.022 ms] verifier: recv commit
+[INFO][+    0.001 ms] verifier: recv commit
+[INFO][+    0.054 ms] verifier: verify
+[INFO][+  244.251 ms] verify done: ok
+[INFO][+    0.015 ms] verifier: verify
+[INFO][+  239.194 ms] verify done: ok
+[INFO][+   76.229 ms] bytes len: 124545375
+[INFO][+  225.302 ms] circuit created. h[in:109134], s[in:3739]
+[INFO][+    0.076 ms] proof params: h[nl:20, ni:109134], s[nl:21, ni:3739] hc[b:478 r:316] sc[b:455 r:19]
+[INFO][+    2.283 ms] proofs read
+[INFO][+    0.023 ms] verifier: recv commit
+[INFO][+    0.002 ms] verifier: recv commit
+[INFO][+    0.057 ms] verifier: verify
+[INFO][+  233.913 ms] verify done: ok
+[INFO][+    0.015 ms] verifier: verify
+[INFO][+  234.465 ms] verify done: ok
+[INFO][+   72.159 ms] bytes len: 124545375
+[INFO][+  226.028 ms] circuit created. h[in:109134], s[in:3739]
+[INFO][+    0.075 ms] proof params: h[nl:20, ni:109134], s[nl:21, ni:3739] hc[b:478 r:316] sc[b:455 r:19]
+[INFO][+    2.291 ms] proofs read
+[INFO][+    0.028 ms] verifier: recv commit
+[INFO][+    0.001 ms] verifier: recv commit
+[INFO][+    0.056 ms] verifier: verify
+[INFO][+  244.344 ms] verify done: ok
+[INFO][+    0.018 ms] verifier: verify
+[INFO][+  236.055 ms] verify done: ok
+[ZK] 3-attribute done.
+[ZK] Benchmarking 4-attribute circuit...
+  circuit generate (5 iterations)...
+[INFO][+  730.221 ms] Compiled circuit: sig
+[INFO][+    0.018 ms]  depth: 22 wires: 223876 in: 3739 out:90 use:166479 ovh:57397 t:481833 cse:26852 notn:353423
+[INFO][+  174.339 ms] sig bytes: 5834530 id:2845210af05740e6e3e054762f9e35ff5fc4fb23088716e369f7cf73eb61df2d
+[INFO][+15664.632 ms] Compiled circuit: hash
+[INFO][+    0.018 ms]  depth: 21 wires: 4594611 in: 114038 out:4 use:4312073 ovh:282538 t:10338539 cse:9877278 notn:8480483
+[INFO][+ 2387.253 ms] hash bytes:129904563 id:1c1cfc92b61da57c3d981c22a2539f72726230a152c91987024aa875e8463d2e
+[INFO][+ 1949.587 ms] zstd from 129904563 --> 384028
+[INFO][+  658.046 ms] Compiled circuit: sig
+[INFO][+    0.014 ms]  depth: 22 wires: 223876 in: 3739 out:90 use:166479 ovh:57397 t:481833 cse:26852 notn:353423
+[INFO][+  169.974 ms] sig bytes: 5834530 id:2845210af05740e6e3e054762f9e35ff5fc4fb23088716e369f7cf73eb61df2d
+[INFO][+15976.695 ms] Compiled circuit: hash
+[INFO][+    0.016 ms]  depth: 21 wires: 4594611 in: 114038 out:4 use:4312073 ovh:282538 t:10338539 cse:9877278 notn:8480483
+[INFO][+ 2220.663 ms] hash bytes:129904563 id:1c1cfc92b61da57c3d981c22a2539f72726230a152c91987024aa875e8463d2e
+[INFO][+ 1711.299 ms] zstd from 129904563 --> 384028
+[INFO][+  612.525 ms] Compiled circuit: sig
+[INFO][+    0.013 ms]  depth: 22 wires: 223876 in: 3739 out:90 use:166479 ovh:57397 t:481833 cse:26852 notn:353423
+[INFO][+  161.163 ms] sig bytes: 5834530 id:2845210af05740e6e3e054762f9e35ff5fc4fb23088716e369f7cf73eb61df2d
+[INFO][+14078.866 ms] Compiled circuit: hash
+[INFO][+    0.018 ms]  depth: 21 wires: 4594611 in: 114038 out:4 use:4312073 ovh:282538 t:10338539 cse:9877278 notn:8480483
+[INFO][+ 2290.203 ms] hash bytes:129904563 id:1c1cfc92b61da57c3d981c22a2539f72726230a152c91987024aa875e8463d2e
+[INFO][+ 1784.683 ms] zstd from 129904563 --> 384028
+[INFO][+  636.458 ms] Compiled circuit: sig
+[INFO][+    0.013 ms]  depth: 22 wires: 223876 in: 3739 out:90 use:166479 ovh:57397 t:481833 cse:26852 notn:353423
+[INFO][+  168.502 ms] sig bytes: 5834530 id:2845210af05740e6e3e054762f9e35ff5fc4fb23088716e369f7cf73eb61df2d
+[INFO][+13902.388 ms] Compiled circuit: hash
+[INFO][+    0.017 ms]  depth: 21 wires: 4594611 in: 114038 out:4 use:4312073 ovh:282538 t:10338539 cse:9877278 notn:8480483
+[INFO][+ 2238.467 ms] hash bytes:129904563 id:1c1cfc92b61da57c3d981c22a2539f72726230a152c91987024aa875e8463d2e
+[INFO][+ 1737.263 ms] zstd from 129904563 --> 384028
+[INFO][+  632.601 ms] Compiled circuit: sig
+[INFO][+    0.014 ms]  depth: 22 wires: 223876 in: 3739 out:90 use:166479 ovh:57397 t:481833 cse:26852 notn:353423
+[INFO][+  164.243 ms] sig bytes: 5834530 id:2845210af05740e6e3e054762f9e35ff5fc4fb23088716e369f7cf73eb61df2d
+[INFO][+14544.604 ms] Compiled circuit: hash
+[INFO][+    0.018 ms]  depth: 21 wires: 4594611 in: 114038 out:4 use:4312073 ovh:282538 t:10338539 cse:9877278 notn:8480483
+[INFO][+ 2209.928 ms] hash bytes:129904563 id:1c1cfc92b61da57c3d981c22a2539f72726230a152c91987024aa875e8463d2e
+[INFO][+ 1688.652 ms] zstd from 129904563 --> 384028
+  circuit load (5 iterations)...
+  prove + verify (5 iterations each)...
+[INFO][+   32.579 ms] bytes len: 129904563
+[INFO][+  235.757 ms] circuit created. h[in:114038 q:20], s[in:3739 q:21]
+[INFO][+    2.710 ms] ZK Commit start
+[INFO][+  117.758 ms] ZK Commitment done
+[INFO][+    0.014 ms] ZK Commit start
+[INFO][+  115.310 ms] ZK Commitment done
+[INFO][+    0.014 ms] commit created. h[nl:20, ni:114038], s[nl:21, ni:3739] hc[b:490 r:317] sc[b:455 r:19]
+[INFO][+  553.070 ms] ZK sumcheck done
+[INFO][+    2.302 ms] ZK constraints done
+[INFO][+    5.993 ms] Prover Done: flag
+[INFO][+    0.016 ms] ZK hash proof done
+[INFO][+  244.307 ms] ZK sumcheck done
+[INFO][+    1.521 ms] ZK constraints done
+[INFO][+   23.506 ms] Prover Done: flag
+[INFO][+    0.014 ms] ZK signature proof done
+[INFO][+    6.781 ms] com:32, sc:20224, com_proof:158560 [980 el, 41844 el, 527 d in 317 rows]: 178816b
+[INFO][+    0.141 ms] com:32, sc:36032, com_proof:162828 [910 el, 2508 el, 498 d in 19 rows]: 198892b
+[INFO][+    0.002 ms] proof_len: 377804 
+[INFO][+   15.960 ms] bytes len: 129904563
+[INFO][+  221.279 ms] circuit created. h[in:114038 q:20], s[in:3739 q:21]
+[INFO][+    2.762 ms] ZK Commit start
+[INFO][+  116.786 ms] ZK Commitment done
+[INFO][+    0.015 ms] ZK Commit start
+[INFO][+  115.458 ms] ZK Commitment done
+[INFO][+    0.013 ms] commit created. h[nl:20, ni:114038], s[nl:21, ni:3739] hc[b:490 r:317] sc[b:455 r:19]
+[INFO][+  549.705 ms] ZK sumcheck done
+[INFO][+    2.229 ms] ZK constraints done
+[INFO][+    5.869 ms] Prover Done: flag
+[INFO][+    0.017 ms] ZK hash proof done
+[INFO][+  235.354 ms] ZK sumcheck done
+[INFO][+    1.535 ms] ZK constraints done
+[INFO][+   17.084 ms] Prover Done: flag
+[INFO][+    0.014 ms] ZK signature proof done
+[INFO][+    6.771 ms] com:32, sc:20224, com_proof:157984 [980 el, 41844 el, 509 d in 317 rows]: 178240b
+[INFO][+    0.140 ms] com:32, sc:36032, com_proof:162668 [910 el, 2508 el, 493 d in 19 rows]: 198732b
+[INFO][+    0.002 ms] proof_len: 377068 
+[INFO][+   16.089 ms] bytes len: 129904563
+[INFO][+  223.607 ms] circuit created. h[in:114038 q:20], s[in:3739 q:21]
+[INFO][+    2.716 ms] ZK Commit start
+[INFO][+  118.368 ms] ZK Commitment done
+[INFO][+    0.015 ms] ZK Commit start
+[INFO][+  115.956 ms] ZK Commitment done
+[INFO][+    0.017 ms] commit created. h[nl:20, ni:114038], s[nl:21, ni:3739] hc[b:490 r:317] sc[b:455 r:19]
+[INFO][+  572.786 ms] ZK sumcheck done
+[INFO][+    2.268 ms] ZK constraints done
+[INFO][+    5.845 ms] Prover Done: flag
+[INFO][+    0.019 ms] ZK hash proof done
+[INFO][+  241.554 ms] ZK sumcheck done
+[INFO][+    1.521 ms] ZK constraints done
+[INFO][+   17.202 ms] Prover Done: flag
+[INFO][+    0.015 ms] ZK signature proof done
+[INFO][+    7.182 ms] com:32, sc:20224, com_proof:158016 [980 el, 41844 el, 510 d in 317 rows]: 178272b
+[INFO][+    0.142 ms] com:32, sc:36032, com_proof:163116 [910 el, 2508 el, 507 d in 19 rows]: 199180b
+[INFO][+    0.001 ms] proof_len: 377548 
+[INFO][+   16.026 ms] bytes len: 129904563
+[INFO][+  233.122 ms] circuit created. h[in:114038 q:20], s[in:3739 q:21]
+[INFO][+    2.715 ms] ZK Commit start
+[INFO][+  117.987 ms] ZK Commitment done
+[INFO][+    0.013 ms] ZK Commit start
+[INFO][+  116.344 ms] ZK Commitment done
+[INFO][+    0.013 ms] commit created. h[nl:20, ni:114038], s[nl:21, ni:3739] hc[b:490 r:317] sc[b:455 r:19]
+[INFO][+  556.948 ms] ZK sumcheck done
+[INFO][+    2.234 ms] ZK constraints done
+[INFO][+    6.067 ms] Prover Done: flag
+[INFO][+    0.017 ms] ZK hash proof done
+[INFO][+  246.083 ms] ZK sumcheck done
+[INFO][+    1.519 ms] ZK constraints done
+[INFO][+   17.427 ms] Prover Done: flag
+[INFO][+    0.013 ms] ZK signature proof done
+[INFO][+    7.242 ms] com:32, sc:20224, com_proof:158304 [980 el, 41844 el, 519 d in 317 rows]: 178560b
+[INFO][+    0.143 ms] com:32, sc:36032, com_proof:163276 [910 el, 2508 el, 512 d in 19 rows]: 199340b
+[INFO][+    0.001 ms] proof_len: 377996 
+[INFO][+   16.236 ms] bytes len: 129904563
+[INFO][+  232.188 ms] circuit created. h[in:114038 q:20], s[in:3739 q:21]
+[INFO][+    2.934 ms] ZK Commit start
+[INFO][+  116.473 ms] ZK Commitment done
+[INFO][+    0.013 ms] ZK Commit start
+[INFO][+  119.002 ms] ZK Commitment done
+[INFO][+    0.014 ms] commit created. h[nl:20, ni:114038], s[nl:21, ni:3739] hc[b:490 r:317] sc[b:455 r:19]
+[INFO][+  553.700 ms] ZK sumcheck done
+[INFO][+    2.265 ms] ZK constraints done
+[INFO][+    8.647 ms] Prover Done: flag
+[INFO][+    0.015 ms] ZK hash proof done
+[INFO][+  266.013 ms] ZK sumcheck done
+[INFO][+    1.540 ms] ZK constraints done
+[INFO][+   17.448 ms] Prover Done: flag
+[INFO][+    0.021 ms] ZK signature proof done
+[INFO][+    6.900 ms] com:32, sc:20224, com_proof:158176 [980 el, 41844 el, 515 d in 317 rows]: 178432b
+[INFO][+    0.154 ms] com:32, sc:36032, com_proof:163180 [910 el, 2508 el, 509 d in 19 rows]: 199244b
+[INFO][+    0.003 ms] proof_len: 377772 
+[INFO][+   17.156 ms] bytes len: 129904563
+[INFO][+  232.076 ms] circuit created. h[in:114038], s[in:3739]
+[INFO][+    0.073 ms] proof params: h[nl:20, ni:114038], s[nl:21, ni:3739] hc[b:490 r:317] sc[b:455 r:19]
+[INFO][+    2.376 ms] proofs read
+[INFO][+    0.025 ms] verifier: recv commit
+[INFO][+    0.001 ms] verifier: recv commit
+[INFO][+    0.055 ms] verifier: verify
+[INFO][+  244.831 ms] verify done: ok
+[INFO][+    0.015 ms] verifier: verify
+[INFO][+  227.125 ms] verify done: ok
+[INFO][+   15.955 ms] bytes len: 129904563
+[INFO][+  226.206 ms] circuit created. h[in:114038], s[in:3739]
+[INFO][+    0.080 ms] proof params: h[nl:20, ni:114038], s[nl:21, ni:3739] hc[b:490 r:317] sc[b:455 r:19]
+[INFO][+    2.260 ms] proofs read
+[INFO][+    0.021 ms] verifier: recv commit
+[INFO][+    0.002 ms] verifier: recv commit
+[INFO][+    0.056 ms] verifier: verify
+[INFO][+  235.176 ms] verify done: ok
+[INFO][+    0.014 ms] verifier: verify
+[INFO][+  229.332 ms] verify done: ok
+[INFO][+   16.625 ms] bytes len: 129904563
+[INFO][+  228.233 ms] circuit created. h[in:114038], s[in:3739]
+[INFO][+    0.075 ms] proof params: h[nl:20, ni:114038], s[nl:21, ni:3739] hc[b:490 r:317] sc[b:455 r:19]
+[INFO][+    2.287 ms] proofs read
+[INFO][+    0.022 ms] verifier: recv commit
+[INFO][+    0.001 ms] verifier: recv commit
+[INFO][+    0.055 ms] verifier: verify
+[INFO][+  236.357 ms] verify done: ok
+[INFO][+    0.014 ms] verifier: verify
+[INFO][+  232.040 ms] verify done: ok
+[INFO][+   15.964 ms] bytes len: 129904563
+[INFO][+  229.682 ms] circuit created. h[in:114038], s[in:3739]
+[INFO][+    0.075 ms] proof params: h[nl:20, ni:114038], s[nl:21, ni:3739] hc[b:490 r:317] sc[b:455 r:19]
+[INFO][+    2.279 ms] proofs read
+[INFO][+    0.021 ms] verifier: recv commit
+[INFO][+    0.001 ms] verifier: recv commit
+[INFO][+    0.055 ms] verifier: verify
+[INFO][+  237.725 ms] verify done: ok
+[INFO][+    0.014 ms] verifier: verify
+[INFO][+  227.690 ms] verify done: ok
+[INFO][+   15.904 ms] bytes len: 129904563
+[INFO][+  231.921 ms] circuit created. h[in:114038], s[in:3739]
+[INFO][+    0.076 ms] proof params: h[nl:20, ni:114038], s[nl:21, ni:3739] hc[b:490 r:317] sc[b:455 r:19]
+[INFO][+    2.265 ms] proofs read
+[INFO][+    0.020 ms] verifier: recv commit
+[INFO][+    0.001 ms] verifier: recv commit
+[INFO][+    0.055 ms] verifier: verify
+[INFO][+  237.849 ms] verify done: ok
+[INFO][+    0.016 ms] verifier: verify
+[INFO][+  231.122 ms] verify done: ok
+[ZK] 4-attribute done.
+Running escrow pipeline benchmark...
+  ML-KEM-768 keygen (5 iterations)...
+  field encoding (5 iterations)...
+  AES-256-GCM encrypt (5 iterations)...
+  ML-KEM encrypt K (5 iterations)...
+  ML-KEM decrypt K (5 iterations)...
+  AES-256-GCM decrypt (5 iterations)...
