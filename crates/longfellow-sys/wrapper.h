@@ -134,6 +134,16 @@ typedef enum {
   P7S_MEMORY_FAILURE = 5,
 } P7sErrorCode;
 
-// Scaffolding stubs — replaced with real prove/verify signatures as invariants land.
-extern int p7s_prove_stub(void);
-extern int p7s_verify_stub(void);
+// Phase 2a Task 1a hello-world circuit: declares context_hash[32] as a
+// public input and asserts it equals itself. Exercises the full FFI +
+// prove/verify loop without depending on the SHA-256 gadget (which lands
+// in Task 1b). Proof bytes are opaque; caller must free via p7s_free_proof.
+extern P7sErrorCode p7s_prove(
+    const uint8_t context_hash[32],
+    uint8_t** proof_out, unsigned long* proof_len_out);
+
+extern P7sErrorCode p7s_verify(
+    const uint8_t context_hash[32],
+    const uint8_t* proof, unsigned long proof_len);
+
+extern void p7s_free_proof(uint8_t* proof);
