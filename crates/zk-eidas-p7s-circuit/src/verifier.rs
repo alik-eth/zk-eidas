@@ -1,13 +1,19 @@
 //! Proof verification + public-input blob builder.
 //!
-//! Public blob v7 layout (see schema history in `witness.rs`). The public
-//! side is structurally identical to v3 — Tasks 22, 23, 24, and 25a don't
-//! add public inputs. The version byte still bumps so proofs minted
-//! under distinct circuits aren't interchangeable.
-//!   u32 version = 7
+//! Public blob v8 layout (see schema history in `witness.rs`). The public
+//! side is structurally identical to v3 — Tasks 22–25a and 29 don't add
+//! public inputs. The version byte still bumps so proofs minted under
+//! distinct circuits aren't interchangeable.
+//!   u32 version = 8
 //!   u8  context_hash[32]
 //!   u8  pk[65]
 //!   u8  nonce[32]
+//!
+//! Note: the DIIA QTSP 2311 root pubkey used by invariant 1 is a
+//! compile-time constant in the C++ circuit — it is NOT part of the
+//! public blob. The `root_pk` field on `PublicInputs` is retained for
+//! type-system continuity with callers that still populate it, but
+//! `to_ffi_bytes()` ignores it.
 
 use crate::{
     witness::{NONCE_BYTES, PK_BYTES, SCHEMA_VERSION},

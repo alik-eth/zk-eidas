@@ -44,12 +44,23 @@
 //!   v7 (Task 25a) — no blob schema change. The circuit splits into a
 //!     hash circuit (GF(2^128)) and a sig circuit (Fp256Base) linked
 //!     by a MAC gadget bound to a compile-time sentinel, but the
-//!     witness/public blob layouts are identical to v6. The version
-//!     byte still bumps so proofs minted under the v6 circuit cannot
-//!     be misinterpreted as v7 proofs (transcript seeds also bump
-//!     from "p7s-24" to "p7s-25-hash" / "p7s-25-sig" for the same
-//!     reason).
+//!     witness/public blob layouts are identical to v6. Transcript
+//!     seed bumps to "p7s-25-hash" for the same cross-version safety
+//!     reason.
+//!
+//!   v8 (Task 29) — invariant 1: real ECDSA verification against the
+//!     hardcoded DIIA QTSP 2311 root pubkey, MAC-bound to
+//!     `e = SHA-256(cert_tbs)`. Witness blob extends v7 with:
+//!     `u32 cert_tbs_len` (in [0, 2039]), `u8 cert_tbs[2048]` (raw +
+//!     zero pad; filler SHA-pads 32 blocks), `u8 cert_sig_r[32]`
+//!     (big-endian scalar, DER-parsed in Rust), `u8 cert_sig_s[32]`.
+//!     Public blob layout unchanged from v7. The DIIA root pubkey is
+//!     a compile-time constant baked into the C++ circuit; it is NOT
+//!     part of the public blob. The `PublicInputs.root_pk` field is
+//!     retained for type-system continuity but is not serialized.
+//!     Transcript seed bumps to "p7s-29-hash".
 
+use p256::ecdsa::Signature;
 use sha2::{Digest, Sha256};
 
 use zk_eidas_p7s::P7sWitness;
@@ -58,7 +69,7 @@ use crate::CircuitError;
 
 /// Keep in sync with C++ constants in `p7s_circuit.h` and
 /// `sub/declaration_whitelist.h`.
-pub const SCHEMA_VERSION: u32 = 7;
+pub const SCHEMA_VERSION: u32 = 8;
 pub const MAX_CONTEXT: usize = 32;
 pub const MAX_SIGNED_CONTENT: usize = 1024;
 pub const PK_HEX_LEN: usize = 130;
@@ -71,6 +82,11 @@ pub const MESSAGE_DIGEST_LEN: usize = 32;
 /// Maximum signed_content length that fits within 16 SHA blocks after
 /// Merkle-Damgård padding: 16 × 64 − 9 = 1015.
 pub const MAX_SIGNED_CONTENT_RAW: usize = 1015;
+
+/// 32 SHA blocks × 64 bytes = 2048. Max raw cert_tbs (accounting for
+/// the 9-byte SHA padding floor) is 2039.
+pub const CERT_TBS_MAX_BYTES: usize = 2048;
+pub const CERT_TBS_MAX_RAW: usize = CERT_TBS_MAX_BYTES - 9;
 
 #[derive(Debug, Clone)]
 pub struct Witness {
@@ -180,9 +196,47 @@ impl Witness {
         // Compute the prover's claimed message_digest = SHA-256(signed_content).
         let message_digest: [u8; MESSAGE_DIGEST_LEN] = Sha256::digest(sc).into();
 
+        // --- cert_tbs + cert_sig extraction (v8) ---
+        let cert_tbs_end = off
+            .cert_tbs_start
+            .checked_add(off.cert_tbs_len)
+            .ok_or_else(|| CircuitError::InvalidWitness(
+                "cert_tbs range overflow".into(),
+            ))?;
+        if cert_tbs_end > self.inner.p7s_bytes.len() {
+            return Err(CircuitError::InvalidWitness(
+                "cert_tbs extends past p7s_bytes".into(),
+            ));
+        }
+        let cert_tbs = &self.inner.p7s_bytes[off.cert_tbs_start..cert_tbs_end];
+        if cert_tbs.len() > CERT_TBS_MAX_RAW {
+            return Err(CircuitError::InvalidWitness(format!(
+                "cert_tbs len {} exceeds CERT_TBS_MAX_RAW {} \
+                 (needs to fit in 32 SHA blocks including 9-byte padding)",
+                cert_tbs.len(),
+                CERT_TBS_MAX_RAW
+            )));
+        }
+
+        // DER-parse cert_sig to get the raw 32-byte scalars (r, s).
+        // `Signature::from_der` normalizes to the fixed-size `r || s`
+        // representation (32 bytes each, big-endian, zero-padded).
+        let cert_sig_der = &self.inner.p7s_bytes
+            [off.cert_sig_start..off.cert_sig_start + off.cert_sig_len];
+        let fixed_sig = Signature::from_der(cert_sig_der).map_err(|e| {
+            CircuitError::InvalidWitness(format!("cert_sig DER parse: {e}"))
+        })?;
+        let sig_bytes = fixed_sig.to_bytes();
+        let (r_slice, s_slice) = sig_bytes.split_at(32);
+        let mut cert_sig_r = [0u8; 32];
+        let mut cert_sig_s = [0u8; 32];
+        cert_sig_r.copy_from_slice(r_slice);
+        cert_sig_s.copy_from_slice(s_slice);
+
         let mut out = Vec::with_capacity(
             4 + 4 + MAX_CONTEXT + 4 + MAX_SIGNED_CONTENT + 4 + PK_HEX_LEN
-                + 4 + NONCE_HEX_LEN + 4 + 4 + MESSAGE_DIGEST_LEN,
+                + 4 + NONCE_HEX_LEN + 4 + 4 + MESSAGE_DIGEST_LEN
+                + 4 + CERT_TBS_MAX_BYTES + 32 + 32,
         );
         out.extend_from_slice(&SCHEMA_VERSION.to_le_bytes());
 
@@ -214,6 +268,14 @@ impl Witness {
 
         // messageDigest = SHA-256(signed_content)
         out.extend_from_slice(&message_digest);
+
+        // --- v8: cert_tbs witness + raw (r, s) ---
+        out.extend_from_slice(&(cert_tbs.len() as u32).to_le_bytes());
+        let mut cert_tbs_padded = [0u8; CERT_TBS_MAX_BYTES];
+        cert_tbs_padded[..cert_tbs.len()].copy_from_slice(cert_tbs);
+        out.extend_from_slice(&cert_tbs_padded);
+        out.extend_from_slice(&cert_sig_r);
+        out.extend_from_slice(&cert_sig_s);
 
         Ok(out)
     }

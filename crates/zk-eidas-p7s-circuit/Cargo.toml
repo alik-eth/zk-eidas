@@ -11,6 +11,7 @@ longfellow-sys = { path = "../longfellow-sys" }
 zk-eidas-p7s = { path = "../zk-eidas-p7s" }
 thiserror = { workspace = true }
 sha2 = "0.10"
+p256 = { version = "0.13", default-features = false, features = ["ecdsa", "std"] }
 
 [dev-dependencies]
 hex = "0.4"
