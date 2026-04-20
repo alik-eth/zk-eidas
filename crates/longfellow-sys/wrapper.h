@@ -123,26 +123,28 @@ extern int longfellow_prove_verify_cached(
     const uint8_t* circuit, unsigned long circuit_len,
     uint8_t** proof_out, unsigned long* proof_len_out);
 
-// --- p7s circuit (Phase 2a, blob protocol v5) ---
+// --- p7s circuit (Phase 2a, blob protocol v6) ---
 //
 // Task 20 switched the ABI from typed C arguments to byte-blobs so
 // additional witness fields can land without per-task churn. Task 21
 // appended nonce fields (v3); Task 22 added json_context_offset (v4);
-// Task 23 adds json_declaration_offset (v5). Both blobs start with a
-// little-endian u32 schema version; the authoritative layout lives in
+// Task 23 added json_declaration_offset (v5); Task 24 adds
+// message_digest (v6). Both blobs start with a little-endian u32
+// schema version; the authoritative layout lives in
 // lib/circuits/p7s/p7s_zk.cc's "schema history" comment.
 //
-// Witness blob v5:
-//   u32 version = 5
+// Witness blob v6:
+//   u32 version = 6
 //   u32 context_len ; u8 context[32]
 //   u32 signed_content_len ; u8 signed_content[1024]
 //   u32 json_pk_offset ; u8 pk_hex[130]
 //   u32 json_nonce_offset ; u8 nonce_hex[64]
 //   u32 json_context_offset
 //   u32 json_declaration_offset
+//   u8 message_digest[32]                 prover-claimed SHA-256(signed_content)
 //
-// Public blob v5 (unchanged from v3):
-//   u32 version = 5
+// Public blob v6 (unchanged from v3):
+//   u32 version = 6
 //   u8 context_hash[32]
 //   u8 pk[65]
 //   u8 nonce[32]

@@ -1,10 +1,10 @@
 //! Proof verification + public-input blob builder.
 //!
-//! Public blob v5 layout (see schema history in `witness.rs`). The public
-//! side is structurally identical to v3 — Tasks 22 and 23 don't add
+//! Public blob v6 layout (see schema history in `witness.rs`). The public
+//! side is structurally identical to v3 — Tasks 22, 23, and 24 don't add
 //! public inputs. The version byte still bumps so proofs minted under
 //! distinct circuits aren't interchangeable.
-//!   u32 version = 5
+//!   u32 version = 6
 //!   u8  context_hash[32]
 //!   u8  pk[65]
 //!   u8  nonce[32]
