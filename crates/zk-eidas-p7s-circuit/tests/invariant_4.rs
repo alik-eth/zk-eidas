@@ -27,11 +27,20 @@ fn expected_pk() -> [u8; 65] {
     out
 }
 
+fn expected_nonce() -> [u8; 32] {
+    let w = build_witness(FIXTURE, b"0x", DUMMY_ROOT_PK).unwrap();
+    let off = &w.offsets;
+    let nonce_hex = &w.p7s_bytes[off.json_nonce_start..off.json_nonce_start + off.json_nonce_len];
+    let mut out = [0u8; 32];
+    hex::decode_to_slice(nonce_hex, &mut out).unwrap();
+    out
+}
+
 fn public_for(pk: [u8; 65], ctx: &[u8]) -> PublicInputs {
     PublicInputs {
         context_hash: Sha256::digest(ctx).into(),
         pk,
-        nonce: [0u8; 32],
+        nonce: expected_nonce(),
         root_pk: [0u8; 65],
         timestamp: 0,
     }
