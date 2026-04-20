@@ -1,0 +1,294 @@
+\section{Background and Preliminaries}\label{sec:background}
+
+This section establishes the regulatory, credential, and cryptographic
+foundations on which \textsc{zk-eidas} is built.  We first review the eIDAS~2.0
+regulation and the EUDI Architecture Reference Framework
+(Section~\ref{sec:bg-eidas}), then survey zero-knowledge proof families and
+their suitability for government-grade deployment
+(Section~\ref{sec:bg-zkp}), and finally present a detailed treatment of the
+Sumcheck protocol and the Ligero commitment scheme that underlie our
+construction (Section~\ref{sec:bg-sumcheck-ligero}).
+
+%% ---------------------------------------------------------------------------
+\subsection{eIDAS~2.0 and the EUDI Architecture Reference Framework}
+\label{sec:bg-eidas}
+
+Regulation~(EU)~2024/1183~\cite{eidas2} amends the original eIDAS framework to
+require every Member State to issue a European Digital Identity Wallet capable
+of storing and presenting two classes of credential: \emph{Person
+Identification Data}~(PID), which encodes the holder's legal identity (name,
+date of birth, nationality, unique identifier); and \emph{Qualified Electronic
+Attestations of Attributes}~(QEAA), which carry domain-specific claims such as
+driving privileges, professional qualifications, or health data.  The EUDI
+Architecture Reference Framework~(ARF)~v1.4~\cite{eudi-arf} translates these
+regulatory mandates into a concrete technical specification for wallet
+implementations, relying-party interfaces, and trust-infrastructure components.
+
+\paragraph{The mdoc credential format.}
+The ARF selects the ISO~18013-5 mobile document~(mdoc) format~\cite{iso18013}
+as one of two credential encodings (the other being SD-JWT).  An mdoc is a
+CBOR-encoded structure whose issuer-signed portion consists of two parts:
+\begin{enumerate}[label=(\roman*)]
+  \item \textbf{IssuerAuth}: a \texttt{COSE\_Sign1} envelope containing the
+        \emph{Mobile Security Object}~(MSO).  The MSO records the digest
+        algorithm (SHA-256), a \texttt{valueDigests} map from namespace and
+        digest identifier to the SHA-256 hash of each claim, the
+        \texttt{docType} string, and a \texttt{validityInfo} structure
+        specifying issuance and expiry dates.  The entire MSO is signed with
+        ECDSA over the P-256 curve.
+  \item \textbf{IssuerSignedItems}: the individual data elements.  Each element
+        is an \texttt{IssuerSignedItem} containing a \texttt{digestID} (linking
+        it to the MSO digest map), a \texttt{random} salt (at least 16~bytes),
+        an \texttt{elementIdentifier} (the claim name), and an
+        \texttt{elementValue} (the claim datum).  The SHA-256 hash of the
+        CBOR-encoded \texttt{IssuerSignedItem} must match the corresponding
+        entry in \texttt{valueDigests}.
+\end{enumerate}
+This design permits \emph{selective release}: a holder may choose which
+\texttt{IssuerSignedItem} elements to transmit, and the verifier can
+independently check each disclosed element against the MSO digest map under
+the issuer's signature.
+
+\paragraph{The privacy problem.}
+Despite selective release, the base mdoc presentation protocol has three
+privacy deficiencies.  First, every element that \emph{is} released arrives as
+plaintext---the verifier (and any downstream processor) learns the exact
+attribute value rather than merely that it satisfies a policy predicate.
+Second, the device key used to sign the session transcript enables the verifier
+to link multiple presentations by the same holder.  Third, the standard
+provides no mechanism for proving derived statements (``the holder is over~18'')
+without revealing the underlying data element (the full date of birth).  These
+gaps motivate a zero-knowledge layer that can operate over the mdoc commitment
+structure without modifying the issuer infrastructure.
+
+%% ---------------------------------------------------------------------------
+\subsection{Zero-Knowledge Proof Systems}\label{sec:bg-zkp}
+
+\begin{definition}[Zero-Knowledge Proof System]\label{def:zkp}
+Let $\mathcal{R} \subseteq \mathcal{X} \times \mathcal{W}$ be a
+polynomial-time decidable relation.  A \emph{zero-knowledge proof system} for
+$\mathcal{R}$ is a pair of probabilistic polynomial-time algorithms
+$(P, V)$ such that:
+\begin{itemize}
+  \item \textbf{Completeness.}  For every $(x, w) \in \mathcal{R}$, the
+        verifier $V(x, \pi)$ accepts with overwhelming probability when
+        $\pi \leftarrow P(x, w)$.
+  \item \textbf{Soundness.}  For every $x \notin \mathcal{L}_\mathcal{R}$
+        and every computationally bounded prover $P^*$, the probability that
+        $V(x, P^*(x)) = 1$ is negligible.
+  \item \textbf{Zero-Knowledge.}  There exists a probabilistic
+        polynomial-time simulator $S$ such that for every $(x, w) \in
+        \mathcal{R}$, the distribution $S(x)$ is computationally
+        indistinguishable from the distribution of $P(x, w)$.
+\end{itemize}
+\end{definition}
+
+\noindent
+A proof system is \emph{transparent} if the setup phase requires no secret
+randomness (and hence no trusted ceremony).  It is \emph{post-quantum secure}
+if its soundness relies on assumptions believed to resist quantum algorithms.
+Table~\ref{tab:zk-families} surveys the main families relevant to credential
+systems.
+
+\begin{table}[t]
+  \centering
+  \caption{Taxonomy of zero-knowledge proof families. PQ = post-quantum secure.}
+  \label{tab:zk-families}
+  \small
+  \setlength{\tabcolsep}{4pt}
+  \begin{tabular}{@{}lllcp{3.5cm}@{}}
+    \toprule
+    Family & Example & Setup & PQ & Core Assumption \\
+    \midrule
+    Pairing-based    & Groth16~\cite{groth16}
+                     & Trusted (per-circuit)  & No
+                     & DLP on BN254 \\
+    Polynomial (KZG) & PLONK~\cite{plonk}
+                     & Trusted (universal)    & No
+                     & DLP on BN254 \\
+    Polynomial (IPA) & Halo~2~\cite{halo2}
+                     & None                   & No
+                     & DLOG on Pasta curves \\
+    Hash-based       & Sumcheck+Ligero~\cite{ligero,sumcheck}
+                     & None                   & Yes
+                     & SHA-256 collision resistance \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\paragraph{Properties for government deployment.}
+For a credential system deployed under eIDAS~2.0, the choice of proof system is
+constrained by considerations beyond raw performance:
+\begin{itemize}
+  \item \textbf{Transparency.}  A trusted setup ceremony requires either a
+        multi-party computation among mutually distrusting participants or
+        reliance on a single coordinator---neither of which maps cleanly to the
+        governance model of 27~Member States.  Transparent systems eliminate
+        this political and operational burden entirely.
+  \item \textbf{Post-quantum security.}  The Commission's cybersecurity
+        recommendations~(2024) and the ``harvest now, decrypt later'' threat model
+        make post-quantum resilience a forward-looking requirement for any
+        system handling national identity data with multi-decade validity.
+  \item \textbf{Standards compliance.}  Hash-based proof systems whose sole
+        cryptographic primitive is SHA-256 inherit the FIPS~140-3~\cite{fips140}
+        and SOG-IS approval of that hash function, simplifying certification
+        and procurement.
+  \item \textbf{Proof size vs.\ security.}  Hash-based systems typically
+        produce larger proofs than pairing-based ones (tens of kilobytes
+        vs.\ hundreds of bytes).  In credential verification, however, the
+        proof is transmitted once over a local channel; the dominant cost is
+        proving time, not bandwidth.
+\end{itemize}
+These considerations lead us to the Sumcheck+Ligero family, which we describe
+in detail next.
+
+%% ---------------------------------------------------------------------------
+\subsection{The Sumcheck Protocol and Ligero}\label{sec:bg-sumcheck-ligero}
+
+The proof system used by \textsc{zk-eidas} combines two classical
+constructions: the Sumcheck protocol for reducing a global claim about a
+multivariate polynomial to a single-point evaluation, and the Ligero
+commitment scheme for binding the prover's witness with sublinear
+communication.  We describe each in turn, then sketch their composition in the
+Longfellow implementation~\cite{longfellow,longfellow-ietf}.
+
+\subsubsection{The Sumcheck Protocol}\label{sec:bg-sumcheck}
+
+The Sumcheck protocol~\cite{sumcheck} allows a prover to convince a verifier
+of the value of a sum over exponentially many evaluations of a low-degree
+polynomial, using only a linear number of rounds.
+
+\begin{definition}[Sumcheck claim]\label{def:sumcheck}
+Let $g \colon \mathbb{F}^n \to \mathbb{F}$ be a polynomial of individual
+degree at most $d$ in each variable.  The prover claims
+\begin{equation}\label{eq:sumcheck-claim}
+  H \;=\; \sum_{x_1 \in \{0,1\}} \;\sum_{x_2 \in \{0,1\}} \;\cdots\;
+  \sum_{x_n \in \{0,1\}} g(x_1, x_2, \ldots, x_n).
+\end{equation}
+\end{definition}
+
+\noindent
+The interactive protocol proceeds over $n$ rounds, binding one variable per
+round.  Algorithm~\ref{alg:sumcheck} gives the full specification.
+
+\begin{algorithm}[t]
+  \caption{The Sumcheck Protocol}\label{alg:sumcheck}
+  \begin{algorithmic}[1]
+    \Require Polynomial $g \colon \mathbb{F}^n \to \mathbb{F}$ of individual
+             degree~$\leq d$; claimed sum $H$
+    \Ensure Verifier accepts iff $H = \sum_{x \in \{0,1\}^n} g(x)$
+    \State $H_1 \gets H$
+    \For{$i = 1, 2, \ldots, n$}
+      \State \textbf{Prover} sends univariate polynomial
+             $g_i(X_i) = \displaystyle\sum_{x_{i+1}, \ldots, x_n \in \{0,1\}}
+             g(r_1, \ldots, r_{i-1}, X_i, x_{i+1}, \ldots, x_n)$
+      \State \textbf{Verifier} checks $g_i(0) + g_i(1) = H_i$;
+             \textbf{aborts} if the check fails
+      \State \textbf{Verifier} samples $r_i \xleftarrow{\$} \mathbb{F}$
+             and sends $r_i$ to the prover
+      \State $H_{i+1} \gets g_i(r_i)$
+    \EndFor
+    \State \textbf{Verifier} queries oracle for
+           $g(r_1, r_2, \ldots, r_n)$ and accepts iff it equals~$H_{n+1}$
+  \end{algorithmic}
+\end{algorithm}
+
+\begin{theorem}[Sumcheck soundness]\label{thm:sumcheck-soundness}
+If the prover's claim $H$ is incorrect, then for any (possibly unbounded)
+cheating prover, the verifier in Algorithm~\ref{alg:sumcheck} rejects with
+probability at least
+\begin{equation}\label{eq:sumcheck-soundness}
+  1 - \frac{n \cdot d}{\lvert\mathbb{F}\rvert}.
+\end{equation}
+\end{theorem}
+
+\noindent
+The protocol is public-coin (the verifier's messages are uniformly random
+field elements) and can therefore be made non-interactive via the Fiat--Shamir
+transform: each challenge $r_i$ is derived as a hash of the transcript up to
+that point.  In the Longfellow instantiation, challenges are produced by an
+AES-256-based Fiat--Shamir pseudo-random function (FSPRF), deriving each
+$r_i$ deterministically from the running transcript digest.
+
+\subsubsection{The Ligero Commitment Scheme}\label{sec:bg-ligero}
+
+The Sumcheck protocol requires the verifier to evaluate $g$ at a single random
+point.  When $g$ encodes a circuit computation over a prover-held witness, the
+verifier cannot perform this evaluation directly.  The Ligero
+scheme~\cite{ligero} provides a commitment mechanism that (a) binds the
+prover's witness, (b) allows the verifier to check the required evaluation via
+random column queries, and (c) achieves proof size $O(\sqrt{\lvert w \rvert})$,
+sublinear in the witness size.
+
+\paragraph{Matrix encoding.}
+Let $w \in \mathbb{F}^m$ be the prover's witness.  Ligero arranges $w$ into a
+$k \times (m/k)$ matrix~$M$, where $k = \Theta(\sqrt{m})$.  Each row of $M$ is
+then extended via a Reed--Solomon code to length~$n > m/k$, yielding the
+\emph{extended matrix}~$\hat{M}$ of dimension~$k \times n$ at rate
+$\rho = m/(kn)$.  The code distance $n - m/k + 1$ ensures that any cheating
+strategy must corrupt a constant fraction of columns.
+
+\paragraph{Merkle commitment.}
+Each column of $\hat{M}$ is hashed (using SHA-256), and the resulting $n$
+column hashes form the leaves of a Merkle tree.  The root of this tree serves
+as the commitment to~$w$.  Opening a single column requires transmitting the
+column entries together with their Merkle authentication path---$O(\log n)$
+hashes.
+
+\paragraph{Constraint verification.}
+To verify that the committed witness satisfies the circuit constraints, the
+verifier requests the opening of $t$ randomly chosen columns.  For each opened
+column, the verifier checks:
+\begin{enumerate}[label=(\roman*)]
+  \item \textbf{Linear constraints}: the column is consistent with the
+        publicly known linear relations among wire values.
+  \item \textbf{Quadratic constraints}: products of wire values (encoding
+        multiplication gates) match the committed column entries.
+\end{enumerate}
+Because the rows are Reed--Solomon codewords, any inconsistency in the witness
+must corrupt at least a $1 - \rho$ fraction of columns, so $t = O(\kappa /
+\log m)$ column openings suffice for $\kappa$~bits of soundness.
+
+\paragraph{Zero-knowledge.}
+To prevent column openings from leaking information about $w$, the prover
+prepends $\ell$ uniformly random \emph{masking rows} to $M$ before Reed--Solomon
+encoding.  These masking rows ensure that any subset of opened columns is
+statistically independent of the underlying witness, providing statistical
+zero-knowledge.
+
+\subsubsection{The Longfellow Instantiation}\label{sec:bg-longfellow}
+
+Longfellow~\cite{longfellow} is Google's open-source implementation combining
+the Sumcheck protocol with the Ligero commitment scheme into a complete
+zero-knowledge proof system.  Its specification is documented in an IETF
+draft~\cite{longfellow-ietf}.  Several design choices make it particularly
+well-suited to credential verification:
+
+\begin{itemize}
+  \item \textbf{Field.}  Longfellow operates over $\mathrm{GF}(2^{128})$, a
+        binary extension field.  This choice aligns with the bitwise structure
+        of SHA-256, enabling efficient circuit representations of hash
+        computations without the field-mismatch penalties incurred by
+        prime-field systems.
+  \item \textbf{Circuit model.}  Computations are expressed as hash chains
+        over CBOR-encoded data---matching the mdoc digest structure exactly.
+        Each proof corresponds to a single extended circuit that encompasses
+        all disclosed claims, predicates, and binding commitments.
+  \item \textbf{DSL compilation.}  Longfellow provides a domain-specific
+        language for defining circuits; the \textsc{zk-eidas} circuits are
+        compiled from this DSL into a single \texttt{prove}/\texttt{verify}
+        call pair, with circuit parameters (number of claims, predicate types)
+        determined at build time.
+  \item \textbf{Proof size.}  For the witness sizes typical of credential
+        verification ($\lvert w \rvert \approx 2^{15}$--$2^{17}$ field
+        elements), the $O(\sqrt{\lvert w \rvert})$ scaling yields proofs of
+        approximately 40--80\,KB---larger than pairing-based proofs but well
+        within the bandwidth budget of a local NFC or BLE channel.
+\end{itemize}
+
+\noindent
+Together, the Sumcheck protocol, the Ligero commitment, and the Longfellow
+implementation provide a transparent, post-quantum proof system whose sole
+cryptographic assumption is the collision resistance of SHA-256.  In
+Section~\ref{sec:construction} we show how this system is applied to the mdoc
+credential structure to achieve selective disclosure and predicate proving.

@@ -1,0 +1,92 @@
+//! Host-side verification of the p7s witness.
+//!
+//! Runs the same cryptographic checks the ZK circuit will eventually
+//! perform, but in plain Rust. Used to validate fixtures in CI before
+//! any circuit work begins.
+//!
+//! Verifies:
+//!   1. Signer cert is signed by the trust anchor (ECDSA P-256)
+//!   2. Signed content is signed by the user's signing key (the cert's SPKI)
+//!
+//! Note: for now, step 2 is simplified. Real CMS may use signedAttrs
+//! (sign over DER-encoded signedAttrs SET instead of raw content).
+//! This verifier handles only the "no signedAttrs" case — sufficient
+//! for QKB-format documents.
+
+use p256::ecdsa::{signature::Verifier, DerSignature, VerifyingKey};
+use sha2::{Digest, Sha256};
+
+use crate::{P7sError, P7sWitness};
+
+/// Run host-side verification of the witness against the trust anchor.
+pub fn host_verify(witness: &P7sWitness) -> Result<(), P7sError> {
+    verify_cert_signature(witness)?;
+    verify_content_signature(witness)?;
+    Ok(())
+}
+
+fn verify_cert_signature(witness: &P7sWitness) -> Result<(), P7sError> {
+    let off = &witness.offsets;
+    let bytes = &witness.p7s_bytes;
+
+    let tbs = &bytes[off.cert_tbs_start..off.cert_tbs_start + off.cert_tbs_len];
+    let sig_der = &bytes[off.cert_sig_start..off.cert_sig_start + off.cert_sig_len];
+
+    let vk = VerifyingKey::from_sec1_bytes(&witness.trust_anchor_pk)
+        .map_err(|e| P7sError::BadSignature(string_leak(format!("anchor pk: {e}"))))?;
+    let sig = DerSignature::try_from(sig_der)
+        .map_err(|e| P7sError::BadSignature(string_leak(format!("cert sig der: {e}"))))?;
+
+    // The signature is over SHA-256(TBS)
+    vk.verify(tbs, &sig)
+        .map_err(|_| P7sError::BadSignature("cert signature does not verify"))?;
+
+    Ok(())
+}
+
+fn verify_content_signature(witness: &P7sWitness) -> Result<(), P7sError> {
+    let off = &witness.offsets;
+    let bytes = &witness.p7s_bytes;
+
+    // 1. messageDigest inside signedAttrs must equal SHA-256(signed_content)
+    let content = &bytes[off.signed_content_start..off.signed_content_start + off.signed_content_len];
+    let md_claimed = &bytes[off.message_digest_start..off.message_digest_start + off.message_digest_len];
+    let md_computed: [u8; 32] = Sha256::digest(content).into();
+    if md_claimed != md_computed.as_slice() {
+        return Err(P7sError::BadSignature(
+            "messageDigest does not equal SHA-256(signed_content)",
+        ));
+    }
+
+    // 2. Reconstruct the bytes the signature was computed over:
+    //    signedAttrs DER but with [0] IMPLICIT tag 0xA0 rewritten to SET tag 0x31.
+    let mut signed_attrs = bytes
+        [off.signed_attrs_start..off.signed_attrs_start + off.signed_attrs_len]
+        .to_vec();
+    if signed_attrs.is_empty() || signed_attrs[0] != 0xA0 {
+        return Err(P7sError::BadSignature(
+            "signedAttrs at offset does not start with [0] IMPLICIT tag",
+        ));
+    }
+    signed_attrs[0] = 0x31;
+
+    // 3. ECDSA-verify the signature over SHA-256(signed_attrs_as_set_der)
+    let sig_der = &bytes[off.content_sig_start..off.content_sig_start + off.content_sig_len];
+    let user_pk = &bytes[off.user_signing_pk_start..off.user_signing_pk_start + 65];
+
+    let vk = VerifyingKey::from_sec1_bytes(user_pk)
+        .map_err(|e| P7sError::BadSignature(string_leak(format!("user pk: {e}"))))?;
+    let sig = DerSignature::try_from(sig_der)
+        .map_err(|e| P7sError::BadSignature(string_leak(format!("content sig der: {e}"))))?;
+
+    vk.verify(&signed_attrs, &sig)
+        .map_err(|_| P7sError::BadSignature("content signature does not verify"))?;
+
+    Ok(())
+}
+
+/// Leak a String to a &'static str. Used to smuggle dynamic error text
+/// through a &'static-str-only error variant. Only used on error paths.
+fn string_leak(s: String) -> &'static str {
+    Box::leak(s.into_boxed_str())
+}

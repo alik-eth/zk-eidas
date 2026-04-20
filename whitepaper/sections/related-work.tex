@@ -1,0 +1,194 @@
+% !TEX root = ../main.tex
+\section{Related Work}\label{sec:related}
+
+Zero-knowledge credential systems span several proof-system families.
+We organise the discussion by cryptographic approach, characterising each
+system's design, proof technique, and relationship to \textsc{zk-eidas}.
+Where performance figures are available we cite them directly; direct
+hardware-normalised comparisons are deferred to Table~\ref{tab:comparison}
+in Section~\ref{sec:evaluation}.
+
+%% ───────────────────────────────────────────────────────────────────
+\subsection{Hash-Based and Transparent Systems}\label{sec:rel-hash}
+
+\paragraph{OpenAC~\cite{openac}.}
+Eagen et al.\ present OpenAC, an anonymous credential system built on
+the Halo2 proof system with an IPA commitment scheme.  The protocol
+follows a \emph{prepare–reblind–show} pipeline: a preparation phase
+commits to the credential, a reblinding phase randomises the commitment
+to break linkability, and a show phase proves predicate satisfaction
+against the reblinded commitment.  OpenAC includes an appendix mapping
+its construction to the EUDI Architecture and Reference Framework
+(ARF)~\cite{eudi-arf}, demonstrating regulatory awareness.
+The system reports a 129~ms end-to-end presentation time.
+
+\textsc{zk-eidas} differs from OpenAC in three respects.
+First, IPA commitments rely on the discrete logarithm assumption, which
+is not post-quantum secure; \textsc{zk-eidas} uses Sumcheck+Ligero over
+$\mathsf{GF}(2^{128})$ with hash-based commitments that are conjectured
+to be post-quantum secure under the random oracle model.
+Second, OpenAC does not include identity escrow; \textsc{zk-eidas}
+integrates per-presentation ML-KEM-768~\cite{fips203} escrow with an
+in-circuit digest binding that prevents payload substitution.
+Third, the multi-phase prepare–reblind–show pipeline implies separate
+circuit invocations or interactive rounds, whereas \textsc{zk-eidas}
+uses a single monolithic circuit that ingests raw mdoc CBOR bytes and
+produces the proof, nullifier, binding hash, and escrow digest in one pass.
+
+%% ───────────────────────────────────────────────────────────────────
+\subsection{Pairing-Based Systems}\label{sec:rel-pairing}
+
+\paragraph{Groth16 and zk-creds~\cite{zkcreds}.}
+The Groth16 proof system~\cite{groth16} underlies many deployed anonymous
+credential constructions, including zk-creds~\cite{zkcreds} and
+Semaphore~\cite{semaphore}.  These systems offer constant-size proofs
+(192~bytes for Groth16 on BN254) and sub-millisecond verification, making
+them attractive for latency-sensitive workflows.  Their central limitation
+is a per-circuit trusted setup ceremony: generating the common reference
+string requires a multi-party computation whose soundness rests on
+participants discarding secret randomness (``toxic waste'').  A new or
+modified circuit requires a new ceremony.  Groth16 is also not
+post-quantum secure, as its security relies on the bilinear Diffie-Hellman
+assumption over pairing-friendly elliptic curves.
+
+\textsc{zk-eidas} v1 used Groth16 over BN254.  The v2 migration to
+Longfellow~\cite{longfellow} was motivated by both the absence of trusted
+setup and the anticipation of post-quantum requirements in eIDAS~2.0
+certification.  The cost is a larger proof size (${\sim}\,$365~KB versus
+192~B) and slower verification (${\sim}\,$700~ms versus ${\sim}\,$1~ms);
+Section~\ref{sec:bench-comparison} analyses these trade-offs in detail.
+
+\paragraph{BBS+ and AnonCreds~\cite{bbs}.}
+BBS+ is a pairing-based multi-message signature scheme that natively
+supports \emph{selective disclosure}: the holder can prove knowledge of a
+subset of signed messages without revealing the others, producing proofs of
+a few kilobytes in millisecond time.  AnonCreds, used in the Hyperledger
+Indy ecosystem, builds on similar principles.  Both are operationally
+efficient and see production deployment.
+
+The key limitation for our purposes is that BBS+ is a specialised
+signature scheme rather than a general-purpose proof system.  It can
+conceal or reveal individual attributes, but cannot enforce arbitrary
+predicates (e.g., range proofs, date comparisons, or inequality checks)
+without composing with a separate zero-knowledge proof, which introduces
+an additional trusted setup or proof system.  BBS+ also relies on
+pairing-based cryptography, which is not post-quantum secure.
+\textsc{zk-eidas} integrates predicate evaluation directly inside the
+circuit and does not require a secondary proof system.
+
+%% ───────────────────────────────────────────────────────────────────
+\subsection{ECDSA-Based Systems}\label{sec:rel-ecdsa}
+
+\paragraph{Anonymous Credentials from ECDSA~\cite{ecdsa-anon}.}
+Frigo and shelat (2024) construct anonymous credential schemes that build
+directly on ECDSA signatures.  Because ECDSA is the signature algorithm
+used in most existing credential issuance infrastructure, this approach is
+appealing for deployability: issuers require no changes.  The construction
+achieves unlinkability by proving knowledge of a valid ECDSA signature
+inside a zero-knowledge proof without revealing the raw signature.
+
+\textsc{zk-eidas} shares the property of accepting unmodified issuer
+ECDSA signatures --- our circuit verifies an ECDSA~P-256 signature over
+the Mobile Security Object without any preprocessing or re-signing by the
+issuer.  The distinction lies in scope and quantum resilience: the
+Frigo--shelat construction does not include identity escrow, does not
+target the mdoc credential format, and the underlying ECDSA discrete
+logarithm assumption is not post-quantum secure.
+
+%% ───────────────────────────────────────────────────────────────────
+\subsection{Hardware-Bound Credentials}\label{sec:rel-hardware}
+
+\paragraph{Device-Bound Anonymous Credentials~\cite{device-bound}.}
+This line of work (2025) ties anonymous credentials to device hardware,
+typically a Trusted Platform Module (TPM) or secure enclave, so that
+credential use requires the physical device.  Device binding reduces the
+risk of credential exfiltration and sharing, and complements privacy
+protections by ensuring that the prover is in possession of the bound
+hardware.
+
+The contribution is orthogonal to ours.  \textsc{zk-eidas} does not
+currently bind credentials to hardware, but the two approaches are
+composable: the holder binding hash ($\beta$ in Algorithm~\ref{alg:prove})
+could incorporate a hardware-attested key without changing the circuit
+structure.  Device binding and post-quantum anonymous credential
+verification address different threat surfaces and are not in tension.
+
+%% ───────────────────────────────────────────────────────────────────
+\subsection{Accountability in Anonymous Credentials}\label{sec:rel-accountability}
+
+\paragraph{Towards Accountability for Anonymous Credentials~\cite{accountability-ac}.}
+Mishra (2026) studies formal accountability mechanisms for anonymous
+credential systems, providing game-based security definitions that
+characterise when and how an anonymity-preserving system can satisfy legal
+accountability requirements.  The work identifies several
+accountability flavours --- traceability, revocability, and
+non-frameability --- and analyses which existing constructions achieve
+them.
+
+This work is complementary to \textsc{zk-eidas}.  Our identity escrow
+protocol (Section~\ref{sec:escrow}) informally targets the same properties
+--- court-ordered recovery with non-frameability --- but without a
+complete formal treatment.  The definitional framework of Mishra could be
+used to provide a rigorous proof that the ML-KEM-768 KEM/DEM construction
+achieves the non-frameability condition formalised in that work.
+
+%% ───────────────────────────────────────────────────────────────────
+\subsection{Surveys and Taxonomies}\label{sec:rel-surveys}
+
+\paragraph{SoK: Anonymous Credentials for Digital Identity Wallets~\cite{sok-ac}.}
+Bormann (2026) provides a comprehensive systematisation-of-knowledge
+survey of anonymous credential systems for digital identity wallets,
+covering proof systems, deployment considerations, and regulatory
+alignment.  The survey introduces a taxonomy along four axes:
+proof system transparency, post-quantum resilience, predicate support,
+and accountability mechanisms.
+
+Within this taxonomy, \textsc{zk-eidas} occupies the
+\emph{hash-based, transparent, accountable} quadrant: it uses a
+hash-based transparent proof system (Sumcheck+Ligero), supports
+generalised predicates beyond reveal/conceal, and provides an escrow
+mechanism for judicial accountability.  The survey identifies this
+quadrant as underserved relative to pairing-based systems, noting that
+most deployed systems sacrifice at least one of transparency,
+post-quantum resilience, or accountability.
+
+%% ───────────────────────────────────────────────────────────────────
+\subsection{Positioning \textsc{zk-eidas}}\label{sec:rel-position}
+
+To our knowledge, no prior system simultaneously provides all four of
+the following properties:
+
+\begin{enumerate}
+  \item \textbf{Post-quantum transparent proofs.}
+    Sumcheck+Ligero over $\mathsf{GF}(2^{128})$ requires no trusted
+    setup and relies on symmetric-key assumptions (hash-based commitments
+    and the random oracle model) that are conjectured to withstand quantum
+    attacks.
+  \item \textbf{In-circuit mdoc parsing.}
+    The circuit ingests raw ISO/IEC~18013-5 CBOR bytes and performs
+    all verification steps --- CBOR structure decoding, SHA-256 digest
+    chain validation, and ECDSA~P-256 signature verification --- without
+    any issuer-side preprocessing or re-signing.
+  \item \textbf{Identity escrow.}
+    Per-presentation AES-256-GCM encryption of designated identity fields
+    under an ML-KEM-768~\cite{fips203} public key, with an in-circuit
+    SHA-256 digest binding that prevents the holder from substituting a
+    different payload after proof generation.
+  \item \textbf{Generalised predicate system.}
+    Equality, inequality, and lexicographic range predicates evaluated
+    inside the hash sub-circuit, covering the practical needs of age
+    proofs, expiry checks, and attribute matching without a secondary
+    proof system.
+\end{enumerate}
+
+OpenAC~\cite{openac} provides transparency and predicate support but not
+post-quantum security or escrow.
+BBS+~\cite{bbs} provides efficiency but not predicates beyond
+reveal/conceal, transparency, or post-quantum security.
+zk-creds~\cite{zkcreds} provides predicates but requires a trusted setup
+and is not post-quantum secure.
+The device-bound~\cite{device-bound} and accountability~\cite{accountability-ac}
+works are complementary and composable but do not address the
+proof-system dimension.
+Table~\ref{tab:comparison} in Section~\ref{sec:evaluation} quantifies the
+performance trade-offs that accompany these design choices.

@@ -1,0 +1,73 @@
+\documentclass[11pt,a4paper]{article}
+
+\usepackage[utf8]{inputenc}
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath,amssymb,amsfonts,amsthm}
+\usepackage{algorithm}
+\usepackage{algpseudocode}
+\usepackage{tikz}
+\usepackage{pgfplots}
+\usepackage{booktabs}
+\usepackage{multirow}
+\usepackage{hyperref}
+\usepackage{xcolor}
+\usepackage{listings}
+\usepackage{subcaption}
+\usepackage{enumitem}
+
+\usetikzlibrary{positioning,arrows.meta,shapes.geometric,fit,backgrounds}
+\pgfplotsset{compat=1.18}
+
+\newtheorem{theorem}{Theorem}[section]
+\newtheorem{definition}[theorem]{Definition}
+
+\newcommand{\keywords}[1]{\par\smallskip\noindent\textbf{Keywords:} #1}
+
+\title{Post-Quantum Selective Disclosure for eIDAS~2.0 Credentials\\with Identity Escrow\\[0.5em]
+\large A Transparent Hash-Based Construction from Sumcheck and Ligero}
+
+\author{Oleksandr Vovkotrub\\
+\small Independent Researcher\\
+\small \texttt{alik@zk-eidas.com}}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+The European Digital Identity framework (eIDAS~2.0) mandates digital identity
+wallets for EU citizens, yet current credential presentation protocols reveal
+more personal data than necessary. We present \textsc{zk-eidas}, a system for
+privacy-preserving verification of ISO~18013-5 mdoc credentials using
+zero-knowledge proofs from Sumcheck and Ligero. Our construction requires only
+SHA-256---no bilinear pairings and no trusted setup---providing post-quantum
+security for the proving system and offering a concrete migration path as
+issuers adopt post-quantum signature schemes. We introduce an identity escrow
+protocol combining ML-KEM-768 and AES-256-GCM that enables court-ordered
+de-anonymization without breaking unlinkability, directly addressing eIDAS
+accountability requirements. Our predicate system supports equality, comparison,
+range, set membership, and Boolean composition over credential claims. We
+achieve \textasciitilde17\,ms proving time for the ECDSA~P-256 signature
+sub-circuit, with end-to-end proving in approximately 1.3\,s for
+multi-attribute credentials on commodity hardware.
+We provide comprehensive benchmarks and map our construction to EUDI
+Architecture Reference Framework requirements.
+\end{abstract}
+
+\keywords{zero-knowledge proofs, selective disclosure, eIDAS~2.0,
+post-quantum cryptography, identity escrow, anonymous credentials}
+
+\input{sections/introduction}
+\input{sections/background}
+\input{sections/construction}
+\input{sections/escrow}
+\input{sections/implementation}
+\input{sections/evaluation}
+\input{sections/eudi-mapping}
+\input{sections/related-work}
+\input{sections/discussion}
+\input{sections/conclusion}
+
+\bibliographystyle{alpha}
+\bibliography{references}
+
+\end{document}

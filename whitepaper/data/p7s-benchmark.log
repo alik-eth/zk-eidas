@@ -1,0 +1,136 @@
+    Finished `release` profile [optimized] target(s) in 0.14s
+     Running `target/release/p7s_benchmark`
+=== zk-eidas-p7s-circuit Phase 2a benchmark ===
+System: Genuine Intel(R) CPU 0000 @ 2.60GHz, 8C/16T, 31GB RAM
+OS: Linux 6.19.10-200.fc43.x86_64 x86_64
+Rust: 1.94.1 (e408947bf 2026-03-25), release build
+
+[p7s] Benchmarking circuit on fixture `binding.qkb.p7s` (N=5 iterations)...
+  cold prove (1 iteration, includes in-FFI circuit build)...
+[INFO][+25671.247 ms] ZK Commit start
+[INFO][+  201.260 ms] ZK Commitment done
+[INFO][+    0.018 ms] ZK Commit start
+[INFO][+  136.728 ms] ZK Commitment done
+[INFO][+ 1059.693 ms] ZK sumcheck done
+[INFO][+    6.960 ms] ZK constraints done
+[INFO][+   27.952 ms] Prover Done: flag
+[INFO][+  470.298 ms] ZK sumcheck done
+[INFO][+    2.991 ms] ZK constraints done
+[INFO][+   44.450 ms] Prover Done: flag
+[INFO][+    5.227 ms] com:32, sc:15136, com_proof:801416 [2730 el, 42525 el, 769 d in 225 rows]: 816584b
+[INFO][+    0.246 ms] com:32, sc:37056, com_proof:209292 [1364 el, 2835 el, 601 d in 15 rows]: 246380b
+  warm prove (5 iterations)...
+[INFO][+    6.665 ms] ZK Commit start
+[INFO][+  205.434 ms] ZK Commitment done
+[INFO][+    0.019 ms] ZK Commit start
+[INFO][+  143.684 ms] ZK Commitment done
+[INFO][+ 1010.516 ms] ZK sumcheck done
+[INFO][+    6.305 ms] ZK constraints done
+[INFO][+   23.426 ms] Prover Done: flag
+[INFO][+  470.072 ms] ZK sumcheck done
+[INFO][+    2.405 ms] ZK constraints done
+[INFO][+   40.465 ms] Prover Done: flag
+[INFO][+    5.104 ms] com:32, sc:15136, com_proof:800840 [2730 el, 42525 el, 751 d in 225 rows]: 816008b
+[INFO][+    0.360 ms] com:32, sc:37056, com_proof:209132 [1364 el, 2835 el, 596 d in 15 rows]: 246220b
+[INFO][+    6.931 ms] ZK Commit start
+[INFO][+  204.129 ms] ZK Commitment done
+[INFO][+    0.017 ms] ZK Commit start
+[INFO][+  137.989 ms] ZK Commitment done
+[INFO][+ 1017.705 ms] ZK sumcheck done
+[INFO][+    6.401 ms] ZK constraints done
+[INFO][+   24.489 ms] Prover Done: flag
+[INFO][+  472.702 ms] ZK sumcheck done
+[INFO][+    2.765 ms] ZK constraints done
+[INFO][+   39.134 ms] Prover Done: flag
+[INFO][+    4.901 ms] com:32, sc:15136, com_proof:800424 [2730 el, 42525 el, 738 d in 225 rows]: 815592b
+[INFO][+    0.329 ms] com:32, sc:37056, com_proof:209196 [1364 el, 2835 el, 598 d in 15 rows]: 246284b
+[INFO][+    6.513 ms] ZK Commit start
+[INFO][+  213.023 ms] ZK Commitment done
+[INFO][+    0.017 ms] ZK Commit start
+[INFO][+  136.661 ms] ZK Commitment done
+[INFO][+ 1030.502 ms] ZK sumcheck done
+[INFO][+    6.640 ms] ZK constraints done
+[INFO][+   23.880 ms] Prover Done: flag
+[INFO][+  457.695 ms] ZK sumcheck done
+[INFO][+    2.296 ms] ZK constraints done
+[INFO][+   36.403 ms] Prover Done: flag
+[INFO][+    4.646 ms] com:32, sc:15136, com_proof:801608 [2730 el, 42525 el, 775 d in 225 rows]: 816776b
+[INFO][+    0.257 ms] com:32, sc:37056, com_proof:208332 [1364 el, 2835 el, 571 d in 15 rows]: 245420b
+[INFO][+    5.691 ms] ZK Commit start
+[INFO][+  203.125 ms] ZK Commitment done
+[INFO][+    0.026 ms] ZK Commit start
+[INFO][+  135.317 ms] ZK Commitment done
+[INFO][+ 1050.070 ms] ZK sumcheck done
+[INFO][+    6.528 ms] ZK constraints done
+[INFO][+   25.075 ms] Prover Done: flag
+[INFO][+  482.689 ms] ZK sumcheck done
+[INFO][+    2.651 ms] ZK constraints done
+[INFO][+   39.827 ms] Prover Done: flag
+[INFO][+    4.920 ms] com:32, sc:15136, com_proof:801448 [2730 el, 42525 el, 770 d in 225 rows]: 816616b
+[INFO][+    0.356 ms] com:32, sc:37056, com_proof:208780 [1364 el, 2835 el, 585 d in 15 rows]: 245868b
+[INFO][+    5.643 ms] ZK Commit start
+[INFO][+  199.170 ms] ZK Commitment done
+[INFO][+    0.029 ms] ZK Commit start
+[INFO][+  141.553 ms] ZK Commitment done
+[INFO][+ 1037.378 ms] ZK sumcheck done
+[INFO][+    6.217 ms] ZK constraints done
+[INFO][+   22.127 ms] Prover Done: flag
+[INFO][+  466.303 ms] ZK sumcheck done
+[INFO][+    2.940 ms] ZK constraints done
+[INFO][+   41.036 ms] Prover Done: flag
+[INFO][+    4.997 ms] com:32, sc:15136, com_proof:801768 [2730 el, 42525 el, 780 d in 225 rows]: 816936b
+[INFO][+    0.423 ms] com:32, sc:37056, com_proof:208524 [1364 el, 2835 el, 577 d in 15 rows]: 245612b
+  verify (5 iterations)...
+[INFO][+    2.966 ms] verifier: recv commit
+[INFO][+    0.018 ms] verifier: recv commit
+[INFO][+    0.053 ms] verifier: verify
+[INFO][+  376.507 ms] verify done: ok
+[INFO][+    0.017 ms] verifier: verify
+[INFO][+  343.299 ms] verify done: ok
+[INFO][+    2.501 ms] verifier: recv commit
+[INFO][+    0.015 ms] verifier: recv commit
+[INFO][+    0.055 ms] verifier: verify
+[INFO][+  385.416 ms] verify done: ok
+[INFO][+    0.016 ms] verifier: verify
+[INFO][+  342.713 ms] verify done: ok
+[INFO][+    2.354 ms] verifier: recv commit
+[INFO][+    0.016 ms] verifier: recv commit
+[INFO][+    0.061 ms] verifier: verify
+[INFO][+  364.248 ms] verify done: ok
+[INFO][+    0.017 ms] verifier: verify
+[INFO][+  337.240 ms] verify done: ok
+[INFO][+    2.043 ms] verifier: recv commit
+[INFO][+    0.010 ms] verifier: recv commit
+[INFO][+    0.046 ms] verifier: verify
+[INFO][+  390.281 ms] verify done: ok
+[INFO][+    0.016 ms] verifier: verify
+[INFO][+  331.863 ms] verify done: ok
+[INFO][+    2.698 ms] verifier: recv commit
+[INFO][+    0.017 ms] verifier: recv commit
+[INFO][+    0.054 ms] verifier: verify
+[INFO][+  373.854 ms] verify done: ok
+[INFO][+    0.022 ms] verifier: verify
+[INFO][+  335.844 ms] verify done: ok
+--- p7s Proving Pipeline ---
+
+Fixture                        binding.qkb.p7s
+Witness blob size                       5038 B
+Public blob size                         133 B
+Prove (cold, 1 iter)                    27.56s
+Prove (warm, median)                     1.92s
+Prove (warm, min/max)            1.91s / 1.96s
+Verify (median)                       721.30ms
+Verify (min/max)              702.88ms / 729.77ms
+Proof size (total)                   1037.8 KB
+  schema header                            4 B
+  macs_b                                  64 B
+  hash_zk + sig_zk                   1037.7 KB
+QR chunks (V40 low-ECC)                    361
+Prove RSS (post-call)                  1234 MB
+Verify RSS (post-call)                 1234 MB
+Prove CPU util                             99%
+Verify CPU util                           100%
+
+Notes: RSS is post-call (handoff §7.3); `hash_zk + sig_zk` split is 
+self-delimited in C++ and not broken out here (handoff §7.4).
+

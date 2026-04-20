@@ -37,6 +37,21 @@ fn main() {
     println!("cargo:rustc-link-lib=dylib=zstd");
     println!("cargo:rustc-link-lib=dylib=z");
 
+    // Build the p7s_static target (Phase 2a).
+    let dst_p7s = cmake::Config::new(&lib_dir)
+        .define("CMAKE_BUILD_TYPE", "Release")
+        .build_target("p7s_static")
+        .very_verbose(false)
+        .env("CMAKE_BUILD_PARALLEL_LEVEL", "4")
+        .build();
+
+    let build_dir_p7s = dst_p7s.join("build");
+    println!(
+        "cargo:rustc-link-search=native={}/circuits/p7s",
+        build_dir_p7s.display()
+    );
+    println!("cargo:rustc-link-lib=static=p7s_static");
+
     // Only rebuild if the Longfellow source changes
     println!("cargo:rerun-if-changed={}", lib_dir.display());
 

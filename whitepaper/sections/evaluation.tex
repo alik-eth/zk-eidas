@@ -1,0 +1,255 @@
+% !TEX root = ../main.tex
+\section{Evaluation}\label{sec:evaluation}\label{sec:benchmarks}
+
+We evaluate the performance of \textsc{zk-eidas} v2.0 across the full proving pipeline and the identity escrow subsystem.
+All measurements use real benchmark data collected on representative hardware.
+Section~\ref{sec:bench-method} describes the methodology.
+Sections~\ref{sec:bench-zk} and~\ref{sec:bench-escrow} present timing, memory, and proof-size results for the ZK and escrow pipelines, respectively.
+Section~\ref{sec:bench-scaling} analyses how costs scale with the number of disclosed attributes.
+Section~\ref{sec:bench-comparison} compares \textsc{zk-eidas} against related systems.
+
+%% ───────────────────────────────────────────────────────────────────
+\subsection{Benchmark Methodology}\label{sec:bench-method}
+
+\paragraph{Hardware.}
+All experiments run on a single machine equipped with an Intel CPU at 2.60~GHz (8~cores, 16~threads), 31~GB RAM, and Linux~6.19 (Fedora~43, x86\_64).
+
+\paragraph{Software.}
+The system under test is the \textsc{zk-eidas} Rust workspace compiled in release mode (\texttt{--release}) with Rust~1.93.1.
+The Longfellow C++ proving core is compiled with CMake in Release configuration and linked statically.
+No cross-compilation or emulation layers are involved.
+
+\paragraph{Measurement instruments.}
+Wall-clock time is measured with \texttt{std::time::Instant}, which provides monotonic nanosecond-resolution timestamps on Linux.
+Resident set size (RSS) is read from \texttt{/proc/self/status} (\texttt{VmRSS} field) immediately after each operation.
+CPU utilisation is derived from \texttt{/proc/self/stat} user and system time relative to wall-clock time.
+
+\paragraph{Statistical method.}
+Each operation is executed five times in sequence; we report the \emph{median} value to mitigate the effect of cold-cache outliers on the first run and scheduling jitter across runs.
+We choose the median over the mean because it is robust to single outliers, which is the dominant noise source on a multiprocess Linux system with a small sample size.
+
+%% ───────────────────────────────────────────────────────────────────
+\subsection{ZK Proving Pipeline}\label{sec:bench-zk}
+
+Table~\ref{tab:zk-bench} presents the full benchmark results for the Sumcheck+Ligero proving pipeline across one to four disclosed attributes.
+Each row corresponds to a distinct circuit variant compiled from a \texttt{kZkSpecs} entry (see~\S\ref{sec:impl-circuits}).
+
+\begin{table}[t]
+  \centering
+  \caption{ZK proving pipeline benchmarks (median of 5 iterations).
+           Circuit generation is a one-time build cost; all other operations occur per presentation.}\label{tab:zk-bench}
+  \begin{tabular}{lrrrr}
+    \toprule
+    & \multicolumn{4}{c}{Attribute count} \\
+    \cmidrule(lr){2-5}
+    Metric & 1 & 2 & 3 & 4 \\
+    \midrule
+    Circuit gen (cold)     & 17.6\,s   & 18.3\,s   & 18.7\,s   & 19.2\,s   \\
+    Circuit load (cache)   & 0.02\,ms  & 0.02\,ms  & 0.04\,ms  & 0.03\,ms  \\
+    Prove                  & 1273\,ms  & 1284\,ms  & 1434\,ms  & 1325\,ms  \\
+    Verify                 & 675\,ms   & 718\,ms   & 794\,ms   & 716\,ms   \\
+    Proof size             & 364\,KB   & 363\,KB   & 368\,KB   & 369\,KB   \\
+    Gen RSS                & 1283\,MB  & 1336\,MB  & 1384\,MB  & 1427\,MB  \\
+    Prove RSS              & 1285\,MB  & 1336\,MB  & 1384\,MB  & 1427\,MB  \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\paragraph{Circuit generation.}
+Compiling a circuit from a \texttt{kZkSpecs} entry takes 17.6--19.2~seconds depending on the attribute count.
+This is a \emph{one-time} cost incurred during the Docker build (\S\ref{sec:impl-deploy}): once the binary circuit file is written to disk, it is reused across all subsequent proofs without recompilation.
+The generation step consumes 1.3--1.4~GB of RAM, dominated by the intermediate representation of the hash and signature sub-circuits.
+CPU utilisation during generation is consistently ${\geq}\,99\%$, indicating a compute-bound workload with negligible I/O stalls.
+
+\paragraph{Circuit loading.}
+Loading a pre-generated circuit from the on-disk cache takes ${\approx}\,0.02$--$0.04$~ms across all four variants --- effectively instantaneous.
+The cache is memory-mapped via a \texttt{tokio::sync::OnceCell}, so subsequent accesses within the same process incur no additional I/O.
+This caching strategy ensures that the expensive generation cost is fully amortised: an API server that starts once and serves thousands of proofs pays the 18-second generation cost zero times at runtime.
+
+\paragraph{Proving time.}
+End-to-end proving takes 1.27--1.43~seconds per presentation.
+This interval encompasses the entire monolithic circuit execution: CBOR parsing, SHA-256 digest chain verification, ECDSA~P-256 signature verification, predicate evaluation, nullifier derivation, holder binding, and escrow digest computation.
+The proving time is dominated by the Sumcheck+Ligero commitment phase, in which the prover commits to the extended witness polynomial over $\mathsf{GF}(2^{128})$ and computes the Ligero proximity proof.
+The ECDSA signature sub-circuit, while computationally intensive in isolation, accounts for a modest fraction of the total because the hash sub-circuit (${\sim}\,4 \times 10^6$ wires) is substantially larger than the signature sub-circuit (${\sim}\,224{,}000$ wires).
+
+\paragraph{Verification time.}
+Verification takes 675--794~ms, approximately 55\% of the proving time.
+Unlike pairing-based systems where verification is orders of magnitude cheaper than proving, the Sumcheck+Ligero verifier must re-evaluate the sumcheck polynomial and perform Ligero proximity checks, both of which are linear in the circuit size.
+This verification time is acceptable for server-side workflows (e.g., an API endpoint that verifies a proof submitted via HTTP) but is not suited for real-time mobile-to-mobile interaction where sub-100\,ms latency is expected.
+
+\paragraph{Proof size.}
+Proofs are consistently 363--369~KB across all attribute counts.
+The near-constant size reflects a fundamental property of the Ligero proof system: proof size is determined by the circuit structure (number of wires, depth, field size) rather than the number of private inputs.
+Adding attributes introduces additional digest chain and predicate gates but does not materially alter the overall circuit dimensions, so the proof size remains stable.
+
+\paragraph{Memory.}
+Peak RSS during proving is 1.28--1.43~GB, closely tracking the circuit generation RSS.
+This is because the dominant memory consumer is the circuit representation itself, which is loaded into memory for both generation and proving.
+The proving step adds only the witness assignment and the Ligero commitment buffers, which are modest relative to the circuit.
+
+%% ───────────────────────────────────────────────────────────────────
+\subsection{Identity Escrow Pipeline}\label{sec:bench-escrow}
+
+Table~\ref{tab:escrow-bench} presents timing measurements for each operation in the identity escrow protocol (Algorithms~\ref{alg:keygen}--\ref{alg:recover}).
+
+\begin{table}[t]
+  \centering
+  \caption{Identity escrow pipeline benchmarks (median of 5 iterations).
+           All operations are per-presentation except keygen, which is a one-time authority setup cost.}\label{tab:escrow-bench}
+  \begin{tabular}{lr}
+    \toprule
+    Operation & Time \\
+    \midrule
+    ML-KEM-768 keygen            & 0.06\,ms \\
+    Field packing (8 fields)     & ${<}\,0.01$\,ms \\
+    AES-256-GCM encrypt          & ${<}\,0.01$\,ms \\
+    ML-KEM-768 encapsulate $K$   & 0.11\,ms \\
+    ML-KEM-768 decapsulate $K$   & 0.12\,ms \\
+    AES-256-GCM decrypt          & ${<}\,0.01$\,ms \\
+    \midrule
+    \textbf{Total escrow overhead} & ${<}\,\textbf{0.3\,ms}$ \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\paragraph{Escrow overhead.}
+The total escrow overhead per presentation --- comprising field packing, AES-256-GCM encryption, and ML-KEM-768 encapsulation --- is under 0.3~ms.
+This is approximately \emph{four orders of magnitude} smaller than the ZK proving time (${\sim}\,1{,}300$~ms), making the escrow subsystem effectively invisible in the end-to-end pipeline latency.
+The result validates our design choice of a lightweight KEM/DEM construction over more complex approaches (e.g., threshold decryption or multi-party computation) for the escrow layer.
+
+\paragraph{ML-KEM-768 operations.}
+Key generation takes 0.06~ms and is a one-time authority setup cost.
+Encapsulation (0.11~ms) and decapsulation (0.12~ms) are nearly symmetric, reflecting the balanced structure of the ML-KEM lattice operations.
+Both are well within the real-time budget even for mobile devices, where lattice operations typically complete in under 1~ms on ARM~Cortex-A cores.
+
+\paragraph{Symmetric operations.}
+AES-256-GCM encryption and decryption of eight 32-byte fields complete in sub-microsecond time, benefiting from hardware AES-NI support on the benchmark CPU.
+Field packing (zero-padding each field value to 32~bytes) is similarly sub-microsecond.
+These operations contribute negligible latency.
+
+%% ───────────────────────────────────────────────────────────────────
+\subsection{Scaling Analysis}\label{sec:bench-scaling}
+
+We examine how each metric scales as the number of disclosed attributes increases from one to four.
+
+\paragraph{Proving time.}
+Proving time ranges from 1273~ms (1~attribute) to 1434~ms (3~attributes), with the 4-attribute case at 1325~ms.
+The non-monotonic behaviour (3~attributes is slower than 4) is within the expected measurement variance for a 5-iteration median on a multiprocess system.
+The key observation is that proving time increases by at most 13\% when quadrupling the attribute count, confirming that the proving cost is dominated by the fixed-size circuit structure (ECDSA sub-circuit, CBOR parser, Ligero commitment) rather than the per-attribute predicate and digest gates.
+
+\paragraph{Proof size.}
+Proof size varies by only 6~KB across the four configurations (363--369~KB), a relative change of 1.6\%.
+This near-constant behaviour is expected: each additional attribute adds a small number of SHA-256 and comparator gates to the hash sub-circuit, but the Ligero proof size depends on the number of columns in the witness matrix, which is determined by the overall circuit wire count.
+Since the per-attribute gates (${\sim}\,10^4$) are small relative to the total hash sub-circuit (${\sim}\,4 \times 10^6$ wires), the proof size is effectively constant.
+
+\paragraph{Circuit generation.}
+Generation time scales approximately linearly from 17.6~s to 19.2~s (a 9\% increase for $4\times$ more attributes), reflecting the linear growth in the number of digest chain and predicate gates.
+As noted in~\S\ref{sec:bench-zk}, this cost is incurred only during the build phase and is fully amortised at runtime.
+
+\paragraph{Memory.}
+Peak RSS grows linearly from 1283~MB to 1427~MB (an 11\% increase), corresponding to the additional wire storage for the extra digest chain and predicate evaluation gates in the hash sub-circuit.
+The memory footprint remains within the budget of a typical server or cloud VM but would be challenging on memory-constrained mobile devices, reinforcing the server-side deployment model described in~\S\ref{sec:impl-deploy}.
+
+\paragraph{Verification time.}
+Verification time follows a pattern similar to proving time, ranging from 675~ms to 794~ms.
+The verifier performs work proportional to the circuit size (Sumcheck evaluation and Ligero proximity checks), so the modest scaling mirrors the proving-time analysis.
+
+%% ───────────────────────────────────────────────────────────────────
+\subsection{Comparison with Related Systems}\label{sec:bench-comparison}
+
+Table~\ref{tab:comparison} places \textsc{zk-eidas} in the landscape of zero-knowledge credential systems.
+We include \textsc{zk-eidas} v1 (the Groth16-based predecessor) as a baseline to illustrate the trade-offs of the Longfellow migration.
+
+\begin{table*}[t]
+  \centering
+  \caption{Comparison of zero-knowledge credential systems.
+           Proof sizes and timings are representative values from each project's published benchmarks or papers; direct hardware-normalised comparison is not possible across systems.
+           PQ = post-quantum security for the proving system; n.r.\ = not reported in the cited work.
+           ${}^{*}$\,Post-quantum for the proving system and escrow; the issuer ECDSA~P-256 signature remains classical.}\label{tab:comparison}
+  \small
+  \setlength{\tabcolsep}{4pt}
+  \begin{tabular}{lllclrrcl}
+    \toprule
+    System & Proof System & Setup & PQ & Size & Prove & Verify & Escrow & Format \\
+    \midrule
+    \textsc{zk-eidas} v1
+      & Groth16 (BN254)
+      & Trusted
+      & No
+      & 192\,B
+      & ${\sim}\,$5\,s
+      & ${\sim}\,$1\,ms
+      & No
+      & SD-JWT+mdoc \\
+    \textsc{zk-eidas} v2
+      & Sumcheck+Ligero
+      & None
+      & Yes$^{*}$
+      & ${\sim}\,$365\,KB
+      & ${\sim}\,$1.3\,s
+      & ${\sim}\,$700\,ms
+      & Yes (ML-KEM)
+      & mdoc \\
+    OpenAC~\cite{openac}
+      & Halo2/IPA
+      & None
+      & No
+      & n.r.
+      & 129\,ms
+      & n.r.
+      & No
+      & mdoc \\
+    zk-creds~\cite{zkcreds}
+      & Groth16
+      & Trusted
+      & No
+      & ${\sim}\,$192\,B
+      & seconds
+      & ms
+      & No
+      & generic \\
+    BBS+~\cite{bbs}
+      & Pairing-based
+      & None
+      & No
+      & ${\sim}\,$few\,KB
+      & ms
+      & ms
+      & No
+      & JSON-LD \\
+    \bottomrule
+  \end{tabular}
+\end{table*}
+
+\paragraph{Trade-offs.}
+The comparison reveals that \textsc{zk-eidas}~v2 occupies a distinct point in the design space.
+The migration from Groth16~\cite{groth16} to Sumcheck+Ligero eliminated the trusted setup ceremony --- a significant practical and regulatory advantage, since eIDAS~2.0 certification bodies are unlikely to accept a system whose soundness depends on a multi-party computation that must be repeated whenever the circuit changes.
+The proving time improved from ${\sim}\,$5~seconds (v1, server-side Groth16) to ${\sim}\,$1.3~seconds (v2), a $3.8\times$ speedup, while also incorporating ECDSA~P-256 verification, identity escrow, and nullifier computation that were absent in~v1.
+
+The cost of these gains is a substantially larger proof size (${\sim}\,$365~KB versus 192~B for Groth16) and a slower verification time (${\sim}\,$700~ms versus ${\sim}\,$1~ms).
+Ligero proofs are inherently larger than pairing-based proofs because they encode proximity-test commitments rather than a constant number of group elements.
+Similarly, the Sumcheck+Ligero verifier performs work linear in the circuit size, whereas the Groth16 verifier performs a constant number of pairing operations.
+
+\paragraph{Comparison with OpenAC.}
+OpenAC~\cite{openac} reports a 129~ms proving time using Halo2 with an IPA commitment scheme, which is an order of magnitude faster than \textsc{zk-eidas}~v2.
+However, the two systems differ in scope: OpenAC does not include identity escrow, post-quantum security, or in-circuit ECDSA signature verification.
+The Halo2/IPA backend also does not provide post-quantum security, as IPA commitments rely on the discrete logarithm assumption.
+A direct performance comparison would require running both systems on identical hardware with equivalent circuit functionality.
+
+\paragraph{Comparison with BBS+.}
+BBS+ signatures~\cite{bbs} achieve millisecond-level proving and verification with proofs of a few kilobytes, making them the fastest option in the landscape.
+However, BBS+ is a specialised signature scheme rather than a general-purpose proof system: it supports selective disclosure of signed attributes but cannot express arbitrary predicates (e.g., range proofs or inequality checks) without auxiliary zero-knowledge proofs.
+BBS+ also relies on pairing-based cryptography, which is not post-quantum secure.
+
+\paragraph{Honest assessment.}
+We acknowledge that the ${\sim}\,$1.3~second proving time and ${\sim}\,$700~ms verification time of \textsc{zk-eidas}~v2 are not competitive with pairing-based systems for latency-sensitive applications such as tap-to-verify mobile interactions.
+The ${\sim}\,$365~KB proof size, while manageable for HTTP-based workflows, is three orders of magnitude larger than a Groth16 proof.
+These are inherent costs of the Sumcheck+Ligero proof system, which we accept in exchange for three properties that no other system in Table~\ref{tab:comparison} provides simultaneously:
+\begin{enumerate}
+  \item \textbf{Transparent setup}: no trusted ceremony, no toxic waste, no per-circuit setup phase.
+  \item \textbf{Post-quantum security}: the proving system operates over $\mathsf{GF}(2^{128})$ with hash-based commitments; the escrow uses ML-KEM-768.
+  \item \textbf{Identity escrow}: per-presentation encryption with in-circuit binding and negligible overhead (${<}\,0.3$~ms).
+\end{enumerate}
+For the target deployment model --- a server-side API that processes credential presentations over HTTP --- the 1.3-second proving time and 700-millisecond verification time are practical.
+The end-to-end latency of a presentation (prove, transmit, verify) fits comfortably within a 3-second user-facing request budget.
+The identity escrow overhead is negligible in this context, adding under 0.3~ms to a pipeline dominated by the zero-knowledge proof.

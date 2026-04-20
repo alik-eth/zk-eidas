@@ -1,0 +1,36 @@
+[package]
+name = "zk-eidas-p7s-circuit"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Longfellow circuit bindings for eIDAS 1 p7s witnesses"
+
+[dependencies]
+longfellow-sys = { path = "../longfellow-sys" }
+zk-eidas-p7s = { path = "../zk-eidas-p7s" }
+thiserror = { workspace = true }
+sha2 = "0.10"
+p256 = { version = "0.13", default-features = false, features = ["ecdsa", "std"] }
+# Benchmark-only deps (used by the `p7s_benchmark` binary). Keeping them
+# as regular dependencies rather than dev-dependencies so `cargo run
+# --release --bin p7s_benchmark` works without a test-profile build.
+hex = "0.4"
+serde_json = { workspace = true }
+
+[features]
+# Mirrors `zk-eidas-p7s/test-bypass-host-anchors` — propagates to the
+# parser and wires the `prove_bypass_host_anchors` FFI entry so
+# invariant_2a / invariant_2c tests can construct lying-offset
+# witnesses and verify the in-circuit anchors reject them.
+test-bypass-host-anchors = [
+    "zk-eidas-p7s/test-bypass-host-anchors",
+    "longfellow-sys/test-bypass-host-anchors",
+]
+
+[dev-dependencies]
+proptest = "1"
+
+[[bin]]
+name = "p7s_benchmark"
+path = "src/bin/p7s_benchmark.rs"

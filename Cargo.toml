@@ -3,6 +3,8 @@ resolver = "2"
 members = [
     "crates/zk-eidas-types",
     "crates/zk-eidas-mdoc",
+    "crates/zk-eidas-p7s",
+    "crates/zk-eidas-p7s-circuit",
     "crates/zk-eidas-utils",
     "crates/zk-eidas",
     "crates/longfellow-sys",

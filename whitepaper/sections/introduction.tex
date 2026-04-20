@@ -1,0 +1,103 @@
+\section{Introduction}\label{sec:intro}
+
+The European Digital Identity framework, codified in Regulation~(EU)~2024/1183
+(eIDAS~2.0)~\cite{eidas2}, mandates that every Member State offer a digital
+identity wallet to its citizens by~2026, placing privacy-preserving credential
+management on a trajectory that will ultimately touch some 450~million
+individuals. The regulation's technical foundation rests on ISO~18013-5 mobile
+document (mdoc) credentials, a CBOR-encoded format originally designed for
+mobile driving licences and now adopted as one of two credential formats
+(alongside SD-JWT) for national identity documents, health certificates, and
+professional attestations. In the current mdoc
+presentation protocol a holder transmits each disclosed data element in the
+clear to the relying party, together with an issuer signature that covers the
+entire credential. Although the standard provides for selective release of
+individual elements, every element that \emph{is} released arrives as plaintext
+bound to a device key, leaving the relying party---and any downstream data
+processor---with more personal data than the transaction requires. This tension
+between the regulation's stated goal of privacy by design and the reality of
+full-element disclosure motivates a cryptographic layer that can prove
+statements about credential claims without revealing the claims themselves.
+
+Zero-knowledge proof systems offer a natural remedy: a holder can convince a
+verifier that a credential satisfies a policy (``the holder is over~18,'' ``the
+nationality is in the Schengen set'') without transmitting the underlying
+attribute values. Several constructions have been proposed. Groth16~\cite{groth16}
+produces succinct 192-byte proofs with constant-time verification, but it
+requires a per-circuit trusted setup ceremony and its security relies on the
+hardness of the discrete logarithm problem in pairing-friendly groups---a
+problem that Shor's algorithm solves in polynomial time on a fault-tolerant
+quantum computer. BBS+ signatures~\cite{bbs} provide efficient multi-message
+selective disclosure and unlinkable presentations, yet they too depend on
+bilinear pairings over elliptic curves vulnerable to quantum attack.
+Halo~2~\cite{halo2}, as employed by the OpenAC anonymous credential
+scheme~\cite{openac}, eliminates the trusted setup through an inner-product
+argument, but its soundness still rests on the discrete-logarithm assumption
+and therefore inherits the same quantum vulnerability. Beyond post-quantum
+resilience, none of these systems addresses the accountability requirement
+introduced by eIDAS~2.0 Article~5a: that a judicial authority must be able, under
+a lawful order, to recover the identity behind an otherwise anonymous
+presentation. Credential systems that achieve perfect unlinkability do so at the
+cost of any recovery mechanism, while those that embed identity do so in ways
+that break unlinkability under collusion.
+
+To our knowledge, no existing construction simultaneously provides:
+\begin{enumerate}
+  \item Post-quantum security from a transparent (no trusted setup) proving
+        system, relying solely on collision-resistant hashing.
+  \item Predicate proofs over real ISO~18013-5 mdoc credentials with in-circuit
+        CBOR parsing and issuer-signature verification.
+  \item Court-resolvable identity escrow that satisfies eIDAS accountability
+        requirements without degrading unlinkability during normal use.
+  \item Practical performance, with end-to-end proving in approximately 1.3\,s
+        for multi-attribute credentials on commodity hardware.
+\end{enumerate}
+
+We present \textsc{zk-eidas}, a system that fills this gap. Our contributions
+are as follows:
+\begin{enumerate}
+  \item A construction for selective disclosure over mdoc credentials using the
+        Sumcheck and Ligero proof system, requiring only SHA-256 as a
+        cryptographic primitive---no bilinear pairings, no trusted setup, and no
+        assumptions beyond collision resistance of the hash function.
+  \item An identity escrow protocol combining ML-KEM-768 (FIPS~203)~\cite{fips203}
+        and AES-256-GCM with ZK-bound ciphertexts, enabling court-ordered
+        de-anonymization while preserving unlinkability under normal operation.
+  \item A predicate system supporting equality, comparison, range, set
+        membership, and Boolean composition over credential claims, compiled
+        from a declarative policy language into arithmetic circuits.
+  \item Scoped nullifiers and holder binding derived from hash commitment
+        chains, preventing double-spending and credential transfer without
+        introducing linkability across relying parties.
+  \item Comprehensive benchmarks on representative credential profiles and a
+        detailed compliance mapping to the EUDI Architecture Reference Framework
+        requirements.
+\end{enumerate}
+
+We note an honest limitation of the current construction. The ECDSA P-256
+signature produced by the credential issuer is a classical primitive: its
+security does not survive a cryptographically relevant quantum computer. This is
+a deliberate scope boundary rather than an oversight. Issuers are distinct
+trust-domain actors who control their own key material and signature algorithms;
+as post-quantum signature standards such as ML-DSA and SLH-DSA mature, issuers
+can migrate independently of the proving system. Our circuit already verifies
+ECDSA P-256 signatures in approximately 17\,ms, and the Sumcheck+Ligero
+framework is agnostic to the signature scheme once an appropriate circuit is
+supplied. We discuss the migration path and its implications in
+Section~\ref{sec:discussion}.
+
+The remainder of this paper is organised as follows.
+Section~\ref{sec:background} reviews the eIDAS~2.0 regulatory landscape, the
+mdoc credential format, and the Sumcheck+Ligero proof system.
+Section~\ref{sec:construction} presents our core construction for selective
+disclosure and predicate proving.
+Section~\ref{sec:escrow} details the identity escrow protocol.
+Section~\ref{sec:implementation} describes the implementation, including circuit
+design and system architecture.
+Section~\ref{sec:evaluation} reports performance benchmarks and proof-size
+measurements.
+Section~\ref{sec:eudi-mapping} maps the construction to EUDI ARF compliance
+requirements.
+Section~\ref{sec:related} surveys related work.
+Section~\ref{sec:discussion} discusses limitations, the post-quantum signature
+migration path, and directions for future work.

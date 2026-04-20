@@ -1,0 +1,28 @@
+[package]
+name = "zk-eidas-p7s"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "PKCS#7/CMS credential parser and witness builder for zk-eidas (eIDAS 1 QTSP signatures)"
+
+[dependencies]
+cms = "0.2"
+x509-cert = { version = "0.2", features = ["std"] }
+der = { version = "0.7", features = ["alloc", "oid"] }
+const-oid = { version = "0.9", features = ["db"] }
+p256 = { version = "0.13", features = ["ecdsa", "pem"] }
+sha2 = "0.10"
+thiserror = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+
+[features]
+# Skip host-side DER anchor assertions (SPKI prefix + CMS messageDigest
+# prefix) so downstream tests can exercise the in-circuit anchors as the
+# sole enforcement layer. Production builds MUST NOT enable this.
+test-bypass-host-anchors = []
+
+[dev-dependencies]
+hex-literal = "0.4"
+hex = "0.4"
+serde_json = "1"

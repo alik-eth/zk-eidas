@@ -1,0 +1,61 @@
+% !TEX root = ../main.tex
+% Figure: Identity escrow protocol sequence diagram
+\begin{tikzpicture}[
+  node distance=0 and 0,
+  arrow/.style={-{Stealth[length=5pt]}, thick},
+  dasharrow/.style={-{Stealth[length=5pt]}, thick, dashed},
+  every node/.style={font=\small}
+]
+
+%% ── Column x-positions ───────────────────────────────────────────────
+\def\xH{0}      % Holder
+\def\xV{5.5}    % Verifier
+\def\xE{11}     % Escrow Authority
+
+%% ── Party headers ────────────────────────────────────────────────────
+\node[align=center] (LH) at (\xH, 0) {\textbf{Holder} ($\mathcal{H}$)};
+\node[align=center] (LV) at (\xV, 0) {\textbf{Verifier} ($\mathcal{V}$)};
+\node[align=center] (LE) at (\xE, 0) {\textbf{Escrow Authority} ($\mathcal{E}$)};
+
+%% ── Vertical timelines ───────────────────────────────────────────────
+\draw[thick] (\xH,  -0.3) -- (\xH, -7.8);
+\draw[thick] (\xV,  -0.3) -- (\xV, -7.8);
+\draw[thick] (\xE,  -0.3) -- (\xE, -7.8);
+
+%% ── Step 1: Holder → Verifier: ZK proof + escrow envelope ────────────
+\draw[arrow] (\xH, -1.0) -- (\xV, -1.0)
+    node[midway, above, font=\small] {ZK proof $+$ escrow envelope};
+
+%% ── Step 2: Verifier internal: verify proof ──────────────────────────
+\draw[thick] (\xV-0.1, -1.7) rectangle (\xV+0.1, -2.5);
+\node[right=0.15cm, align=left, font=\small] at (\xV+0.1, -2.1)
+    {verify proof\\accept / reject};
+
+%% ── Separator: normal flow ───────────────────────────────────────────
+\draw[dotted, thick] (-0.7, -3.2) -- (\xE+0.8, -3.2);
+\node[font=\scriptsize\itshape, right] at (-0.7, -3.15) {};
+
+%% ── Court-order dashed box ───────────────────────────────────────────
+\draw[dashed, rounded corners=4pt, thick]
+    (-0.5, -3.5) rectangle (\xE+0.6, -6.2);
+\node[font=\small\itshape, anchor=north west] at (-0.5, -3.5)
+    {[court order]};
+
+%% ── Step 3: Verifier → Escrow Authority: envelope ────────────────────
+\draw[arrow] (\xV, -4.2) -- (\xE, -4.2)
+    node[midway, above, font=\small] {envelope};
+
+%% ── Step 4: Escrow Authority internal: ML-KEM + AES-GCM decrypt ──────
+\draw[thick] (\xE-0.1, -4.6) rectangle (\xE+0.1, -5.8);
+\node[right=0.15cm, align=left, font=\small] at (\xE+0.1, -5.2)
+    {ML-KEM-768 decaps\\AES-256-GCM decrypt\\bind check ($\delta$)};
+
+%% ── Step 5: Escrow Authority → Verifier: recovered identity ──────────
+\draw[arrow] (\xE, -6.5) -- (\xV, -6.5)
+    node[midway, above, font=\small] {identity fields $\{f_i\}$};
+
+%% ── Step 6: Verifier → Holder (optional notification, dashed) ────────
+\draw[dasharrow] (\xV, -7.3) -- (\xH, -7.3)
+    node[midway, above, font=\small] {\textit{(optional notification)}};
+
+\end{tikzpicture}

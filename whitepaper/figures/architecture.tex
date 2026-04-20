@@ -1,0 +1,73 @@
+% !TEX root = ../main.tex
+% Figure: zk-eidas system architecture pipeline
+\begin{tikzpicture}[
+  node distance=0.55cm and 0.65cm,
+  box/.style={
+    draw, rounded corners=3pt, minimum height=0.75cm,
+    minimum width=1.55cm, align=center, font=\small
+  },
+  subbox/.style={
+    draw, rounded corners=2pt, minimum height=0.5cm,
+    minimum width=1.3cm, align=center, font=\scriptsize,
+    dashed
+  },
+  arrow/.style={-{Stealth[length=5pt]}, thick},
+  dasharrow/.style={-{Stealth[length=5pt]}, thick, dashed}
+]
+
+%% ── Main pipeline ────────────────────────────────────────────────────
+\node[box] (mdoc)    {mdoc\\(CBOR)};
+\node[box, right=of mdoc]    (parser)  {Rust\\Parser};
+\node[box, right=of parser]  (witness) {Witness\\Generation};
+\node[box, right=of witness, minimum width=2.6cm] (circuit) {Longfellow\\Circuit};
+\node[box, right=of circuit] (proof)   {Proof\\Bundle};
+\node[box, right=of proof]   (verify)  {Verifier};
+
+%% ── Main arrows ───────────────────────────────────────────────────────
+\draw[arrow] (mdoc)    -- (parser);
+\draw[arrow] (parser)  -- (witness);
+\draw[arrow] (witness) -- (circuit);
+\draw[arrow] (circuit) -- (proof);
+\draw[arrow] (proof)   -- (verify);
+
+%% ── Sub-components inside Longfellow Circuit box ─────────────────────
+\begin{scope}[node distance=0.22cm]
+  \node[subbox, below=0.55cm of circuit, xshift=-0.6cm] (cbor)    {CBOR\\parsing};
+  \node[subbox, right=of cbor]                           (ecdsa)   {ECDSA\\P-256};
+  \node[subbox, right=of ecdsa]                          (pred)    {Predicate\\eval};
+  \node[subbox, below=0.22cm of cbor]                    (null)    {Nullifier};
+  \node[subbox, right=of null]                           (bind)    {Holder\\binding};
+  \node[subbox, right=of bind]                           (escdig)  {Escrow\\digest};
+\end{scope}
+
+%% ── Fit box around sub-components ────────────────────────────────────
+\begin{pgfonlayer}{background}
+  \node[draw, rounded corners=4pt, fill=gray!8,
+        inner sep=5pt,
+        fit=(cbor)(ecdsa)(pred)(null)(bind)(escdig)] (circfit) {};
+\end{pgfonlayer}
+
+%% ── Circuit node repositioned to span sub-component block ────────────
+%% (label above the fit box)
+\node[above=0.05cm of circfit, font=\small\bfseries] {Longfellow Circuit};
+
+%% ── Re-draw circuit bounding arrow from witness to fit box ──────────
+%% (override the earlier arrow target to the fit box left edge)
+\draw[arrow] (witness.east) -- (circfit.west |- witness.east);
+\draw[arrow] (circfit.east |- proof.west)  -- (proof.west);
+
+%% ── Pre-generated cache (below circuit) ──────────────────────────────
+\node[box, below=1.3cm of circfit] (cache) {Pre-generated\\(from cache)};
+\draw[dasharrow] (cache.north) -- (circfit.south);
+
+%% ── Escrow envelope path (below proof / verify) ──────────────────────
+\node[box, below=1.3cm of proof] (env)  {Escrow\\Envelope};
+\node[box, right=of env]         (auth) {Escrow\\Authority};
+
+\draw[arrow] (proof.south) -- (env.north);
+\draw[arrow] (env)  -- (auth);
+
+%% ── Dashed guide line from Verifier down to Escrow Authority ─────────
+\draw[dasharrow] (verify.south) |- (auth.north);
+
+\end{tikzpicture}
