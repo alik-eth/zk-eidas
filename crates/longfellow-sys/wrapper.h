@@ -122,3 +122,18 @@ extern int longfellow_smoke_test(void);
 extern int longfellow_prove_verify_cached(
     const uint8_t* circuit, unsigned long circuit_len,
     uint8_t** proof_out, unsigned long* proof_len_out);
+
+// --- p7s circuit (Phase 2a) ---
+
+typedef enum {
+  P7S_SUCCESS = 0,
+  P7S_NULL_INPUT = 1,
+  P7S_INVALID_INPUT = 2,
+  P7S_PROVER_FAILURE = 3,
+  P7S_VERIFIER_FAILURE = 4,
+  P7S_MEMORY_FAILURE = 5,
+} P7sErrorCode;
+
+// Scaffolding stubs — replaced with real prove/verify signatures as invariants land.
+extern int p7s_prove_stub(void);
+extern int p7s_verify_stub(void);
