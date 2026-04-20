@@ -22,13 +22,19 @@
 //!   v3 (Task 21) — extends v2 with the nonce fields appended:
 //!     u32 json_nonce_offset       relative to signed_content; +64 ≤ 1024
 //!     u8  nonce_hex[64]           ASCII lowercase hex
+//!
+//!   v4 (Task 22) — extends v3 with json_context_offset appended:
+//!     u32 json_context_offset     relative to signed_content;
+//!                                 + MAX_CONTEXT ≤ MAX_SIGNED_CONTENT
+//!     (context byte-length is NOT transmitted — it is derived in-circuit
+//!      from the SHA-256 padding of context_bytes).
 
 use zk_eidas_p7s::P7sWitness;
 
 use crate::CircuitError;
 
 /// Keep in sync with C++ constants in `p7s_circuit.h`.
-pub const SCHEMA_VERSION: u32 = 3;
+pub const SCHEMA_VERSION: u32 = 4;
 pub const MAX_CONTEXT: usize = 32;
 pub const MAX_SIGNED_CONTENT: usize = 1024;
 pub const PK_HEX_LEN: usize = 130;
@@ -102,8 +108,27 @@ impl Witness {
         let nonce_hex =
             &self.inner.p7s_bytes[off.json_nonce_start..off.json_nonce_start + NONCE_HEX_LEN];
 
+        // Context offset uses the in-witness context length (NOT the JSON
+        // locator's length — the two should agree for honest witnesses).
+        // The in-circuit byte-length comes from SHA padding; a mismatch
+        // fails at prove time with a clean ProverFailed.
+        if off.json_context_len != ctx.len() {
+            return Err(CircuitError::InvalidWitness(format!(
+                "json_context_len {} != witness.context.len() {}",
+                off.json_context_len,
+                ctx.len()
+            )));
+        }
+        let context_off_rel = plain_offset_relative(
+            off.json_context_start,
+            ctx.len(),
+            off.signed_content_start,
+            sc.len(),
+            "json_context",
+        )?;
+
         let mut out = Vec::with_capacity(
-            4 + 4 + MAX_CONTEXT + 4 + MAX_SIGNED_CONTENT + 4 + PK_HEX_LEN + 4 + NONCE_HEX_LEN,
+            4 + 4 + MAX_CONTEXT + 4 + MAX_SIGNED_CONTENT + 4 + PK_HEX_LEN + 4 + NONCE_HEX_LEN + 4,
         );
         out.extend_from_slice(&SCHEMA_VERSION.to_le_bytes());
 
@@ -127,8 +152,49 @@ impl Witness {
         out.extend_from_slice(&(nonce_off_rel as u32).to_le_bytes());
         out.extend_from_slice(nonce_hex);
 
+        // context offset
+        out.extend_from_slice(&(context_off_rel as u32).to_le_bytes());
+
         Ok(out)
     }
+}
+
+/// Validate a non-hex field offset/length and return the relative offset.
+/// Used for the plaintext `json_context` locator (length is variable and
+/// derived in-circuit from SHA padding; the C++ side enforces
+/// `offset + MAX_CONTEXT <= MAX_SIGNED_CONTENT`).
+fn plain_offset_relative(
+    start: usize,
+    len: usize,
+    sc_start: usize,
+    sc_len: usize,
+    label: &str,
+) -> Result<usize, CircuitError> {
+    if len > MAX_CONTEXT {
+        return Err(CircuitError::InvalidWitness(format!(
+            "{label}_len {len} exceeds MAX_CONTEXT {MAX_CONTEXT}"
+        )));
+    }
+    if start < sc_start {
+        return Err(CircuitError::InvalidWitness(format!(
+            "{label}_start precedes signed_content_start"
+        )));
+    }
+    let rel = start - sc_start;
+    if rel + len > sc_len {
+        return Err(CircuitError::InvalidWitness(format!(
+            "{label} window extends past signed_content"
+        )));
+    }
+    // The C++ bound is `offset + MAX_CONTEXT <= MAX_SIGNED_CONTENT` (the
+    // fixed-length shifter always extracts MAX_CONTEXT bytes). Reject
+    // Rust-side for matching error surface.
+    if rel + MAX_CONTEXT > MAX_SIGNED_CONTENT {
+        return Err(CircuitError::InvalidWitness(format!(
+            "{label} + MAX_CONTEXT exceeds MAX_SIGNED_CONTENT"
+        )));
+    }
+    Ok(rel)
 }
 
 /// Validate a hex-field offset/length pair and return its offset relative
