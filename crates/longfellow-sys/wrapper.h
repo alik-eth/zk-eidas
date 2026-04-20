@@ -123,23 +123,26 @@ extern int longfellow_prove_verify_cached(
     const uint8_t* circuit, unsigned long circuit_len,
     uint8_t** proof_out, unsigned long* proof_len_out);
 
-// --- p7s circuit (Phase 2a, blob protocol v2) ---
+// --- p7s circuit (Phase 2a, blob protocol v3) ---
 //
 // Task 20 switched the ABI from typed C arguments to byte-blobs so
-// additional witness fields can land without per-task churn. Both blobs
-// start with a little-endian u32 schema version; the authoritative layout
-// lives in lib/circuits/p7s/p7s_zk.cc's "schema history" comment.
+// additional witness fields can land without per-task churn. Task 21
+// appends the nonce fields (v3). Both blobs start with a little-endian
+// u32 schema version; the authoritative layout lives in
+// lib/circuits/p7s/p7s_zk.cc's "schema history" comment.
 //
-// Witness blob v2:
-//   u32 version = 2
+// Witness blob v3:
+//   u32 version = 3
 //   u32 context_len ; u8 context[32]
 //   u32 signed_content_len ; u8 signed_content[1024]
 //   u32 json_pk_offset ; u8 pk_hex[130]
+//   u32 json_nonce_offset ; u8 nonce_hex[64]
 //
-// Public blob v2:
-//   u32 version = 2
+// Public blob v3:
+//   u32 version = 3
 //   u8 context_hash[32]
 //   u8 pk[65]
+//   u8 nonce[32]
 
 typedef enum {
   P7S_SUCCESS = 0,

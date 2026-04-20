@@ -12,20 +12,30 @@ use zk_eidas_p7s_circuit::{prove, verify, CircuitError, PublicInputs, Witness};
 const FIXTURE: &[u8] = include_bytes!("../../zk-eidas-p7s/fixtures/binding.qkb.p7s");
 const DUMMY_ROOT_PK: [u8; 65] = [0x04; 65];
 
-fn expected_pk() -> [u8; 65] {
+fn fixture_pk_and_nonce() -> ([u8; 65], [u8; 32]) {
     let w = build_witness(FIXTURE, b"0x", DUMMY_ROOT_PK).unwrap();
     let off = &w.offsets;
-    let pk_hex = &w.p7s_bytes[off.json_pk_start..off.json_pk_start + off.json_pk_len];
-    let mut out = [0u8; 65];
-    hex::decode_to_slice(pk_hex, &mut out).unwrap();
-    out
+    let mut pk = [0u8; 65];
+    hex::decode_to_slice(
+        &w.p7s_bytes[off.json_pk_start..off.json_pk_start + off.json_pk_len],
+        &mut pk,
+    )
+    .unwrap();
+    let mut nonce = [0u8; 32];
+    hex::decode_to_slice(
+        &w.p7s_bytes[off.json_nonce_start..off.json_nonce_start + off.json_nonce_len],
+        &mut nonce,
+    )
+    .unwrap();
+    (pk, nonce)
 }
 
 fn honest_public(context: &[u8]) -> PublicInputs {
+    let (pk, nonce) = fixture_pk_and_nonce();
     PublicInputs {
         context_hash: Sha256::digest(context).into(),
-        pk: expected_pk(),
-        nonce: [0u8; 32],
+        pk,
+        nonce,
         root_pk: [0u8; 65],
         timestamp: 0,
     }
