@@ -1,13 +1,16 @@
-//! P7s circuit FFI — blob protocol (schema v8).
+//! P7s circuit FFI — blob protocol (schema v9).
 //!
 //! Task 20 switched from typed C args to byte-blobs so additional witness
 //! fields can land without per-task ABI churn. Task 25a split the single
 //! GF(2^128) circuit into a dual-circuit hash + sig setup linked via a
-//! MAC gadget. Task 29 (25b) extends the witness blob with `cert_tbs`
-//! (+ raw r/s signature scalars) and wires real ECDSA verification
-//! against the hardcoded DIIA QTSP 2311 root pubkey. The dual-proof
-//! structure remains opaque to Rust (just more bytes inside the
-//! `P7sProof` vector). The authoritative schema lives in
+//! MAC gadget. Task 29 (25b) extended the witness blob with `cert_tbs`
+//! + raw r/s scalars and wired real ECDSA verification against the
+//! hardcoded DIIA QTSP 2311 root pubkey (v8). Task 26 adds the CMS
+//! content-signature leg (invariant 2a): `signed_attrs` + its own
+//! (r, s) scalars, verified under the user's `holder_pk` (public
+//! input, same bytes invariant 4 constrains on the hash side). The
+//! dual-proof structure remains opaque to Rust (just more bytes
+//! inside the `P7sProof` vector). The authoritative schema lives in
 //! `vendor/longfellow-zk/lib/circuits/p7s/p7s_zk.cc` under the "schema
 //! history" comment block; the Rust wrappers here only transport opaque
 //! blobs and proof bytes.

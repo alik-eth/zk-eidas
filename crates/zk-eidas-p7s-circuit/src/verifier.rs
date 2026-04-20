@@ -1,19 +1,26 @@
 //! Proof verification + public-input blob builder.
 //!
-//! Public blob v8 layout (see schema history in `witness.rs`). The public
-//! side is structurally identical to v3 — Tasks 22–25a and 29 don't add
-//! public inputs. The version byte still bumps so proofs minted under
-//! distinct circuits aren't interchangeable.
-//!   u32 version = 8
+//! Public blob v9 layout (see schema history in `witness.rs`). The public
+//! side is structurally identical to v3 — Tasks 22–26 don't add public
+//! inputs at the Rust surface. The version byte still bumps so proofs
+//! minted under distinct circuits aren't interchangeable.
+//!   u32 version = 9
 //!   u8  context_hash[32]
 //!   u8  pk[65]
 //!   u8  nonce[32]
 //!
-//! Note: the DIIA QTSP 2311 root pubkey used by invariant 1 is a
-//! compile-time constant in the C++ circuit — it is NOT part of the
-//! public blob. The `root_pk` field on `PublicInputs` is retained for
-//! type-system continuity with callers that still populate it, but
-//! `to_ffi_bytes()` ignores it.
+//! Notes:
+//!   * The DIIA QTSP 2311 root pubkey used by invariant 1 is a
+//!     compile-time constant in the C++ circuit — NOT part of the
+//!     public blob. `PublicInputs.root_pk` is retained for type-system
+//!     continuity but `to_ffi_bytes()` ignores it.
+//!   * The user holder public key used by invariant 2a IS part of the
+//!     public blob — it's `pk[65]`, the same bytes invariant 4
+//!     constrains on the hash side. The C++ verifier host parses
+//!     `pk[1..33]`/`pk[33..65]` (big-endian SEC1) into Fp256Base X/Y
+//!     and feeds them as sig-circuit public-input EltWs. Callers must
+//!     supply pk in SEC1 uncompressed form (leading 0x04 byte); both
+//!     the host and the hash circuit reject non-uncompressed points.
 
 use crate::{
     witness::{NONCE_BYTES, PK_BYTES, SCHEMA_VERSION},
