@@ -8,6 +8,12 @@
 //! -----------------------------------------------------------------------
 //! Schema history
 //! -----------------------------------------------------------------------
+//! Note: "Transcript seed" lines below record the seed that shipped with
+//! each schema version. The *current* seed is whatever the C++ file
+//! (`vendor/longfellow-zk/lib/circuits/p7s/p7s_zk.cc`) declares as
+//! `kHashTranscriptSeed` — today that's `"p7s-31-hash"`. Older seed names
+//! are kept here as history, not as the live value.
+//!
 //!   v1 (Task 1a, 1b): implicit-typed C args — no blob. Removed in Task 20.
 //!
 //!   v2 (Task 20) — Witness blob, all little-endian:

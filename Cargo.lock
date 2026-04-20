@@ -3398,6 +3398,7 @@ dependencies = [
  "longfellow-sys",
  "p256",
  "proptest",
+ "serde_json",
  "sha2",
  "thiserror",
  "zk-eidas-p7s",

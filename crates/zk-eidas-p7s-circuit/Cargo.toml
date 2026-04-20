@@ -12,6 +12,11 @@ zk-eidas-p7s = { path = "../zk-eidas-p7s" }
 thiserror = { workspace = true }
 sha2 = "0.10"
 p256 = { version = "0.13", default-features = false, features = ["ecdsa", "std"] }
+# Benchmark-only deps (used by the `p7s_benchmark` binary). Keeping them
+# as regular dependencies rather than dev-dependencies so `cargo run
+# --release --bin p7s_benchmark` works without a test-profile build.
+hex = "0.4"
+serde_json = { workspace = true }
 
 [features]
 # Mirrors `zk-eidas-p7s/test-bypass-host-anchors` — propagates to the
@@ -24,7 +29,8 @@ test-bypass-host-anchors = [
 ]
 
 [dev-dependencies]
-hex = "0.4"
 proptest = "1"
 
-# [[bench]] prove_verify added in Task 9 (P2a-9: bench + Phase 2a exit).
+[[bin]]
+name = "p7s_benchmark"
+path = "src/bin/p7s_benchmark.rs"
