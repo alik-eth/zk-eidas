@@ -1,19 +1,21 @@
-//! Proof generation — Task 1b (invariant 9: SHA-256(context_bytes)).
+//! Proof generation for the p7s circuit.
+//!
+//! The prover takes a `Witness` (which serializes to the v2 blob) and a
+//! `PublicInputs` value; it produces a Longfellow proof that the
+//! current invariants (9 and 4) hold.
 
-use crate::{witness::Task1bWitness, CircuitError};
+use crate::{verifier::PublicInputs, witness::Witness, CircuitError};
 
 #[derive(Debug, Clone)]
 pub struct Proof {
     pub bytes: Vec<u8>,
 }
 
-/// Phase 2a Task 1b prover.
-///
-/// Produces a Longfellow proof for the predicate
-/// `context_hash == SHA-256(context_bytes)`. `context_bytes` must be at
-/// most `longfellow_sys::p7s::CONTEXT_MAX_BYTES` long (v1 = 32 bytes).
-pub fn prove(witness: &Task1bWitness) -> Result<Proof, CircuitError> {
-    match longfellow_sys::p7s::prove(&witness.context_hash, &witness.context_bytes) {
+/// Produce a proof binding `witness` to `public`.
+pub fn prove(witness: &Witness, public: &PublicInputs) -> Result<Proof, CircuitError> {
+    let wit_blob = witness.to_ffi_bytes()?;
+    let pub_blob = public.to_ffi_bytes();
+    match longfellow_sys::p7s::prove(&wit_blob, &pub_blob) {
         Ok(p) => Ok(Proof { bytes: p.0 }),
         Err(e) => Err(CircuitError::from(e)),
     }

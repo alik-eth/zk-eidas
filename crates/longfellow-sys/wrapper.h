@@ -123,7 +123,23 @@ extern int longfellow_prove_verify_cached(
     const uint8_t* circuit, unsigned long circuit_len,
     uint8_t** proof_out, unsigned long* proof_len_out);
 
-// --- p7s circuit (Phase 2a) ---
+// --- p7s circuit (Phase 2a, blob protocol v2) ---
+//
+// Task 20 switched the ABI from typed C arguments to byte-blobs so
+// additional witness fields can land without per-task churn. Both blobs
+// start with a little-endian u32 schema version; the authoritative layout
+// lives in lib/circuits/p7s/p7s_zk.cc's "schema history" comment.
+//
+// Witness blob v2:
+//   u32 version = 2
+//   u32 context_len ; u8 context[32]
+//   u32 signed_content_len ; u8 signed_content[1024]
+//   u32 json_pk_offset ; u8 pk_hex[130]
+//
+// Public blob v2:
+//   u32 version = 2
+//   u8 context_hash[32]
+//   u8 pk[65]
 
 typedef enum {
   P7S_SUCCESS = 0,
@@ -134,16 +150,13 @@ typedef enum {
   P7S_MEMORY_FAILURE = 5,
 } P7sErrorCode;
 
-// Phase 2a Task 1b — invariant 9: context_hash == SHA-256(context_bytes).
-// v1 bound: context_len <= 32 bytes (CONTEXT_MAX_BYTES = 32). Proof bytes
-// are opaque; caller must free via p7s_free_proof.
 extern P7sErrorCode p7s_prove(
-    const uint8_t context_hash[32],
-    uint8_t** proof_out, unsigned long* proof_len_out,
-    const uint8_t* context_bytes, unsigned long context_len);
+    const uint8_t* witness_blob, unsigned long witness_blob_len,
+    const uint8_t* public_blob, unsigned long public_blob_len,
+    uint8_t** proof_out, unsigned long* proof_len_out);
 
 extern P7sErrorCode p7s_verify(
-    const uint8_t context_hash[32],
+    const uint8_t* public_blob, unsigned long public_blob_len,
     const uint8_t* proof, unsigned long proof_len);
 
 extern void p7s_free_proof(uint8_t* proof);
