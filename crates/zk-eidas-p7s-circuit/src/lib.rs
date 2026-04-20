@@ -9,13 +9,13 @@ pub mod witness;
 
 pub use prover::{prove, Proof};
 pub use verifier::{verify, PublicInputs};
-pub use witness::{Task1bWitness, Witness};
+pub use witness::Witness;
 
 #[derive(Debug, thiserror::Error)]
 pub enum CircuitError {
     #[error("invalid witness: {0}")]
     InvalidWitness(String),
-    #[error("context length {got} exceeds CONTEXT_MAX_BYTES = {max}")]
+    #[error("context length {got} exceeds MAX_CONTEXT = {max}")]
     ContextTooLong { got: usize, max: usize },
     #[error("prover failed with code {0}")]
     ProverFailed(u32),
@@ -29,15 +29,9 @@ impl From<longfellow_sys::p7s::P7sFfiError> for CircuitError {
     fn from(e: longfellow_sys::p7s::P7sFfiError) -> Self {
         use longfellow_sys::p7s::P7sFfiError;
         match e {
-            P7sFfiError::ContextTooLong { got, max } => CircuitError::ContextTooLong { got, max },
             P7sFfiError::ProveFailed(c) => CircuitError::ProverFailed(c),
             P7sFfiError::VerifyFailed(c) => CircuitError::VerifierFailed(c),
             P7sFfiError::MalformedProof => CircuitError::MalformedProof,
         }
     }
-}
-
-/// Sanity check: prove+verify a trivial empty-context round-trip.
-pub fn smoke() -> bool {
-    longfellow_sys::p7s::smoke()
 }
