@@ -1,10 +1,14 @@
-//! P7s circuit FFI — blob protocol (schema v2).
+//! P7s circuit FFI — blob protocol (schema v7).
 //!
 //! Task 20 switched from typed C args to byte-blobs so additional witness
-//! fields can land without per-task ABI churn. The authoritative schema
-//! lives in `vendor/longfellow-zk/lib/circuits/p7s/p7s_zk.cc` under the
-//! "schema history" comment block; the Rust wrappers here only transport
-//! opaque blobs and proof bytes.
+//! fields can land without per-task ABI churn. Task 25a splits the single
+//! GF(2^128) circuit into a dual-circuit hash + sig setup linked via a
+//! MAC gadget, but the blob schema itself stays identical to v6 — the
+//! dual-proof structure is opaque to Rust (it's just more bytes inside
+//! the `P7sProof` vector). The authoritative schema lives in
+//! `vendor/longfellow-zk/lib/circuits/p7s/p7s_zk.cc` under the "schema
+//! history" comment block; the Rust wrappers here only transport opaque
+//! blobs and proof bytes.
 
 use std::os::raw::c_ulong;
 

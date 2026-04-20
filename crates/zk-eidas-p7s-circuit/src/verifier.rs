@@ -1,10 +1,10 @@
 //! Proof verification + public-input blob builder.
 //!
-//! Public blob v6 layout (see schema history in `witness.rs`). The public
-//! side is structurally identical to v3 — Tasks 22, 23, and 24 don't add
-//! public inputs. The version byte still bumps so proofs minted under
-//! distinct circuits aren't interchangeable.
-//!   u32 version = 6
+//! Public blob v7 layout (see schema history in `witness.rs`). The public
+//! side is structurally identical to v3 — Tasks 22, 23, 24, and 25a don't
+//! add public inputs. The version byte still bumps so proofs minted
+//! under distinct circuits aren't interchangeable.
+//!   u32 version = 7
 //!   u8  context_hash[32]
 //!   u8  pk[65]
 //!   u8  nonce[32]
@@ -27,7 +27,7 @@ pub struct PublicInputs {
 }
 
 impl PublicInputs {
-    /// Serialize the public-inputs blob (v3 layout).
+    /// Serialize the public-inputs blob (current v7 layout).
     pub fn to_ffi_bytes(&self) -> Vec<u8> {
         let mut out = Vec::with_capacity(4 + 32 + PK_BYTES + NONCE_BYTES);
         out.extend_from_slice(&SCHEMA_VERSION.to_le_bytes());
