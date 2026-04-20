@@ -34,6 +34,14 @@
 //!                                  + DECLARATION_LEN ≤ MAX_SIGNED_CONTENT
 //!     (declaration length is a compile-time constant; the phrase itself
 //!      is a circuit-side literal in sub/declaration_whitelist.cc).
+//!
+//!   v6 (Task 24) — extends v5 with message_digest appended:
+//!     u8  message_digest[32]       prover-claimed SHA-256(signed_content).
+//!     The C++ filler SHA-pads both context_bytes and signed_content
+//!     off-circuit before pushing into circuit wires, so the raw blob
+//!     still carries raw bytes + zero padding for both fields.
+
+use sha2::{Digest, Sha256};
 
 use zk_eidas_p7s::P7sWitness;
 
@@ -41,7 +49,7 @@ use crate::CircuitError;
 
 /// Keep in sync with C++ constants in `p7s_circuit.h` and
 /// `sub/declaration_whitelist.h`.
-pub const SCHEMA_VERSION: u32 = 5;
+pub const SCHEMA_VERSION: u32 = 6;
 pub const MAX_CONTEXT: usize = 32;
 pub const MAX_SIGNED_CONTENT: usize = 1024;
 pub const PK_HEX_LEN: usize = 130;
@@ -49,6 +57,11 @@ pub const PK_BYTES: usize = 65;
 pub const NONCE_HEX_LEN: usize = 64;
 pub const NONCE_BYTES: usize = 32;
 pub const DECLARATION_LEN: usize = 510;
+pub const MESSAGE_DIGEST_LEN: usize = 32;
+
+/// Maximum signed_content length that fits within 16 SHA blocks after
+/// Merkle-Damgård padding: 16 × 64 − 9 = 1015.
+pub const MAX_SIGNED_CONTENT_RAW: usize = 1015;
 
 #[derive(Debug, Clone)]
 pub struct Witness {
@@ -87,11 +100,12 @@ impl Witness {
             ));
         }
         let sc = &self.inner.p7s_bytes[off.signed_content_start..sc_end];
-        if sc.len() > MAX_SIGNED_CONTENT {
+        if sc.len() > MAX_SIGNED_CONTENT_RAW {
             return Err(CircuitError::InvalidWitness(format!(
-                "signed_content len {} exceeds MAX_SIGNED_CONTENT {}",
+                "signed_content len {} exceeds MAX_SIGNED_CONTENT_RAW {} \
+                 (needs to fit in 16 SHA blocks including 9-byte padding)",
                 sc.len(),
-                MAX_SIGNED_CONTENT
+                MAX_SIGNED_CONTENT_RAW
             )));
         }
 
@@ -154,9 +168,12 @@ impl Witness {
             "json_declaration",
         )?;
 
+        // Compute the prover's claimed message_digest = SHA-256(signed_content).
+        let message_digest: [u8; MESSAGE_DIGEST_LEN] = Sha256::digest(sc).into();
+
         let mut out = Vec::with_capacity(
             4 + 4 + MAX_CONTEXT + 4 + MAX_SIGNED_CONTENT + 4 + PK_HEX_LEN
-                + 4 + NONCE_HEX_LEN + 4 + 4,
+                + 4 + NONCE_HEX_LEN + 4 + 4 + MESSAGE_DIGEST_LEN,
         );
         out.extend_from_slice(&SCHEMA_VERSION.to_le_bytes());
 
@@ -185,6 +202,9 @@ impl Witness {
 
         // declaration offset
         out.extend_from_slice(&(declaration_off_rel as u32).to_le_bytes());
+
+        // messageDigest = SHA-256(signed_content)
+        out.extend_from_slice(&message_digest);
 
         Ok(out)
     }
