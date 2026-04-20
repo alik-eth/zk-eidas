@@ -1,0 +1,19 @@
+[package]
+name = "zk-eidas-p7s-circuit"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Longfellow circuit bindings for eIDAS 1 p7s witnesses"
+
+[dependencies]
+longfellow-sys = { path = "../longfellow-sys" }
+zk-eidas-p7s = { path = "../zk-eidas-p7s" }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+hex = "0.4"
+sha2 = "0.10"
+proptest = "1"
+
+# [[bench]] prove_verify added in Task 9 (P2a-9: bench + Phase 2a exit).
