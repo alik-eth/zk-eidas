@@ -9,7 +9,7 @@ pub mod witness;
 
 pub use prover::{prove, Proof};
 pub use verifier::{verify, PublicInputs};
-pub use witness::Witness;
+pub use witness::{Task1aWitness, Witness};
 
 #[derive(Debug, thiserror::Error)]
 pub enum CircuitError {
