@@ -34,7 +34,6 @@ const DUMMY_ROOT_PK: [u8; 65] = [0x04; 65];
 //   1278 message_digest(32)                                       = 1310
 //   1310 cert_tbs_len(4) + cert_tbs(2048)                         = 3362
 //   3362 cert_sig_r(32) + cert_sig_s(32)                          = 3426
-const SC_START_IN_BLOB: usize = 44;
 const CERT_TBS_LEN_IN_BLOB: usize = 1310;
 const CERT_TBS_DATA_IN_BLOB: usize = CERT_TBS_LEN_IN_BLOB + 4; // 1314
 const CERT_SIG_R_IN_BLOB: usize = CERT_TBS_DATA_IN_BLOB + 2048; // 3362
