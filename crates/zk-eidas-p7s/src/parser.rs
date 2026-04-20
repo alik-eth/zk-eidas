@@ -16,6 +16,22 @@ use crate::{locator, P7sError, P7sOffsets};
 /// OID 2.5.4.5 — X.520 serialNumber attribute.
 const OID_SERIAL_NUMBER: ObjectIdentifier = ObjectIdentifier::new_unwrap("2.5.4.5");
 
+/// 26-byte DIIA P-256 SPKI DER prefix — identical to the constant the
+/// p7s circuit asserts on-wire at `cert_tbs[spki_offset..+26]`. Source
+/// of truth is this host constant; the submodule's
+/// `vendor/longfellow-zk/lib/circuits/p7s/p7s_zk.cc` carries the same
+/// 26 bytes in `kSpkiDiaP256Prefix`. Any change requires updating both
+/// sites.
+const DIIA_P256_SPKI_PREFIX: [u8; 26] = [
+    0x30, 0x59,                                     // SPKI SEQ hdr (l=89)
+    0x30, 0x13,                                     // AlgId SEQ hdr (l=19)
+    0x06, 0x07, 0x2a, 0x86, 0x48, 0xce, 0x3d,       // OID id-ecPublicKey
+    0x02, 0x01,
+    0x06, 0x08, 0x2a, 0x86, 0x48, 0xce, 0x3d,       // OID prime256v1 (P-256)
+    0x03, 0x01, 0x07,
+    0x03, 0x42, 0x00,                               // BIT STRING hdr (l=66)
+];
+
 /// Parse the p7s and locate every byte range of interest.
 pub(crate) fn locate_offsets(p7s: &[u8]) -> Result<P7sOffsets, P7sError> {
     // ── ContentInfo + SignedData ──────────────────────────────────────
@@ -110,6 +126,26 @@ pub(crate) fn locate_offsets(p7s: &[u8]) -> Result<P7sOffsets, P7sError> {
         + find_subslice_unique(&cert_der, spki_bitstring)
             .ok_or(P7sError::OffsetNotFound("user signing pk"))?;
 
+    // SPKI offset WITHIN cert_tbs — the 26-byte DIIA P-256 SPKI DER
+    // prefix sits at `cert_tbs[spki_offset..spki_offset + 26]`, and
+    // the 65-byte SEC1 point (SEC1 0x04 at `spki_offset + 26`) sits
+    // at `cert_tbs[spki_offset + 26..spki_offset + 91]`. Mirror of
+    // the in-circuit anchor in vendor/longfellow-zk/lib/circuits/p7s/
+    // p7s_zk.cc's `build_hash_circuit`. Host-side check gives a clean
+    // P7sError on non-DIIA / non-P-256 certs instead of an opaque
+    // circuit-level failure.
+    const SPKI_PREFIX_LEN: usize = 26;
+    let cert_tbs_spki_offset = user_signing_pk_start
+        .checked_sub(cert_tbs_start)
+        .and_then(|p| p.checked_sub(SPKI_PREFIX_LEN))
+        .ok_or(P7sError::OffsetNotFound("SPKI offset within cert_tbs"))?;
+    let spki_prefix_actual = &p7s[cert_tbs_start + cert_tbs_spki_offset..][..SPKI_PREFIX_LEN];
+    if spki_prefix_actual != DIIA_P256_SPKI_PREFIX {
+        return Err(P7sError::Cms(
+            "cert SPKI DER prefix does not match DIIA P-256 template".into(),
+        ));
+    }
+
     // ── SignerInfo content signature ──────────────────────────────────
     let signer_info = sd
         .signer_infos
@@ -200,6 +236,7 @@ pub(crate) fn locate_offsets(p7s: &[u8]) -> Result<P7sOffsets, P7sError> {
         cert_len,
         cert_tbs_start,
         cert_tbs_len,
+        cert_tbs_spki_offset,
         cert_sig_start,
         cert_sig_len,
         subject_sn_start,

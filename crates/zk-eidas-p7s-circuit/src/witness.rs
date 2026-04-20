@@ -59,6 +59,29 @@
 //!     part of the public blob. The `PublicInputs.root_pk` field is
 //!     retained for type-system continuity but is not serialized.
 //!     Transcript seed bumps to "p7s-29-hash".
+//!
+//!   v9 (Task 26, merged with former #30) — invariant 2a + SPKI
+//!     binding: the CMS content signature is signed by the holder's
+//!     cert SPKI (a P-256 key embedded in cert_tbs's
+//!     SubjectPublicKeyInfo), NOT the secp256k1 JSON.pk of invariant
+//!     4. The sig circuit gains a second ECDSA VerifyCircuit; the
+//!     hash circuit extracts the 65-byte SEC1 point from cert_tbs via
+//!     `Routing::shift` at a host-witnessed offset, anchored by a
+//!     26-byte DIIA P-256 SPKI DER prefix assertion. Four messages
+//!     cross-bind hash→sig via MAC (kMacMessagesCount = 4): `e`, `e2`,
+//!     cert SPKI X, cert SPKI Y. Cert SPKI stays PRIVATE — no holder
+//!     identity in the public blob.
+//!
+//! Witness blob extends v8 with: `u32 cert_tbs_spki_offset` (offset of
+//! the SPKI SEQUENCE 0x30 tag WITHIN cert_tbs — host-witnessed
+//! because DIIA subject-DN byte length varies per holder),
+//! `u32 signed_attrs_len` (in [0, 1527]), `u8 signed_attrs[1536]`
+//! (raw bytes + zero pad; first byte MUST be 0xA0 — the host filler
+//! rewrites byte 0 to 0x31, the CAdES-canonical SET OF tag the
+//! content sig signs over, and SHA-pads the canonical buffer before
+//! pushing into circuit wires), and `u8 content_sig_r[32]` /
+//! `u8 content_sig_s[32]` (big-endian scalars, DER-parsed in Rust).
+//! Public blob unchanged from v8. Transcript seed "p7s-26-hash".
 
 use p256::ecdsa::Signature;
 use sha2::{Digest, Sha256};
@@ -69,7 +92,7 @@ use crate::CircuitError;
 
 /// Keep in sync with C++ constants in `p7s_circuit.h` and
 /// `sub/declaration_whitelist.h`.
-pub const SCHEMA_VERSION: u32 = 8;
+pub const SCHEMA_VERSION: u32 = 9;
 pub const MAX_CONTEXT: usize = 32;
 pub const MAX_SIGNED_CONTENT: usize = 1024;
 pub const PK_HEX_LEN: usize = 130;
@@ -87,6 +110,14 @@ pub const MAX_SIGNED_CONTENT_RAW: usize = 1015;
 /// the 9-byte SHA padding floor) is 2039.
 pub const CERT_TBS_MAX_BYTES: usize = 2048;
 pub const CERT_TBS_MAX_RAW: usize = CERT_TBS_MAX_BYTES - 9;
+
+/// 24 SHA blocks × 64 bytes = 1536. Max raw signedAttrs = 1527 (9-byte
+/// SHA pad floor). DIIA fixture measures 1387 bytes; 24 blocks gives
+/// ~140 bytes of headroom. If a real-world signedAttrs exceeds this,
+/// the host layer fails cleanly rather than truncating — the C++
+/// constant must be bumped in tandem.
+pub const SIGNED_ATTRS_MAX_BYTES: usize = 1536;
+pub const SIGNED_ATTRS_MAX_RAW: usize = SIGNED_ATTRS_MAX_BYTES - 9;
 
 #[derive(Debug, Clone)]
 pub struct Witness {
@@ -233,10 +264,51 @@ impl Witness {
         cert_sig_r.copy_from_slice(r_slice);
         cert_sig_s.copy_from_slice(s_slice);
 
+        // --- signedAttrs + content_sig extraction (v9) ---
+        let sa_end = off
+            .signed_attrs_start
+            .checked_add(off.signed_attrs_len)
+            .ok_or_else(|| CircuitError::InvalidWitness(
+                "signed_attrs range overflow".into(),
+            ))?;
+        if sa_end > self.inner.p7s_bytes.len() {
+            return Err(CircuitError::InvalidWitness(
+                "signed_attrs extends past p7s_bytes".into(),
+            ));
+        }
+        let signed_attrs = &self.inner.p7s_bytes[off.signed_attrs_start..sa_end];
+        if signed_attrs.len() > SIGNED_ATTRS_MAX_RAW {
+            return Err(CircuitError::InvalidWitness(format!(
+                "signed_attrs len {} exceeds SIGNED_ATTRS_MAX_RAW {} \
+                 (needs to fit in 24 SHA blocks including 9-byte padding)",
+                signed_attrs.len(),
+                SIGNED_ATTRS_MAX_RAW
+            )));
+        }
+        if signed_attrs.is_empty() || signed_attrs[0] != 0xA0 {
+            return Err(CircuitError::InvalidWitness(
+                "signed_attrs first byte must be 0xA0 ([0] IMPLICIT tag)".into(),
+            ));
+        }
+
+        // DER-parse content_sig — same normalization as cert_sig.
+        let content_sig_der = &self.inner.p7s_bytes
+            [off.content_sig_start..off.content_sig_start + off.content_sig_len];
+        let fixed_csig = Signature::from_der(content_sig_der).map_err(|e| {
+            CircuitError::InvalidWitness(format!("content_sig DER parse: {e}"))
+        })?;
+        let csig_bytes = fixed_csig.to_bytes();
+        let (cr_slice, cs_slice) = csig_bytes.split_at(32);
+        let mut content_sig_r = [0u8; 32];
+        let mut content_sig_s = [0u8; 32];
+        content_sig_r.copy_from_slice(cr_slice);
+        content_sig_s.copy_from_slice(cs_slice);
+
         let mut out = Vec::with_capacity(
             4 + 4 + MAX_CONTEXT + 4 + MAX_SIGNED_CONTENT + 4 + PK_HEX_LEN
                 + 4 + NONCE_HEX_LEN + 4 + 4 + MESSAGE_DIGEST_LEN
-                + 4 + CERT_TBS_MAX_BYTES + 32 + 32,
+                + 4 + 4 + CERT_TBS_MAX_BYTES + 32 + 32  // cert_tbs_len + spki_offset
+                + 4 + SIGNED_ATTRS_MAX_BYTES + 32 + 32,
         );
         out.extend_from_slice(&SCHEMA_VERSION.to_le_bytes());
 
@@ -269,13 +341,31 @@ impl Witness {
         // messageDigest = SHA-256(signed_content)
         out.extend_from_slice(&message_digest);
 
-        // --- v8: cert_tbs witness + raw (r, s) ---
+        // --- v8/v9: cert_tbs witness + v9 spki offset + raw (r, s) ---
+        // Blob order matches C++ parse_witness_blob:
+        //   u32 cert_tbs_len, u32 cert_tbs_spki_offset,
+        //   u8 cert_tbs[2048], u8 cert_sig_r[32], u8 cert_sig_s[32].
         out.extend_from_slice(&(cert_tbs.len() as u32).to_le_bytes());
+        let spki_offset_u32 = u32::try_from(off.cert_tbs_spki_offset).map_err(|_| {
+            CircuitError::InvalidWitness(format!(
+                "cert_tbs_spki_offset {} overflows u32",
+                off.cert_tbs_spki_offset
+            ))
+        })?;
+        out.extend_from_slice(&spki_offset_u32.to_le_bytes());
         let mut cert_tbs_padded = [0u8; CERT_TBS_MAX_BYTES];
         cert_tbs_padded[..cert_tbs.len()].copy_from_slice(cert_tbs);
         out.extend_from_slice(&cert_tbs_padded);
         out.extend_from_slice(&cert_sig_r);
         out.extend_from_slice(&cert_sig_s);
+
+        // --- v9: signedAttrs witness + content_sig raw (r, s) ---
+        out.extend_from_slice(&(signed_attrs.len() as u32).to_le_bytes());
+        let mut sa_padded = [0u8; SIGNED_ATTRS_MAX_BYTES];
+        sa_padded[..signed_attrs.len()].copy_from_slice(signed_attrs);
+        out.extend_from_slice(&sa_padded);
+        out.extend_from_slice(&content_sig_r);
+        out.extend_from_slice(&content_sig_s);
 
         Ok(out)
     }

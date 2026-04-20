@@ -38,6 +38,13 @@ pub struct P7sOffsets {
     /// TBSCertificate portion — what the issuer signed over.
     pub cert_tbs_start: usize,
     pub cert_tbs_len: usize,
+    /// Offset of the SPKI SEQUENCE's outer `0x30` tag WITHIN
+    /// `cert_tbs`. Equal to `user_signing_pk_start - cert_tbs_start - 26`
+    /// (SEC1 0x04 tag sits 26 bytes past the SPKI SEQ header). Host-
+    /// witnessed because the subject-DN byte length varies across
+    /// DIIA holders; the p7s circuit anchors it via a 26-byte DIIA
+    /// P-256 SPKI prefix assertion.
+    pub cert_tbs_spki_offset: usize,
     /// Raw (r, s) ECDSA signature bytes over the TBS.
     pub cert_sig_start: usize,
     pub cert_sig_len: usize,
