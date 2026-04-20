@@ -1,8 +1,20 @@
 //! Proof generation for the p7s circuit.
 //!
-//! The prover takes a `Witness` (which serializes to the v2 blob) and a
-//! `PublicInputs` value; it produces a Longfellow proof that the
-//! current invariants (9 and 4) hold.
+//! The prover takes a `Witness` (which serializes to the current v8
+//! witness blob) and a `PublicInputs` value; it produces a dual-circuit
+//! Longfellow proof (hash side over GF(2^128) + sig side over Fp256Base,
+//! linked by a cross-field MAC gadget) that the Phase-2a invariants hold
+//! on the witness:
+//!
+//!   * invariant 1  — signer cert's ECDSA verifies under the DIIA root
+//!   * invariant 4  — signed_content[pk_offset..] matches public.pk
+//!   * invariant 5  — signed_content[nonce_offset..] matches public.nonce
+//!   * invariant 6  — signed_content[ctx_offset..] matches context_bytes
+//!   * invariant 9  — context_hash == SHA-256(context_bytes)
+//!   * invariant 10 — signed_content[decl_offset..] == kDeclarationPhrase
+//!   * invariant 2b — message_digest == SHA-256(signed_content)
+//!
+//! See `witness.rs` for the authoritative blob-schema history.
 
 use crate::{verifier::PublicInputs, witness::Witness, CircuitError};
 

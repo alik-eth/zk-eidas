@@ -33,7 +33,7 @@ pub struct PublicInputs {
 }
 
 impl PublicInputs {
-    /// Serialize the public-inputs blob (current v7 layout).
+    /// Serialize the public-inputs blob (current v8 layout).
     pub fn to_ffi_bytes(&self) -> Vec<u8> {
         let mut out = Vec::with_capacity(4 + 32 + PK_BYTES + NONCE_BYTES);
         out.extend_from_slice(&SCHEMA_VERSION.to_le_bytes());
