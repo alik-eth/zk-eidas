@@ -16,6 +16,12 @@ sha2 = "0.10"
 thiserror = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 
+[features]
+# Skip host-side DER anchor assertions (SPKI prefix + CMS messageDigest
+# prefix) so downstream tests can exercise the in-circuit anchors as the
+# sole enforcement layer. Production builds MUST NOT enable this.
+test-bypass-host-anchors = []
+
 [dev-dependencies]
 hex-literal = "0.4"
 hex = "0.4"

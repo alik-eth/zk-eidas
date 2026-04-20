@@ -22,6 +22,7 @@ const OID_SERIAL_NUMBER: ObjectIdentifier = ObjectIdentifier::new_unwrap("2.5.4.
 /// `vendor/longfellow-zk/lib/circuits/p7s/p7s_zk.cc` carries the same
 /// 26 bytes in `kSpkiDiaP256Prefix`. Any change requires updating both
 /// sites.
+#[cfg_attr(feature = "test-bypass-host-anchors", allow(dead_code))]
 const DIIA_P256_SPKI_PREFIX: [u8; 26] = [
     0x30, 0x59,                                     // SPKI SEQ hdr (l=89)
     0x30, 0x13,                                     // AlgId SEQ hdr (l=19)
@@ -30,6 +31,21 @@ const DIIA_P256_SPKI_PREFIX: [u8; 26] = [
     0x06, 0x08, 0x2a, 0x86, 0x48, 0xce, 0x3d,       // OID prime256v1 (P-256)
     0x03, 0x01, 0x07,
     0x03, 0x42, 0x00,                               // BIT STRING hdr (l=66)
+];
+
+/// 17-byte CMS messageDigest attribute DER prefix (RFC 5652). Identical
+/// to `kSignedAttrsMdPrefix` in the p7s circuit, asserted on-wire at
+/// `signed_attrs[md_offset..md_offset+17]`. Attribute SEQUENCE hdr
+/// (l=47) + OID messageDigest + SET OF AttributeValue hdr (l=34) +
+/// OCTET STRING hdr (l=32). The 32-byte SHA-256 digest value follows.
+/// Any change requires updating both sites.
+#[cfg_attr(feature = "test-bypass-host-anchors", allow(dead_code))]
+const CMS_MESSAGE_DIGEST_ATTR_PREFIX: [u8; 17] = [
+    0x30, 0x2f,                                     // Attribute SEQUENCE (l=47)
+    0x06, 0x09, 0x2a, 0x86, 0x48, 0x86, 0xf7,       // OID messageDigest
+    0x0d, 0x01, 0x09, 0x04,                         // (1.2.840.113549.1.9.4)
+    0x31, 0x22,                                     // SET OF AttributeValue (l=34)
+    0x04, 0x20,                                     // OCTET STRING hdr (l=32)
 ];
 
 /// Parse the p7s and locate every byte range of interest.
@@ -139,11 +155,19 @@ pub(crate) fn locate_offsets(p7s: &[u8]) -> Result<P7sOffsets, P7sError> {
         .checked_sub(cert_tbs_start)
         .and_then(|p| p.checked_sub(SPKI_PREFIX_LEN))
         .ok_or(P7sError::OffsetNotFound("SPKI offset within cert_tbs"))?;
-    let spki_prefix_actual = &p7s[cert_tbs_start + cert_tbs_spki_offset..][..SPKI_PREFIX_LEN];
-    if spki_prefix_actual != DIIA_P256_SPKI_PREFIX {
-        return Err(P7sError::Cms(
-            "cert SPKI DER prefix does not match DIIA P-256 template".into(),
-        ));
+    // Host-side SPKI anchor check — same gating rationale as the
+    // messageDigest anchor below (bypass under the
+    // `test-bypass-host-anchors` feature so invariant_2a test-11b can
+    // exercise the in-circuit anchor as the sole enforcement layer).
+    #[cfg(not(feature = "test-bypass-host-anchors"))]
+    {
+        let spki_prefix_actual =
+            &p7s[cert_tbs_start + cert_tbs_spki_offset..][..SPKI_PREFIX_LEN];
+        if spki_prefix_actual != DIIA_P256_SPKI_PREFIX {
+            return Err(P7sError::Cms(
+                "cert SPKI DER prefix does not match DIIA P-256 template".into(),
+            ));
+        }
     }
 
     // ── SignerInfo content signature ──────────────────────────────────
@@ -213,6 +237,37 @@ pub(crate) fn locate_offsets(p7s: &[u8]) -> Result<P7sOffsets, P7sError> {
     let message_digest_start = md_attr_pos + md_attr_der.len() - md_bytes.len();
     let message_digest_len = md_bytes.len();
 
+    // messageDigest offset WITHIN signed_attrs (not absolute in p7s).
+    // The 17-byte CMS messageDigest DER prefix sits at
+    // `signed_attrs[md_offset..md_offset + 17]` and the 32-byte SHA-256
+    // value at `signed_attrs[md_offset + 17..md_offset + 49]`. Mirror of
+    // the in-circuit anchor in
+    // vendor/longfellow-zk/lib/circuits/p7s/p7s_zk.cc's
+    // build_hash_circuit (invariant 2c, Task 31). The host-side anchor
+    // check below is the debuggability bound; the in-circuit anchor
+    // assertion is the soundness bound (both use the same 17 bytes).
+    // Gated by the `test-bypass-host-anchors` Cargo feature so
+    // test-11b-style tests can construct a lying-offset witness and
+    // prove that the circuit rejects it. Production builds never
+    // enable the feature.
+    const MD_PREFIX_LEN: usize = 17;
+    let signed_attrs_md_offset = message_digest_start
+        .checked_sub(signed_attrs_start)
+        .and_then(|p| p.checked_sub(MD_PREFIX_LEN))
+        .ok_or(P7sError::OffsetNotFound(
+            "messageDigest within signed_attrs",
+        ))?;
+    #[cfg(not(feature = "test-bypass-host-anchors"))]
+    {
+        let md_prefix_actual =
+            &p7s[signed_attrs_start + signed_attrs_md_offset..][..MD_PREFIX_LEN];
+        if md_prefix_actual != CMS_MESSAGE_DIGEST_ATTR_PREFIX {
+            return Err(P7sError::Cms(
+                "CMS messageDigest DER prefix does not match template".into(),
+            ));
+        }
+    }
+
     // ── JSON fields inside signed_content ─────────────────────────────
     let (json_pk_start_rel, json_pk_len) = locator::locate_hex_field(json_bytes, b"pk", 130)
         .ok_or(P7sError::JsonFieldMissing("pk"))?;
@@ -246,6 +301,7 @@ pub(crate) fn locate_offsets(p7s: &[u8]) -> Result<P7sOffsets, P7sError> {
         content_sig_len,
         signed_attrs_start,
         signed_attrs_len,
+        signed_attrs_md_offset,
         message_digest_start,
         message_digest_len,
         json_pk_start: signed_content_start + json_pk_start_rel,

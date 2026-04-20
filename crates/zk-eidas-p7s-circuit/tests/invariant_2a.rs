@@ -35,17 +35,18 @@ use zk_eidas_p7s_circuit::{prove, verify, PublicInputs, Witness};
 const FIXTURE: &[u8] = include_bytes!("../../zk-eidas-p7s/fixtures/binding.qkb.p7s");
 const DUMMY_ROOT_PK: [u8; 65] = [0x04; 65];
 
-// v9 blob layout constants — mirrors invariant_1.rs.
+// v10 blob layout constants — mirrors invariant_1.rs.
 const CERT_TBS_LEN_IN_BLOB: usize = 1310;
 const CERT_TBS_SPKI_OFFSET_IN_BLOB: usize = CERT_TBS_LEN_IN_BLOB + 4; // 1314
 const CERT_TBS_DATA_IN_BLOB: usize = CERT_TBS_SPKI_OFFSET_IN_BLOB + 4; // 1318
 const CERT_SIG_R_IN_BLOB: usize = CERT_TBS_DATA_IN_BLOB + 2048; // 3366
 const CERT_SIG_S_IN_BLOB: usize = CERT_SIG_R_IN_BLOB + 32; // 3398
 const SIGNED_ATTRS_LEN_IN_BLOB: usize = CERT_SIG_S_IN_BLOB + 32; // 3430
-const SIGNED_ATTRS_DATA_IN_BLOB: usize = SIGNED_ATTRS_LEN_IN_BLOB + 4; // 3434
-const CONTENT_SIG_R_IN_BLOB: usize = SIGNED_ATTRS_DATA_IN_BLOB + 1536; // 4970
-const CONTENT_SIG_S_IN_BLOB: usize = CONTENT_SIG_R_IN_BLOB + 32; // 5002
-const BLOB_TOTAL_LEN: usize = CONTENT_SIG_S_IN_BLOB + 32; // 5034
+const SIGNED_ATTRS_MD_OFFSET_IN_BLOB: usize = SIGNED_ATTRS_LEN_IN_BLOB + 4; // 3434  ← v10
+const SIGNED_ATTRS_DATA_IN_BLOB: usize = SIGNED_ATTRS_MD_OFFSET_IN_BLOB + 4; // 3438
+const CONTENT_SIG_R_IN_BLOB: usize = SIGNED_ATTRS_DATA_IN_BLOB + 1536; // 4974
+const CONTENT_SIG_S_IN_BLOB: usize = CONTENT_SIG_R_IN_BLOB + 32; // 5006
+const BLOB_TOTAL_LEN: usize = CONTENT_SIG_S_IN_BLOB + 32; // 5038
 
 fn expected_pk() -> [u8; 65] {
     let w = build_witness(FIXTURE, b"0x", DUMMY_ROOT_PK).unwrap();
@@ -208,4 +209,64 @@ fn invariant_2a_tampered_spki_offset_prover_refuses() {
     let err = longfellow_sys::p7s::prove(&honest, &pub_blob)
         .expect_err("prove must refuse lied SPKI offset");
     expect_prove_refused(err);
+}
+
+/// (6) Under `--features test-bypass-host-anchors`, skip both the
+/// Rust parser's SPKI anchor check AND the C++ parse_witness_blob
+/// anchor check, then supply a lying `cert_tbs_spki_offset`. With
+/// both host-parser layers bypassed, the prover still rejects — the
+/// downstream `VerifyWitness3::compute_witness` call fails because
+/// the holder_pk bytes extracted at the lying offset no longer form
+/// a P-256 point whose ECDSA verifies against the content signature.
+/// That surfaces as P7S_INVALID_INPUT(2). (Note: this does NOT
+/// exercise the in-circuit 26-byte SPKI anchor directly — the
+/// ECDSA compute_witness check lies between the bypass and the
+/// circuit. That's a limitation of using offset-sliding as the lie:
+/// any lie that produces different SPKI bytes also breaks ECDSA
+/// at witness construction. Achieving in-circuit-anchor-only failure
+/// on the SPKI side would require constructing a lying witness
+/// whose shifted 65-byte SEC1 window coincidentally forms a valid
+/// P-256 point AND whose signature verifies — computationally
+/// hard. For practical soundness coverage, the host check + the
+/// ECDSA compute_witness + the in-circuit anchor stack together.)
+///
+/// This retrofits #26's test gap (reviewer N1). The test proves
+/// SOME layer below the host parser rejects lied SPKI offsets;
+/// combined with test (5) above which proves the host layer does,
+/// both layers have now seen a lying-offset witness.
+#[cfg(feature = "test-bypass-host-anchors")]
+#[test]
+fn invariant_2a_tampered_spki_offset_bypass_parser() {
+    let inner = build_witness(FIXTURE, b"0x", DUMMY_ROOT_PK).unwrap();
+    let w = Witness::new(inner);
+    let mut honest = w.to_ffi_bytes().expect("serialize");
+
+    // Slide the SPKI anchor by one byte — same construction as the
+    // host-path test, just routed through the bypass FFI.
+    let mut offset_bytes = [0u8; 4];
+    offset_bytes.copy_from_slice(
+        &honest[CERT_TBS_SPKI_OFFSET_IN_BLOB..CERT_TBS_SPKI_OFFSET_IN_BLOB + 4],
+    );
+    let honest_offset = u32::from_le_bytes(offset_bytes);
+    assert!(honest_offset > 0);
+    let lie = honest_offset - 1;
+    honest[CERT_TBS_SPKI_OFFSET_IN_BLOB..CERT_TBS_SPKI_OFFSET_IN_BLOB + 4]
+        .copy_from_slice(&lie.to_le_bytes());
+
+    let public = honest_public();
+    let pub_blob = public.to_ffi_bytes();
+    let err = longfellow_sys::p7s::prove_bypass_host_anchors(&honest, &pub_blob)
+        .expect_err(
+            "prove_bypass_host_anchors must refuse — ECDSA compute_witness \
+             (or the in-circuit SPKI anchor) rejects the lying-offset witness",
+        );
+    // Either 2 (ECDSA compute_witness failed, most common) or 3
+    // (in-circuit anchor, rare — requires the sliding to produce a
+    // valid point). Both indicate "lying offset rejected".
+    match err {
+        longfellow_sys::p7s::P7sFfiError::ProveFailed(code) if code == 2 || code == 3 => {}
+        other => panic!(
+            "expected P7S_INVALID_INPUT(2) or P7S_PROVER_FAILURE(3), got {other:?}"
+        ),
+    }
 }

@@ -13,6 +13,16 @@ thiserror = { workspace = true }
 sha2 = "0.10"
 p256 = { version = "0.13", default-features = false, features = ["ecdsa", "std"] }
 
+[features]
+# Mirrors `zk-eidas-p7s/test-bypass-host-anchors` — propagates to the
+# parser and wires the `prove_bypass_host_anchors` FFI entry so
+# invariant_2a / invariant_2c tests can construct lying-offset
+# witnesses and verify the in-circuit anchors reject them.
+test-bypass-host-anchors = [
+    "zk-eidas-p7s/test-bypass-host-anchors",
+    "longfellow-sys/test-bypass-host-anchors",
+]
+
 [dev-dependencies]
 hex = "0.4"
 proptest = "1"

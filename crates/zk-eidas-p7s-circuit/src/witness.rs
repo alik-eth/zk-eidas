@@ -82,6 +82,25 @@
 //! pushing into circuit wires), and `u8 content_sig_r[32]` /
 //! `u8 content_sig_s[32]` (big-endian scalars, DER-parsed in Rust).
 //! Public blob unchanged from v8. Transcript seed "p7s-26-hash".
+//!
+//!   v10 (Task 31) — invariant 2c: blob.message_digest is bound to the
+//!     32-byte OCTET STRING value embedded in signed_attrs at the CMS
+//!     messageDigest attribute. A new host-witnessed u32 wire
+//!     `signed_attrs_md_offset` locates the messageDigest Attribute
+//!     SEQUENCE tag (0x30) within signed_attrs; the circuit asserts a
+//!     17-byte DER anchor at window[0..17] and the 32-byte digest
+//!     equality at window[17..49] against the existing
+//!     `message_digest[32]` wires (bound by invariant 2b to
+//!     SHA-256(signed_content)). Closes the soundness gap where an
+//!     attacker with honest (cert, signed_attrs, sigs) could
+//!     substitute a fake signed_content + prover-recomputed
+//!     message_digest.
+//!     Witness blob extends v9 with:
+//!       `u32 signed_attrs_md_offset` — offset of messageDigest
+//!         Attribute SEQUENCE tag within signed_attrs (absolute
+//!         md_value_offset - 17). Both DIIA fixtures measure 60 but
+//!         DIIA's BER ordering is non-canonical; host-witnessed.
+//!     Public blob unchanged from v9. Transcript seed "p7s-31-hash".
 
 use p256::ecdsa::Signature;
 use sha2::{Digest, Sha256};
@@ -92,7 +111,7 @@ use crate::CircuitError;
 
 /// Keep in sync with C++ constants in `p7s_circuit.h` and
 /// `sub/declaration_whitelist.h`.
-pub const SCHEMA_VERSION: u32 = 9;
+pub const SCHEMA_VERSION: u32 = 10;
 pub const MAX_CONTEXT: usize = 32;
 pub const MAX_SIGNED_CONTENT: usize = 1024;
 pub const PK_HEX_LEN: usize = 130;
@@ -359,8 +378,19 @@ impl Witness {
         out.extend_from_slice(&cert_sig_r);
         out.extend_from_slice(&cert_sig_s);
 
-        // --- v9: signedAttrs witness + content_sig raw (r, s) ---
+        // --- v9/v10: signedAttrs witness + v10 md offset + content_sig raw (r, s) ---
+        // Blob order matches C++ parse_witness_blob:
+        //   u32 signed_attrs_len, u32 signed_attrs_md_offset,
+        //   u8 signed_attrs[1536], u8 content_sig_r[32], u8 content_sig_s[32].
         out.extend_from_slice(&(signed_attrs.len() as u32).to_le_bytes());
+        let md_offset_u32 =
+            u32::try_from(off.signed_attrs_md_offset).map_err(|_| {
+                CircuitError::InvalidWitness(format!(
+                    "signed_attrs_md_offset {} overflows u32",
+                    off.signed_attrs_md_offset
+                ))
+            })?;
+        out.extend_from_slice(&md_offset_u32.to_le_bytes());
         let mut sa_padded = [0u8; SIGNED_ATTRS_MAX_BYTES];
         sa_padded[..signed_attrs.len()].copy_from_slice(signed_attrs);
         out.extend_from_slice(&sa_padded);
