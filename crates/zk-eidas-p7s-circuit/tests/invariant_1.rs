@@ -23,30 +23,32 @@ use zk_eidas_p7s_circuit::{prove, verify, PublicInputs, Witness};
 const FIXTURE: &[u8] = include_bytes!("../../zk-eidas-p7s/fixtures/binding.qkb.p7s");
 const DUMMY_ROOT_PK: [u8; 65] = [0x04; 65];
 
-// v9 blob offsets — keep in sync with `witness.rs`'s serializer.
+// v10 blob offsets — keep in sync with `witness.rs`'s serializer.
 // Layout (LE u32s = 4 bytes each):
-//   0    version(4) + ctx_len(4) + ctx(32) + sc_len(4)           = 44
-//   44   signed_content(1024)                                    = 1068
-//   1068 json_pk_offset(4) + pk_hex(130)                         = 1202
-//   1202 json_nonce_offset(4) + nonce_hex(64)                    = 1270
-//   1270 json_context_offset(4)                                  = 1274
-//   1274 json_declaration_offset(4)                              = 1278
-//   1278 message_digest(32)                                      = 1310
-//   1310 cert_tbs_len(4) + cert_tbs_spki_offset(4)               = 1318
-//   1318 cert_tbs(2048)                                          = 3366
-//   3366 cert_sig_r(32) + cert_sig_s(32)                         = 3430
-//   3430 signed_attrs_len(4) + signed_attrs(1536)                = 4970
-//   4970 content_sig_r(32) + content_sig_s(32)                   = 5034
+//   0    version(4) + ctx_len(4) + ctx(32) + sc_len(4)             = 44
+//   44   signed_content(1024)                                      = 1068
+//   1068 json_pk_offset(4) + pk_hex(130)                           = 1202
+//   1202 json_nonce_offset(4) + nonce_hex(64)                      = 1270
+//   1270 json_context_offset(4)                                    = 1274
+//   1274 json_declaration_offset(4)                                = 1278
+//   1278 message_digest(32)                                        = 1310
+//   1310 cert_tbs_len(4) + cert_tbs_spki_offset(4)                 = 1318
+//   1318 cert_tbs(2048)                                            = 3366
+//   3366 cert_sig_r(32) + cert_sig_s(32)                           = 3430
+//   3430 signed_attrs_len(4) + signed_attrs_md_offset(4)           = 3438  ← v10
+//   3438 signed_attrs(1536)                                        = 4974
+//   4974 content_sig_r(32) + content_sig_s(32)                     = 5038
 const CERT_TBS_LEN_IN_BLOB: usize = 1310;
 const CERT_TBS_SPKI_OFFSET_IN_BLOB: usize = CERT_TBS_LEN_IN_BLOB + 4; // 1314
 const CERT_TBS_DATA_IN_BLOB: usize = CERT_TBS_SPKI_OFFSET_IN_BLOB + 4; // 1318
 const CERT_SIG_R_IN_BLOB: usize = CERT_TBS_DATA_IN_BLOB + 2048; // 3366
 const CERT_SIG_S_IN_BLOB: usize = CERT_SIG_R_IN_BLOB + 32; // 3398
 const SIGNED_ATTRS_LEN_IN_BLOB: usize = CERT_SIG_S_IN_BLOB + 32; // 3430
-const SIGNED_ATTRS_DATA_IN_BLOB: usize = SIGNED_ATTRS_LEN_IN_BLOB + 4; // 3434
-const CONTENT_SIG_R_IN_BLOB: usize = SIGNED_ATTRS_DATA_IN_BLOB + 1536; // 4970
-const CONTENT_SIG_S_IN_BLOB: usize = CONTENT_SIG_R_IN_BLOB + 32; // 5002
-const BLOB_TOTAL_LEN: usize = CONTENT_SIG_S_IN_BLOB + 32; // 5034
+const SIGNED_ATTRS_MD_OFFSET_IN_BLOB: usize = SIGNED_ATTRS_LEN_IN_BLOB + 4; // 3434
+const SIGNED_ATTRS_DATA_IN_BLOB: usize = SIGNED_ATTRS_MD_OFFSET_IN_BLOB + 4; // 3438
+const CONTENT_SIG_R_IN_BLOB: usize = SIGNED_ATTRS_DATA_IN_BLOB + 1536; // 4974
+const CONTENT_SIG_S_IN_BLOB: usize = CONTENT_SIG_R_IN_BLOB + 32; // 5006
+const BLOB_TOTAL_LEN: usize = CONTENT_SIG_S_IN_BLOB + 32; // 5038
 
 fn expected_pk() -> [u8; 65] {
     let w = build_witness(FIXTURE, b"0x", DUMMY_ROOT_PK).unwrap();

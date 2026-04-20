@@ -1,4 +1,4 @@
-//! P7s circuit FFI — blob protocol (schema v9).
+//! P7s circuit FFI — blob protocol (schema v10).
 //!
 //! Task 20 switched from typed C args to byte-blobs so additional witness
 //! fields can land without per-task ABI churn. Task 25a split the single
@@ -46,6 +46,42 @@ pub fn prove(witness_blob: &[u8], public_blob: &[u8]) -> Result<P7sProof, P7sFfi
     let mut proof_len: c_ulong = 0;
     let code = unsafe {
         p7s_prove(
+            witness_blob.as_ptr(),
+            witness_blob.len() as c_ulong,
+            public_blob.as_ptr(),
+            public_blob.len() as c_ulong,
+            &mut proof_out as *mut *mut u8,
+            &mut proof_len as *mut c_ulong,
+        )
+    };
+    if code != P7sErrorCode_P7S_SUCCESS {
+        return Err(P7sFfiError::ProveFailed(code));
+    }
+    if proof_out.is_null() || proof_len == 0 {
+        return Err(P7sFfiError::MalformedProof);
+    }
+    let bytes = unsafe { std::slice::from_raw_parts(proof_out, proof_len as usize).to_vec() };
+    unsafe { p7s_free_proof(proof_out) };
+    Ok(P7sProof(bytes))
+}
+
+/// Test-only prove entry that skips host-side DER anchor assertions
+/// (SPKI prefix + CMS messageDigest prefix) so callers can construct
+/// lying-offset witnesses and verify the in-circuit anchors reject
+/// them. The C++ `p7s_prove_test_bypass_host_anchors` symbol is
+/// always linked; this Rust wrapper is only exposed under the
+/// `test-bypass-host-anchors` Cargo feature so production callers
+/// cannot accidentally depend on the bypass path.
+#[cfg(feature = "test-bypass-host-anchors")]
+pub fn prove_bypass_host_anchors(
+    witness_blob: &[u8],
+    public_blob: &[u8],
+) -> Result<P7sProof, P7sFfiError> {
+    use crate::p7s_prove_test_bypass_host_anchors;
+    let mut proof_out: *mut u8 = std::ptr::null_mut();
+    let mut proof_len: c_ulong = 0;
+    let code = unsafe {
+        p7s_prove_test_bypass_host_anchors(
             witness_blob.as_ptr(),
             witness_blob.len() as c_ulong,
             public_blob.as_ptr(),

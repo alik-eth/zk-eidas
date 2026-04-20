@@ -66,6 +66,15 @@ pub struct P7sOffsets {
     /// For signature verification, rewrite byte 0 from 0xA0 to 0x31 (SET tag) before hashing.
     pub signed_attrs_start: usize,
     pub signed_attrs_len: usize,
+    /// Offset of the messageDigest Attribute SEQUENCE's outer `0x30` tag
+    /// WITHIN `signed_attrs`. Equal to
+    /// `message_digest_start - signed_attrs_start - 17` (the 17-byte
+    /// CMS messageDigest DER prefix sits immediately before the 32-byte
+    /// digest value). Host-witnessed because DIIA's signedAttrs uses
+    /// non-canonical BER ordering; the p7s circuit anchors this via a
+    /// 17-byte CMS messageDigest DER prefix assertion (invariant 2c,
+    /// Task 31).
+    pub signed_attrs_md_offset: usize,
     /// The 32-byte digest inside the messageDigest attribute (OID 1.2.840.113549.1.9.4).
     /// Must equal SHA-256(signed_content) — asserted by verify_content_signature.
     pub message_digest_start: usize,
