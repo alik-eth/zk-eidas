@@ -3396,6 +3396,7 @@ version = "2.0.0"
 dependencies = [
  "hex",
  "longfellow-sys",
+ "p256",
  "proptest",
  "sha2",
  "thiserror",

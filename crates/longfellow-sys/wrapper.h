@@ -123,38 +123,48 @@ extern int longfellow_prove_verify_cached(
     const uint8_t* circuit, unsigned long circuit_len,
     uint8_t** proof_out, unsigned long* proof_len_out);
 
-// --- p7s circuit (Phase 2a, blob protocol v7) ---
+// --- p7s circuit (Phase 2a, blob protocol v8) ---
 //
 // Task 20 switched the ABI from typed C arguments to byte-blobs so
 // additional witness fields can land without per-task churn. Task 21
 // appended nonce fields (v3); Task 22 added json_context_offset (v4);
 // Task 23 added json_declaration_offset (v5); Task 24 added
-// message_digest (v6). Task 25a leaves both blob schemas unchanged
-// from v6 but splits the single GF(2^128) circuit into a dual-circuit
-// setup (hash over GF(2^128) + sig over Fp256Base) linked via a MAC
-// gadget bound to a compile-time sentinel. Both blobs still start
-// with a little-endian u32 schema version; the authoritative layout
-// lives in lib/circuits/p7s/p7s_zk.cc's "schema history" comment.
+// message_digest (v6). Task 25a left the blob schema unchanged from
+// v6 (dual-circuit split is proof-format-only, but the version byte
+// bumped to 7). Task 29 extends the witness blob with cert_tbs and
+// the raw (r, s) ECDSA scalars so the sig circuit can verify the DIIA
+// signer-cert signature against the hardcoded DIIA QTSP 2311 root.
+// Both blobs still start with a little-endian u32 schema version;
+// the authoritative layout lives in lib/circuits/p7s/p7s_zk.cc's
+// "schema history" comment.
 //
-// Witness blob v7 (identical to v6):
-//   u32 version = 7
+// Witness blob v8 (extends v7 with cert_tbs + r/s):
+//   u32 version = 8
 //   u32 context_len ; u8 context[32]
 //   u32 signed_content_len ; u8 signed_content[1024]
 //   u32 json_pk_offset ; u8 pk_hex[130]
 //   u32 json_nonce_offset ; u8 nonce_hex[64]
 //   u32 json_context_offset
 //   u32 json_declaration_offset
-//   u8 message_digest[32]                 prover-claimed SHA-256(signed_content)
+//   u8 message_digest[32]                  SHA-256(signed_content)
+//   u32 cert_tbs_len                       in [0, 2039]
+//   u8 cert_tbs[2048]                      raw bytes + zero pad; SHA-padded in C++
+//   u8 cert_sig_r[32]                      big-endian scalar (DER-parsed in Rust)
+//   u8 cert_sig_s[32]                      big-endian scalar (DER-parsed in Rust)
 //
-// Public blob v7 (identical to v3/v4/v5/v6):
-//   u32 version = 7
+// Public blob v8 (identical to v3/v4/v5/v6/v7):
+//   u32 version = 8
 //   u8 context_hash[32]
 //   u8 pk[65]
 //   u8 nonce[32]
 //
-// Extended proof-output format (v7):
-//   u32 schema_version(= 7)
-//   u8  macs_b[32]       two GF(2^128) MAC values over the sentinel
+// Note: DIIA QTSP 2311 root pubkey is a COMPILE-TIME CONSTANT baked
+// into the C++ sig circuit (`sub/p7s_signature.h::kDiiaRootPkX_decimal`
+// / `kDiiaRootPkY_decimal`). It is NOT part of the public blob.
+//
+// Extended proof-output format (v8):
+//   u32 schema_version(= 8)
+//   u8  macs_b[32]       two GF(2^128) MAC values over SHA-256(cert_tbs)
 //   u8  hash_zk[...]     ZkProof<GF(2^128)>, self-delimited
 //   u8  sig_zk[...]      ZkProof<Fp256Base>, self-delimited
 
