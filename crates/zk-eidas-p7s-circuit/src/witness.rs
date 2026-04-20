@@ -28,19 +28,27 @@
 //!                                 + MAX_CONTEXT ≤ MAX_SIGNED_CONTENT
 //!     (context byte-length is NOT transmitted — it is derived in-circuit
 //!      from the SHA-256 padding of context_bytes).
+//!
+//!   v5 (Task 23) — extends v4 with json_declaration_offset appended:
+//!     u32 json_declaration_offset  relative to signed_content;
+//!                                  + DECLARATION_LEN ≤ MAX_SIGNED_CONTENT
+//!     (declaration length is a compile-time constant; the phrase itself
+//!      is a circuit-side literal in sub/declaration_whitelist.cc).
 
 use zk_eidas_p7s::P7sWitness;
 
 use crate::CircuitError;
 
-/// Keep in sync with C++ constants in `p7s_circuit.h`.
-pub const SCHEMA_VERSION: u32 = 4;
+/// Keep in sync with C++ constants in `p7s_circuit.h` and
+/// `sub/declaration_whitelist.h`.
+pub const SCHEMA_VERSION: u32 = 5;
 pub const MAX_CONTEXT: usize = 32;
 pub const MAX_SIGNED_CONTENT: usize = 1024;
 pub const PK_HEX_LEN: usize = 130;
 pub const PK_BYTES: usize = 65;
 pub const NONCE_HEX_LEN: usize = 64;
 pub const NONCE_BYTES: usize = 32;
+pub const DECLARATION_LEN: usize = 510;
 
 #[derive(Debug, Clone)]
 pub struct Witness {
@@ -124,11 +132,31 @@ impl Witness {
             ctx.len(),
             off.signed_content_start,
             sc.len(),
+            MAX_CONTEXT,
             "json_context",
         )?;
 
+        // Declaration is a compile-time constant (DECLARATION_LEN bytes) —
+        // only the offset is serialized. The parser's `json_declaration_len`
+        // MUST match our constant for the circuit's byte_range_eq to hold.
+        if off.json_declaration_len != DECLARATION_LEN {
+            return Err(CircuitError::InvalidWitness(format!(
+                "json_declaration_len {} != expected DECLARATION_LEN {DECLARATION_LEN}",
+                off.json_declaration_len
+            )));
+        }
+        let declaration_off_rel = plain_offset_relative(
+            off.json_declaration_start,
+            DECLARATION_LEN,
+            off.signed_content_start,
+            sc.len(),
+            DECLARATION_LEN,
+            "json_declaration",
+        )?;
+
         let mut out = Vec::with_capacity(
-            4 + 4 + MAX_CONTEXT + 4 + MAX_SIGNED_CONTENT + 4 + PK_HEX_LEN + 4 + NONCE_HEX_LEN + 4,
+            4 + 4 + MAX_CONTEXT + 4 + MAX_SIGNED_CONTENT + 4 + PK_HEX_LEN
+                + 4 + NONCE_HEX_LEN + 4 + 4,
         );
         out.extend_from_slice(&SCHEMA_VERSION.to_le_bytes());
 
@@ -155,26 +183,28 @@ impl Witness {
         // context offset
         out.extend_from_slice(&(context_off_rel as u32).to_le_bytes());
 
+        // declaration offset
+        out.extend_from_slice(&(declaration_off_rel as u32).to_le_bytes());
+
         Ok(out)
     }
 }
 
 /// Validate a non-hex field offset/length and return the relative offset.
-/// Used for the plaintext `json_context` locator (length is variable and
-/// derived in-circuit from SHA padding; the C++ side enforces
-/// `offset + MAX_CONTEXT <= MAX_SIGNED_CONTENT`).
+/// `len` is the actual byte length of the field in the witness;
+/// `window_len` is the length of the in-circuit shifter window (≥ `len`
+/// for fields whose length varies at runtime, equal for compile-time-
+/// fixed fields like the declaration). The C++ deserializer enforces
+/// `offset + window_len ≤ MAX_SIGNED_CONTENT`; we mirror that here so
+/// Rust-side errors have the same shape as a C++ rejection.
 fn plain_offset_relative(
     start: usize,
     len: usize,
     sc_start: usize,
     sc_len: usize,
+    window_len: usize,
     label: &str,
 ) -> Result<usize, CircuitError> {
-    if len > MAX_CONTEXT {
-        return Err(CircuitError::InvalidWitness(format!(
-            "{label}_len {len} exceeds MAX_CONTEXT {MAX_CONTEXT}"
-        )));
-    }
     if start < sc_start {
         return Err(CircuitError::InvalidWitness(format!(
             "{label}_start precedes signed_content_start"
@@ -186,12 +216,9 @@ fn plain_offset_relative(
             "{label} window extends past signed_content"
         )));
     }
-    // The C++ bound is `offset + MAX_CONTEXT <= MAX_SIGNED_CONTENT` (the
-    // fixed-length shifter always extracts MAX_CONTEXT bytes). Reject
-    // Rust-side for matching error surface.
-    if rel + MAX_CONTEXT > MAX_SIGNED_CONTENT {
+    if rel + window_len > MAX_SIGNED_CONTENT {
         return Err(CircuitError::InvalidWitness(format!(
-            "{label} + MAX_CONTEXT exceeds MAX_SIGNED_CONTENT"
+            "{label} + window exceeds MAX_SIGNED_CONTENT"
         )));
     }
     Ok(rel)
