@@ -1405,6 +1405,7 @@ dependencies = [
  "hex",
  "libc",
  "serde_json",
+ "sha2",
  "thiserror",
  "zk-eidas",
  "zk-eidas-mdoc",

@@ -1,10 +1,10 @@
-//! Proof verification — Task 1a hello-world.
+//! Proof verification — Task 1b (invariant 9: context_hash SHA-256).
 
 use crate::{CircuitError, Proof};
 
-/// Eventual public-input struct. Only `context_hash` is bound in Task 1a;
-/// the remaining fields are placeholders that surface as subsequent
-/// invariants land.
+/// Eventual public-input struct. Only `context_hash` is bound by the
+/// Task-1b circuit; the remaining fields are placeholders that surface
+/// as subsequent invariants land.
 #[derive(Debug, Clone)]
 pub struct PublicInputs {
     pub context_hash: [u8; 32],
@@ -14,11 +14,16 @@ pub struct PublicInputs {
     pub timestamp: u64,
 }
 
-/// Phase 2a Task 1a verifier. Returns `Ok(true)` iff the proof verifies
-/// against `public.context_hash`.
+/// Phase 2a Task 1b verifier. Returns `Ok(true)` iff the proof verifies
+/// against `public.context_hash`. A proof for the wrong public input
+/// surfaces as `Ok(false)`; malformed proofs yield `Err(...)`.
 pub fn verify(proof: &Proof, public: &PublicInputs) -> Result<bool, CircuitError> {
+    use longfellow_sys::p7s::P7sFfiError;
     match longfellow_sys::p7s::verify(&public.context_hash, &proof.bytes) {
         Ok(()) => Ok(true),
-        Err(code) => Err(CircuitError::VerifierFailed(code)),
+        // A clean "proof does not verify for these inputs" is Ok(false),
+        // letting callers distinguish wrong-public-input from broken-proof.
+        Err(P7sFfiError::VerifyFailed(_)) => Ok(false),
+        Err(e) => Err(CircuitError::from(e)),
     }
 }
