@@ -40,6 +40,15 @@
 //!     The C++ filler SHA-pads both context_bytes and signed_content
 //!     off-circuit before pushing into circuit wires, so the raw blob
 //!     still carries raw bytes + zero padding for both fields.
+//!
+//!   v7 (Task 25a) — no blob schema change. The circuit splits into a
+//!     hash circuit (GF(2^128)) and a sig circuit (Fp256Base) linked
+//!     by a MAC gadget bound to a compile-time sentinel, but the
+//!     witness/public blob layouts are identical to v6. The version
+//!     byte still bumps so proofs minted under the v6 circuit cannot
+//!     be misinterpreted as v7 proofs (transcript seeds also bump
+//!     from "p7s-24" to "p7s-25-hash" / "p7s-25-sig" for the same
+//!     reason).
 
 use sha2::{Digest, Sha256};
 
@@ -49,7 +58,7 @@ use crate::CircuitError;
 
 /// Keep in sync with C++ constants in `p7s_circuit.h` and
 /// `sub/declaration_whitelist.h`.
-pub const SCHEMA_VERSION: u32 = 6;
+pub const SCHEMA_VERSION: u32 = 7;
 pub const MAX_CONTEXT: usize = 32;
 pub const MAX_SIGNED_CONTENT: usize = 1024;
 pub const PK_HEX_LEN: usize = 130;
@@ -77,7 +86,7 @@ impl Witness {
         &self.inner
     }
 
-    /// Serialize the witness into the v3 blob layout.
+    /// Serialize the witness into the current (v7) blob layout.
     pub fn to_ffi_bytes(&self) -> Result<Vec<u8>, CircuitError> {
         let off = &self.inner.offsets;
         let ctx = &self.inner.context;
