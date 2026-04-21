@@ -169,3 +169,70 @@ fn trust_anchor_table_minimum_size_compile_assert() {
     // static_assert. See vendor/longfellow-zk/lib/circuits/p7s/sub/
     // p7s_signature.h near the `kTrustAnchorCount` definition.
 }
+
+/// (4) **Bypass-gated companion to (2).** Under
+/// `--features test-bypass-host-anchors`, the C++ `parse_witness_blob`
+/// bounds check `trust_anchor_index < kTrustAnchorCount` is skipped,
+/// so the out-of-range index (1, for the N=1 table) reaches the
+/// circuit's `lc.assert1(lc.vlt(trust_anchor_index, kTrustAnchorCount))`
+/// — the SOLE remaining enforcement layer.
+///
+/// `vlt(1, 1)` = false → `assert1(0)` → eval_circuit fails →
+/// P7S_PROVER_FAILURE(3). This proves the in-circuit bound check is
+/// load-bearing and would catch an out-of-range index even if the
+/// host-side parser check were removed (closing reviewer-2 audit nit
+/// N3 from #36).
+///
+/// Note: the public blob's `trust_anchor_index` field is also checked
+/// by `parse_public_blob` before `parse_witness_blob` in the prove
+/// call path. To avoid P7S_INVALID_INPUT from the public-blob check,
+/// we set `public.trust_anchor_index = 0` (in-range), while supplying
+/// the out-of-range `1` only in the WITNESS blob. The mismatch between
+/// the public `0` and the witness-blob `1` would ordinarily be caught
+/// host-side (they're expected to agree), but the bypass FFI skips
+/// the witness-blob bounds check specifically — so the circuit sees
+/// witness index `1` and public index `0`, and tries to compute with
+/// anchor `kTrustAnchors[1]` (which is out of bounds). P7S_PROVER_FAILURE
+/// fires from the `vlt` assertion before the array access.
+#[cfg(feature = "test-bypass-host-anchors")]
+#[test]
+fn trust_anchor_out_of_range_index_bypass_parser() {
+    let inner = build_witness(FIXTURE, b"0x", DUMMY_ROOT_PK).unwrap();
+    let w = Witness::new(inner);
+    let mut tampered = w.to_ffi_bytes().expect("serialize");
+    assert_eq!(
+        tampered.len(),
+        BLOB_TOTAL_LEN,
+        "v11 blob layout mismatch — update constants"
+    );
+
+    // Supply trust_anchor_index = 1 in the WITNESS blob only.
+    // The N=1 table has only index 0; any value >= 1 is out-of-range.
+    tampered[TRUST_ANCHOR_IDX_IN_BLOB..TRUST_ANCHOR_IDX_IN_BLOB + 4]
+        .copy_from_slice(&1u32.to_le_bytes());
+
+    // Keep the PUBLIC blob at index 0 to avoid tripping parse_public_blob's
+    // own bound check before the witness-blob bypass path is reached.
+    let public = honest_public();
+    assert_eq!(
+        public.trust_anchor_index, 0,
+        "honest_public() must carry index 0 for the DIIA fixture"
+    );
+    let pub_blob = public.to_ffi_bytes();
+
+    let err = longfellow_sys::p7s::prove_bypass_host_anchors(&tampered, &pub_blob)
+        .expect_err(
+            "prove_bypass_host_anchors must refuse — in-circuit \
+             vlt(trust_anchor_index=1, kTrustAnchorCount=1) = false \
+             → assert1(0) → P7S_PROVER_FAILURE",
+        );
+    // With the host-side bound check bypassed, only the circuit's
+    // `lc.assert1(lc.vlt(trust_anchor_index, kTrustAnchorCount))` remains.
+    // It fires as P7S_PROVER_FAILURE(3).
+    match err {
+        longfellow_sys::p7s::P7sFfiError::ProveFailed(3) => {}
+        other => panic!(
+            "expected P7S_PROVER_FAILURE(3) from in-circuit vlt assert, got {other:?}"
+        ),
+    }
+}

@@ -546,3 +546,45 @@ fn contains_subslice(haystack: &[u8], needle: &[u8]) -> bool {
     }
     haystack.windows(needle.len()).any(|w| w == needle)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Verify that no `TRUST_ANCHOR_PROBES` marker is a substring of
+    /// another. The selection uses `find_map` (first-match) over the
+    /// probe list, so if marker A is a prefix/suffix/substring of marker
+    /// B, a cert issued by B's QTSP would incorrectly resolve to A's
+    /// trust-anchor index (whichever marker appears first in the list).
+    ///
+    /// This test fails LOUDLY when a new probe is added that would
+    /// create an ambiguity — e.g. a short marker `TEST-00` that matches
+    /// inside the longer `TEST-00000000-01`. Reviewer-2 audit nit N1
+    /// from Task #42 (P2b-36n).
+    ///
+    /// For the current N=1 table this is trivially satisfied, but the
+    /// check is future-proof: it catches the bug for N≥2 before any
+    /// fixture exercises the issue.
+    #[test]
+    fn trust_anchor_probes_are_unique() {
+        let probes = TRUST_ANCHOR_PROBES;
+        for (i, (a, _idx_a, name_a)) in probes.iter().enumerate() {
+            for (j, (b, _idx_b, name_b)) in probes.iter().enumerate() {
+                if i == j {
+                    continue;
+                }
+                // a must not be a substring of b (and vice versa — the
+                // j>i case catches that on the symmetric iteration).
+                assert!(
+                    !contains_subslice(b, a),
+                    "TRUST_ANCHOR_PROBES collision: marker #{i} ({name_a:?} = {:?}) \
+                     is a substring of marker #{j} ({name_b:?} = {:?}); \
+                     find_map would match #{i} on #{j}'s certs, assigning \
+                     the wrong trust-anchor index",
+                    std::str::from_utf8(a).unwrap_or("<non-utf8>"),
+                    std::str::from_utf8(b).unwrap_or("<non-utf8>"),
+                );
+            }
+        }
+    }
+}

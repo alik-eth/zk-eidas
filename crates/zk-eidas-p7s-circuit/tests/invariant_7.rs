@@ -225,6 +225,57 @@ fn invariant_7_tampered_stable_id_offset_into_issuer_dn_prover_refuses() {
     expect_prove_refused(err);
 }
 
+/// (4b) **Bypass-gated companion to (4).** Under
+/// `--features test-bypass-host-anchors`, the C++ `parse_witness_blob`
+/// range check `subject_dn_start < subject_sn_offset` (line ≈1645) is
+/// skipped, so the lied offset reaches the circuit's
+/// `lc.assert1(lc.vlt(subject_dn_start_offset, subject_sn_offset))`
+/// assertion — the SOLE remaining enforcement layer.
+///
+/// `vlt(294, 184)` = false → `assert1(0)` → eval_circuit fails →
+/// P7S_PROVER_FAILURE(3). This test proves the in-circuit assertion is
+/// load-bearing and would survive a hypothetical removal of the host-
+/// side range check (closing reviewer-2 audit nit N1 from #34).
+///
+/// Notes on the nullifier: the tampered `subject_sn_offset` is fed to
+/// the in-circuit SHA preimage; the honest `public.nullifier` won't
+/// match — but the vlt assertion fires BEFORE the SHA computation
+/// (it's asserted in `build_hash_circuit` before the routing step),
+/// so the circuit refuses at the range check, not at nullifier
+/// equality. P7S_PROVER_FAILURE is therefore the only expected code.
+#[cfg(feature = "test-bypass-host-anchors")]
+#[test]
+fn invariant_7_tampered_stable_id_offset_into_issuer_dn_bypass_parser() {
+    let inner = build_witness(FIXTURE_BINDING, b"0x", DUMMY_ROOT_PK).unwrap();
+    let w = Witness::new(inner);
+    let mut tampered = w.to_ffi_bytes().expect("serialize");
+
+    // Issuer DN serialNumber sits at cert_tbs offset 184 — before the
+    // subject DN starts at 294. This makes `vlt(294, 184)` = false in
+    // the circuit. Same value as in the host-path test (4) above.
+    const ISSUER_SN_OFFSET_IN_TBS: u32 = 184;
+    tampered[SUBJECT_SN_OFFSET_IN_BLOB..SUBJECT_SN_OFFSET_IN_BLOB + 4]
+        .copy_from_slice(&ISSUER_SN_OFFSET_IN_TBS.to_le_bytes());
+
+    let public = honest_public(FIXTURE_BINDING);
+    let pub_blob = public.to_ffi_bytes();
+    let err = longfellow_sys::p7s::prove_bypass_host_anchors(&tampered, &pub_blob)
+        .expect_err(
+            "prove_bypass_host_anchors must refuse — in-circuit \
+             vlt(subject_dn_start=294, subject_sn=184) = false \
+             → assert1(0) → P7S_PROVER_FAILURE",
+        );
+    // With both host-parser range checks bypassed, only the circuit's
+    // `lc.assert1(lc.vlt(subject_dn_start_offset, subject_sn_offset))`
+    // is left. It fires as P7S_PROVER_FAILURE(3).
+    match err {
+        longfellow_sys::p7s::P7sFfiError::ProveFailed(3) => {}
+        other => panic!(
+            "expected P7S_PROVER_FAILURE(3) from in-circuit vlt assert, got {other:?}"
+        ),
+    }
+}
+
 /// (5) Wrong public context. The prover witnesses the honest context
 /// bytes (satisfying invariant 9's SHA), but the caller mints a
 /// `PublicInputs` whose `nullifier` is computed against a DIFFERENT
