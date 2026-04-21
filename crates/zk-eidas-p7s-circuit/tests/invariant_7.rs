@@ -1,13 +1,14 @@
 //! Phase 2b Task 34 — invariant 7: `nullifier == SHA-256(stable_id[16] ||
 //! context_raw)`, where `stable_id` is the 16-byte PrintableString
 //! value of the X.520 serialNumber attribute in cert_tbs's Subject DN
-//! (DIIA RNOKPP format: `TINUA-` + 10 digits). The host computes the
+//! (synthetic TestAnchorA stable-ID format; mirrors the real-DIIA
+//! RNOKPP layout of `TINUA-` + 10 digits). The host computes the
 //! same formula in `zk_eidas_p7s::compute_outputs` (Phase 1); the
 //! circuit enforces it so a malicious prover can't lie.
 //!
 //! Tests (per plan §Step-14):
-//!   1. Happy: honest DIIA fixture → prove+verify; in-circuit nullifier
-//!      equals the Phase 1 host-computed nullifier.
+//!   1. Happy: honest TestAnchorA fixture → prove+verify; in-circuit
+//!      nullifier equals the Phase 1 host-computed nullifier.
 //!   2. Cross-holder same RNOKPP: both `binding.qkb.p7s` and
 //!      `admin-binding.qkb.p7s` share the same holder RNOKPP — same
 //!      nullifier.
@@ -102,13 +103,15 @@ fn invariant_7_nullifier_matches_phase1_host_output() {
     let inner = build_witness(FIXTURE_BINDING, b"0x", DUMMY_ROOT_PK).unwrap();
     assert_eq!(
         inner.offsets.subject_sn_offset_in_tbs, 370,
-        "DIIA fixture's X.520 serialNumber offset within cert_tbs must be \
-         370 (see fixtures/kat-subject-serial.json)"
+        "TestAnchorA fixture's X.520 serialNumber offset within cert_tbs \
+         must be 370 (see fixtures/kat-subject-serial.json); the synthetic \
+         cert preserves this offset by being a length-preserving rewrite \
+         of the original DIIA layout"
     );
     assert_eq!(
         inner.offsets.subject_dn_start_offset_in_tbs, 294,
-        "DIIA fixture's Subject DN start offset within cert_tbs must be \
-         294 (measured: issuer_end + validity = 294)"
+        "TestAnchorA fixture's Subject DN start offset within cert_tbs \
+         must be 294 (measured: issuer_end + validity = 294)"
     );
     let expected = compute_outputs(&inner).unwrap();
     let w = Witness::new(inner);
@@ -124,11 +127,11 @@ fn invariant_7_nullifier_matches_phase1_host_output() {
     );
 }
 
-/// (2) Both DIIA fixtures share the same holder (Vovkotrub) and
-/// therefore the same RNOKPP. Under the same public context, the two
-/// proofs MUST expose the SAME `nullifier` — this is the cross-cert-
-/// renewal property invariant 7 guarantees (Phase 1 comment on
-/// `outputs.rs:17-41`).
+/// (2) Both TestAnchorA fixtures share the same synthetic holder and
+/// therefore the same stable-ID. Under the same public context, the
+/// two proofs MUST expose the SAME `nullifier` — this is the
+/// cross-cert-renewal property invariant 7 guarantees (Phase 1
+/// comment on `outputs.rs:17-41`).
 #[test]
 fn invariant_7_cross_holder_same_rnokpp_same_nullifier() {
     let w1 = build_witness(FIXTURE_BINDING, b"0x", DUMMY_ROOT_PK).unwrap();
@@ -149,7 +152,7 @@ fn invariant_7_cross_holder_same_rnokpp_same_nullifier() {
     assert_eq!(s1, s2, "same-holder fixtures must have the same stable_id");
     assert_eq!(
         std::str::from_utf8(s1).unwrap_or(""),
-        "TINUA-3627506575",
+        "TINUA-1111111111",
         "fixture stable_id drifted from kat-subject-serial.json baseline"
     );
 }
@@ -184,11 +187,11 @@ fn invariant_7_tampered_stable_id_bytes_prover_refuses() {
 
 /// (4) **LOAD-BEARING soundness test.** Witness an offset pointing at
 /// the ISSUER DN's serialNumber attribute instead of the subject DN's.
-/// DIIA's issuer DN carries the QTSP's registration code
-/// `UA-43395033-2311` under the SAME 9-byte anchor as the subject's —
-/// without the in-circuit range check `subject_sn_offset >
-/// subject_dn_start_offset`, the prover could bind `nullifier` to the
-/// issuer's stable ID, giving EVERY DIIA proof the same nullifier and
+/// The TestAnchorA issuer DN carries the QTSP's registration code
+/// `TQSA-00000000-01` under the SAME 9-byte anchor as the subject's
+/// — without the in-circuit range check `subject_sn_offset >
+/// subject_dn_start_offset`, the prover could bind `nullifier` to
+/// the issuer's stable ID, giving EVERY proof the same nullifier and
 /// defeating the anti-replay guarantee.
 ///
 /// Expected refusal path:

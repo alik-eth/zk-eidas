@@ -37,8 +37,8 @@ fn build_fixture(nattr: usize) -> VerifyFixture {
         4 => vec![
             ("age_over_18", ClaimValue::Boolean(true)),
             ("nationality", ClaimValue::String("UA".into())),
-            ("given_name", ClaimValue::String("Oleksandr".into())),
-            ("family_name", ClaimValue::String("Vovkotrub".into())),
+            ("given_name", ClaimValue::String("Test".into())),
+            ("family_name", ClaimValue::String("Holder".into())),
         ],
         _ => panic!("unsupported nattr={nattr}"),
     };

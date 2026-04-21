@@ -1,8 +1,13 @@
 //! Cross-fixture equality test for the person-level nullifier property.
 //!
-//! Two independently-signed DIIA QKB documents for the same Ukrainian
-//! state tax ID (TINUA-3627506575) must produce identical nullifier and
+//! Two independently-signed QKB documents for the same synthetic
+//! holder stable-ID (`TINUA-1111111111`, produced by the TestAnchorA
+//! fixture generator) must produce identical nullifier and
 //! binding_hash outputs, because both derive from the same stable_id.
+//! The pre-#43a fixtures exercised the same property against a real
+//! DIIA Ukrainian tax ID; the synthetic fixtures preserve the
+//! stable-ID format and share-across-fixtures property by
+//! construction.
 
 use zk_eidas_p7s::{build_witness, compute_outputs};
 

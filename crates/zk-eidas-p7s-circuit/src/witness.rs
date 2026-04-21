@@ -157,6 +157,14 @@
 //!     RNOKPP format `TINUA-` + 10 digits). Non-DIIA QTSPs with
 //!     different RNOKPP-analog lengths are deferred to Task #37.
 //!     Transcript seed bumps "p7s-31-hash" -> "p7s-7-hash".
+//!
+//! v11 runtime values (Task 43a, 2026-04-21): committed fixtures swapped
+//!   from real DIIA to synthetic TestAnchorA; signer-cert PII scrubbed
+//!   (generator at `crates/zk-eidas-p7s/src/bin/gen_synthetic_fixtures.rs`).
+//!   TSA countersignature region left unchanged — stale after content_sig
+//!   was re-signed, but no circuit invariant or test reads the TSA path.
+//!   Residual DIIA-branding strings inside the TSA cert are tracked as
+//!   Task #45. No schema version bump — v11 layout is unchanged.
 
 use p256::ecdsa::Signature;
 use sha2::{Digest, Sha256};

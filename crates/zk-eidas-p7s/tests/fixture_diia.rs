@@ -1,41 +1,56 @@
-//! Integration test against a real DIIA QKB binding document.
+//! Integration test against a DIIA-shaped QKB binding fixture.
 //!
-//! The fixture is `fixtures/binding.qkb.p7s` — a Ukrainian DIIA-issued
-//! qualified certificate signing over a QKB JSON that declares a
-//! secp256k1 public key.
+//! The fixture at `fixtures/binding.qkb.p7s` is a synthetic TestAnchorA
+//! CAdES envelope produced by `src/bin/gen_synthetic_fixtures.rs`
+//! (Task #43a). It mirrors the layout of the real DIIA QKB document
+//! it replaced — same offsets, same JSON shape, same RFC 3161 TSA
+//! countersignature shell — but the signer cert DN + SPKI + cert sig
+//! + content sig + ESSCertIDv2 hash were regenerated with a
+//! deterministic synthetic root and signer keypair so the fixture
+//! carries no real personal QES signature. The file name is kept as
+//! `fixture_diia.rs` to minimise review churn; it exercises the
+//! DIIA-shaped code path that #36 retained.
 
 use hex_literal::hex;
 use sha2::{Digest, Sha256};
 use zk_eidas_p7s::{build_witness, compute_outputs};
 
-/// DIIA QTSP 2311 root pubkey — the issuer of the signer cert in our fixture.
-/// Extracted from `diia-qtsp-2311.der` (DIIA Ukrainian Trust List, Nov 2023 key).
-/// Subject: `"DIIA" Qualified Trust Services Provider, serialNumber=UA-43395033-2311`.
-/// Uncompressed SEC1 P-256 point: 0x04 || X[32] || Y[32].
-const DIIA_ROOT_PK: [u8; 65] = hex!(
-    "048500048265e919c1738e873572c1f6443895a0c03985fc71bd96a6f62a53bc"
-    "c869d23ca6e6a2a7dc443bbb2a0b914ee35f1c74e282ecd8e6c5287c7a3d4aee10"
+/// TestAnchorA synthetic root pubkey — the issuer of the signer cert
+/// in the synthetic fixture. Generator seed:
+/// `zk-eidas-test-anchor-A-root-v1`. Uncompressed SEC1 P-256 point:
+/// `0x04 || X[32] || Y[32]`. The submodule's
+/// `kDiiaRootPkX/Y_decimal` constants encode the same X, Y in
+/// decimal form.
+const TEST_ANCHOR_A_ROOT_PK: [u8; 65] = hex!(
+    "04"
+    "e62c46fd4aeeef700e933114a1b85af927a007019f157e89f3ec8a36d4dc08a3"
+    "c327059b5cb8ef635db4fc15e3da7ef174332efd07b7ef3a35c4b69492a64c28"
 );
 
 const FIXTURE: &[u8] = include_bytes!("../fixtures/binding.qkb.p7s");
 
 /// The stable ID encoded in the fixture's signer cert subject.
-const EXPECTED_STABLE_ID: &[u8] = b"TINUA-3627506575";
+/// Post-#43a this is the synthetic `TINUA-1111111111` rather than any
+/// real RNOKPP. Format preserved for bit-compatible byte surgery.
+const EXPECTED_STABLE_ID: &[u8] = b"TINUA-1111111111";
 
-/// The secp256k1 pubkey declared in the fixture's JSON body.
+/// The secp256k1 pubkey declared in the fixture's JSON body. This
+/// field is NOT touched by #43a — the JSON payload is unchanged from
+/// the pre-scrub fixture, so the pk value here is a real repo-public
+/// secp256k1 key and not personally identifying.
 const EXPECTED_PK: [u8; 65] = hex!(
     "04aa1cd4d92aef29df5644f29d79bae2f81ba3c2ae347075fbec1301b84db712b4"
     "a0683ffcdf9b4a5eebdaaf74f0719510044d40961854901f44ce31e88b27ff2b"
 );
 
-/// The nonce in the fixture's JSON.
+/// The nonce in the fixture's JSON. Also untouched by #43a.
 const EXPECTED_NONCE: [u8; 32] = hex!(
     "78b634054062c77d6a027b291108f6c908e52b83c8f05a9c326cbbeb6feea750"
 );
 
 #[test]
 fn offsets_extract_correct_stable_id() {
-    let witness = build_witness(FIXTURE, b"0x", DIIA_ROOT_PK).expect("parse");
+    let witness = build_witness(FIXTURE, b"0x", TEST_ANCHOR_A_ROOT_PK).expect("parse");
     let off = &witness.offsets;
 
     let got = &witness.p7s_bytes[off.subject_sn_start..off.subject_sn_start + off.subject_sn_len];
@@ -44,7 +59,7 @@ fn offsets_extract_correct_stable_id() {
 
 #[test]
 fn offsets_extract_correct_pk_hex() {
-    let witness = build_witness(FIXTURE, b"0x", DIIA_ROOT_PK).expect("parse");
+    let witness = build_witness(FIXTURE, b"0x", TEST_ANCHOR_A_ROOT_PK).expect("parse");
     let off = &witness.offsets;
 
     let pk_hex = &witness.p7s_bytes[off.json_pk_start..off.json_pk_start + off.json_pk_len];
@@ -56,7 +71,7 @@ fn offsets_extract_correct_pk_hex() {
 #[test]
 fn public_outputs_match_expected() {
     let context = b"0x";
-    let witness = build_witness(FIXTURE, context, DIIA_ROOT_PK).expect("parse");
+    let witness = build_witness(FIXTURE, context, TEST_ANCHOR_A_ROOT_PK).expect("parse");
     let out = compute_outputs(&witness).expect("compute outputs");
 
     assert_eq!(out.pk, EXPECTED_PK, "pk extraction");
@@ -79,7 +94,7 @@ fn public_outputs_match_expected() {
 #[test]
 fn context_mismatch_is_detected() {
     // Witness says "wrong" but the JSON has "0x" — compute_outputs must catch this
-    let witness = build_witness(FIXTURE, b"wrong", DIIA_ROOT_PK).expect("parse");
+    let witness = build_witness(FIXTURE, b"wrong", TEST_ANCHOR_A_ROOT_PK).expect("parse");
     let err = compute_outputs(&witness).expect_err("should fail");
     assert!(
         matches!(err, zk_eidas_p7s::P7sError::ContextMismatch { .. }),
@@ -88,7 +103,8 @@ fn context_mismatch_is_detected() {
 }
 
 #[test]
-fn host_verify_succeeds_with_real_diia_root() {
-    let witness = build_witness(FIXTURE, b"0x", DIIA_ROOT_PK).expect("parse");
-    zk_eidas_p7s::host_verify(&witness).expect("host_verify must succeed against real DIIA 2311 root");
+fn host_verify_succeeds_with_test_anchor_a_root() {
+    let witness = build_witness(FIXTURE, b"0x", TEST_ANCHOR_A_ROOT_PK).expect("parse");
+    zk_eidas_p7s::host_verify(&witness)
+        .expect("host_verify must succeed against TestAnchorA synthetic root");
 }
