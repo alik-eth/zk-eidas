@@ -1,22 +1,28 @@
-//! Deterministic synthetic-fixture generator (Task 43a).
+//! Deterministic synthetic-fixture generator.
 //!
-//! Rewrites the committed DIIA `.p7s` fixtures by:
-//!   1. In-place, length-preserving substitutions in the signer cert's
-//!      issuer + subject DNs (removes PII — see `DN_SUBS` table below).
-//!   2. Re-signing the cert's TBSCertificate with a deterministic
-//!      synthetic root key (`TestAnchorA`), splicing the new
-//!      `signatureValue` into the cert's BIT STRING.
-//!   3. Recomputing the SHA-256(cert) digest embedded in the CMS
-//!      `signing-certificate-v2` (ESSCertIDv2) attribute inside
-//!      signedAttrs.
-//!   4. Re-signing the canonicalized `signedAttrs` (byte 0 rewritten
-//!      from `0xA0` to `0x31`) with a deterministic synthetic signer
-//!      key, splicing the new `signatureValue` into the SignerInfo.
+//! Supports N≥2 trust anchors as parameterized `SyntheticAnchorParams`
+//! entries. Each anchor produces a pair of re-signed `.p7s` fixtures
+//! derived from the committed baseline. TestAnchorA (`ANCHORS[0]`) keeps
+//! its existing output byte-identical — its seeds, DN substitutions, and
+//! output filenames are fixed. TestAnchorB (`ANCHORS[1]`, added in
+//! Task #44) differs in seed strings (yielding a distinct root pk),
+//! DN-org text, and reg-code / stable-ID markers (yielding a distinct
+//! `TRUST_ANCHOR_PROBES` match), and emits output to `testanchor-b-*.p7s`.
 //!
-//! TSA countersignature bytes are LEFT AS-IS — by design the new
-//! content_sig no longer matches the TSA's `message_imprint`, but no
-//! circuit invariant or test reads the TSA path (scope decision for
-//! Task 43a; TSA surgery is tracked as Task #45).
+//! Surgery steps per anchor:
+//!   1. Apply the universal `TSA_SUBS` table (TSA region branding;
+//!      same for every anchor).
+//!   2. Apply the anchor's `dn_subs` table (DN-identifying text +
+//!      QTSP reg-code + stable-ID — length-preserving).
+//!   3. Re-sign the cert_tbs with the anchor's root key, splice the
+//!      signature into the cert BIT STRING.
+//!   4. Recompute SHA-256(cert), splice into ESSCertIDv2.
+//!   5. Re-sign the canonicalized signedAttrs with the anchor's
+//!      signer key, splice into the primary content_sig.
+//!
+//! TSA countersignature bytes are LEFT AS-IS for both anchors — no
+//! circuit invariant reads the TSA path (#43a scope decision; TSA
+//! surgery tracked by #45, already merged upstream of this task).
 //!
 //! ## Determinism
 //!
@@ -24,8 +30,8 @@
 //! and signer secret keys are derived from fixed seed strings via
 //! SHA-256 → scalar reduction. The `(signer_seed_nonce, serial_tweak)`
 //! retry loop iterates in a fixed order. Running the generator twice
-//! with no code changes produces byte-identical output — verified by
-//! `--output-dir` + `diff -rq` in CI.
+//! with no code changes produces byte-identical output for EVERY anchor
+//! — verified by `--output-dir` + `diff -rq` in CI.
 //!
 //! ## Usage
 //!
@@ -39,18 +45,15 @@
 //! # Overwrite in place (used once the output has been verified).
 //! cargo run --release --bin gen_synthetic_fixtures -- --in-place
 //! ```
-//!
-//! The final output SHA-256s are logged on success; any drift in
-//! future runs surfaces as a visible diff.
 
 use std::path::PathBuf;
 
 use p256::ecdsa::{signature::Signer, Signature, SigningKey, VerifyingKey};
 use sha2::{Digest, Sha256};
 
-// ── Scope guards (handoff §8 trap 1) ─────────────────────────────────
+// ── Scope guards ─────────────────────────────────────────────────────
 //
-// These constants pin the DIIA fixture layout. Any drift means the
+// These constants pin the baseline fixture layout. Any drift means the
 // current fixtures aren't the ones this generator was designed for and
 // the surgery would corrupt them. Changing these requires re-auditing
 // the whole surgery plan.
@@ -77,9 +80,9 @@ const SERIAL_START: usize = 932;
 const SERIAL_LEN: usize = 20;
 
 /// Offset of the signer cert SPKI's 65-byte SEC1 uncompressed point
-/// (leading `0x04` byte). The 26-byte DIIA P-256 SPKI DER prefix that
+/// (leading `0x04` byte). The 26-byte P-256 SPKI DER prefix that
 /// precedes it is unchanged (same OID bytes for every P-256 QTSP, so
-/// the in-circuit prefix anchor stays valid for the synthetic anchor).
+/// the in-circuit prefix anchor stays valid for every synthetic anchor).
 const SPKI_PK_START: usize = 1355;
 const SPKI_PK_LEN: usize = 65;
 
@@ -92,12 +95,12 @@ const ESS_DIGEST_LEN: usize = 32;
 
 /// Offset of the signedAttrs `[0] IMPLICIT` tag within the p7s. The
 /// body length is read from the `30 82 ll ll` header at runtime
-/// because the two DIIA fixtures differ by one byte of signedAttrs
+/// because the two baseline fixtures differ by one byte of signedAttrs
 /// body length (`binding.qkb.p7s` vs `admin-binding.qkb.p7s`).
 const SIGNED_ATTRS_START: usize = 2477;
 
 /// Offset of the primary content_sig's 70-byte ECDSA SEQ value. Note:
-/// the two DIIA fixtures differ — `binding.qkb.p7s` has it at 3878,
+/// the two baseline fixtures differ — `binding.qkb.p7s` has it at 3878,
 /// `admin-binding.qkb.p7s` at 3879 (one-byte shift from the longer
 /// signedAttrs body). The generator locates this from the signedAttrs
 /// end rather than hardcoding.
@@ -107,13 +110,11 @@ const CONTENT_SIG_LEN: usize = 70;
 // ── Length-preserving TSA region substitution table (Task 45) ────────
 //
 // These strings appear exclusively in (or primarily in) the TSA
-// countersignature region. They are applied globally like DN_SUBS —
-// any occurrences inside the signer cert TBS or signedAttrs are
-// covered by the subsequent re-signing steps (cert_sig + content_sig),
-// so the output remains self-consistent.
-//
-// The TSA countersignature's message_imprint remains stale (it already
-// was after #43a; no circuit invariant reads the TSA path).
+// countersignature region. They are applied globally like `dn_subs` for
+// EVERY anchor — the TSA region is neutralized once and shared across
+// anchors. Any occurrences inside the signer cert TBS or signedAttrs
+// are covered by the subsequent per-anchor re-signing steps (cert_sig
+// + content_sig), so the output remains self-consistent.
 
 const TSA_SUBS: &[(&[u8], &[u8])] = &[
     // 22-byte pair: TSA cert common name.
@@ -138,16 +139,18 @@ const TSA_SUBS: &[(&[u8], &[u8])] = &[
     (b"diia_ecdsa", b"test_ecdsa"),
 ];
 
-// ── Length-preserving DN substitution table (handoff §3.2) ───────────
+// ── TestAnchorA DN substitution table ────────────────────────────────
 //
-// Each (needle, replacement) pair is byte-identical in length. Order
+// Each (needle, replacement) pair is byte-identical in length. Applied
+// to the signer cert TBS + signedAttrs region for TestAnchorA. Order
 // matters only for overlap avoidance — longer needles first so we
 // don't accidentally match a shorter needle inside a longer one.
+//
+// The reg-code `TQSA-00000000-01` is the marker the host-side
+// `TRUST_ANCHOR_PROBES` uses to identify TestAnchorA.
 
-const DN_SUBS: &[(&[u8], &[u8])] = &[
-    // 41-byte pair (longer than the 23-byte "State enterprise" variant,
-    // which is a substring of nothing else — but longer first is cheap
-    // insurance).
+const DN_SUBS_TESTANCHOR_A: &[(&[u8], &[u8])] = &[
+    // 41-byte pair.
     (
         b"\"DIIA\". Qualified Trust Services Provider",
         b"\"Test\". Synthetic Trust Services Provider",
@@ -164,8 +167,7 @@ const DN_SUBS: &[(&[u8], &[u8])] = &[
     ),
     // 20-byte pair (subject DN commonName — note trailing space).
     (b"Vovkotrub Oleksandr ", b"Test Holder Subject "),
-    // 16-byte pair (QTSP reg-code — the marker `TRUST_ANCHOR_PROBES`
-    // uses to identify TestAnchorA).
+    // 16-byte pair (QTSP reg-code — the TRUST_ANCHOR_PROBES marker).
     (b"UA-43395033-2311", b"TQSA-00000000-01"),
     // 16-byte pair (subject stable-ID).
     (b"TINUA-3627506575", b"TINUA-1111111111"),
@@ -179,15 +181,105 @@ const DN_SUBS: &[(&[u8], &[u8])] = &[
     (b"Kyiv", b"Test"),
 ];
 
+// ── TestAnchorB DN substitution table (Task #44) ─────────────────────
+//
+// The committed baseline fixture is ALREADY post-TestAnchorA-substitution
+// (the pre-A DIIA form is not stored in the tree). So the TestAnchorB
+// generator reads the A-shaped fixture and performs a *delta* rewrite
+// from TestAnchorA text to TestAnchorB text — the needles below are
+// A's replacements, not DIIA originals.
+//
+// Same length constraints as TestAnchorA. The DN-identifying strings
+// differ so the two anchors are distinguishable to a human reader and
+// so the `TRUST_ANCHOR_PROBES` marker is unique per anchor. The
+// QTSP reg-code is `TQSB-00000000-02` (16 bytes) — B for "second
+// synthetic anchor", distinct from A's `TQSA-00000000-01`.
+//
+// Invariant: every (needle, replacement) must be byte-identical in
+// length. Order: longer needles first.
+
+const DN_SUBS_TESTANCHOR_B: &[(&[u8], &[u8])] = &[
+    // 41-byte pair.
+    (
+        b"\"Test\". Synthetic Trust Services Provider",
+        b"\"TstB\". Fixture-B Trust Services Provider",
+    ),
+    // 39-byte pair.
+    (
+        b"Synthetic Electronic Trust Services Dpt",
+        b"Fixture-B Electronic Trust Services Dpt",
+    ),
+    // 23-byte pair.
+    (
+        b"Synthetic Test QTSP Inc",
+        b"Fixture-B Test QTSP Inc",
+    ),
+    // 20-byte pair (subject DN commonName — note trailing space).
+    (b"Test Holder Subject ", b"FixtureB Holder Sub "),
+    // 16-byte pair (QTSP reg-code — the TRUST_ANCHOR_PROBES marker).
+    (b"TQSA-00000000-01", b"TQSB-00000000-02"),
+    // 16-byte pair (subject stable-ID).
+    (b"TINUA-1111111111", b"TINUB-2222222222"),
+    // 14-byte pair (legal entity reg code).
+    (b"NTRUA-00000000", b"NTRUB-00000000"),
+    // 10-byte pair (subject givenName — trailing space).
+    (b"TestHoldr ", b"TestHoldB "),
+    // 9-byte pair (subject surname).
+    (b"TestHoldX", b"FixtrHldB"),
+    // 4-byte pair (locality) — A rewrote Kyiv→Test, so B needle is Test.
+    //
+    // CAVEAT: "Test" is a very common 4-byte substring; `replace_all` is
+    // indiscriminate, so some non-locality occurrences may flip too.
+    // Safe because the surgery re-signs the cert after the substitution
+    // (any incidental flips are absorbed into the new cert_sig and
+    // content_sig). The only region not re-signed is the TSA
+    // countersignature, which already has stale bytes by design
+    // (#43a / #45).
+    (b"Test", b"TstB"),
+];
+
+// ── Parameterized anchor spec ────────────────────────────────────────
+//
+// One `SyntheticAnchorParams` value per distinct trust anchor. The
+// generator iterates `ANCHORS[]` and emits the full `{binding,
+// admin-binding}` pair for each — prefixed by `output_prefix` so
+// outputs don't collide. TestAnchorA uses the empty prefix for
+// backwards compatibility with the already-committed filenames.
+
+struct SyntheticAnchorParams {
+    /// Human-readable name for logging.
+    name: &'static str,
+    /// Seed string fed to SHA-256 to derive the root CA signing key.
+    root_seed: &'static [u8],
+    /// Seed base for signer keys. Per-fixture key is derived by
+    /// hashing `signer_seed_base || signer_seed_nonce.to_le_bytes()`.
+    signer_seed_base: &'static [u8],
+    /// Length-preserving DN substitution table for this anchor.
+    dn_subs: &'static [(&'static [u8], &'static [u8])],
+    /// Output filename prefix (e.g. `""` or `"testanchor-b-"`). The
+    /// baseline filenames from `FIXTURE_FILES` get concatenated after
+    /// the prefix, so `testanchor-b-binding.qkb.p7s` etc.
+    output_prefix: &'static str,
+}
+
+const ANCHORS: &[SyntheticAnchorParams] = &[
+    SyntheticAnchorParams {
+        name: "TestAnchorA",
+        root_seed: b"zk-eidas-test-anchor-A-root-v1",
+        signer_seed_base: b"zk-eidas-test-anchor-A-signer-v1",
+        dn_subs: DN_SUBS_TESTANCHOR_A,
+        output_prefix: "",
+    },
+    SyntheticAnchorParams {
+        name: "TestAnchorB",
+        root_seed: b"zk-eidas-p7s-testanchor-b-root-v1",
+        signer_seed_base: b"zk-eidas-p7s-testanchor-b-signer-v1",
+        dn_subs: DN_SUBS_TESTANCHOR_B,
+        output_prefix: "testanchor-b-",
+    },
+];
+
 // ── Deterministic key derivation ─────────────────────────────────────
-
-/// Root-CA seed — hashed with SHA-256 to produce the scalar that
-/// becomes `TestAnchorA`'s root signing key.
-const ROOT_SEED: &[u8] = b"zk-eidas-test-anchor-A-root-v1";
-
-/// Signer seed base — the per-fixture signer key is derived by
-/// hashing `SIGNER_SEED_BASE || signer_seed_nonce.to_le_bytes()`.
-const SIGNER_SEED_BASE: &[u8] = b"zk-eidas-test-anchor-A-signer-v1";
 
 /// Derive a P-256 signing key deterministically from a 32-byte seed.
 /// If the reduced scalar is zero, bump the seed and retry (vanishingly
@@ -203,13 +295,13 @@ fn derive_key(mut seed: [u8; 32]) -> SigningKey {
     }
 }
 
-fn derive_root_key() -> SigningKey {
-    derive_key(Sha256::digest(ROOT_SEED).into())
+fn derive_root_key(root_seed: &[u8]) -> SigningKey {
+    derive_key(Sha256::digest(root_seed).into())
 }
 
-fn derive_signer_key(nonce: u32) -> SigningKey {
+fn derive_signer_key(signer_seed_base: &[u8], nonce: u32) -> SigningKey {
     let mut h = Sha256::new();
-    h.update(SIGNER_SEED_BASE);
+    h.update(signer_seed_base);
     h.update(nonce.to_le_bytes());
     derive_key(h.finalize().into())
 }
@@ -268,7 +360,7 @@ fn read_long_form_len(buf: &[u8], pos: usize) -> (usize, usize) {
 /// forward from `signed_attrs_end` looking for the signerInfo's
 /// `signatureAlgorithm` AlgId (`30 0A 06 08 2A 86 48 CE 3D 04 03 02`),
 /// then the immediately following `04 46 <70-byte ECDSA SEQ>`. This is
-/// more robust than hardcoding the offset because the two DIIA
+/// more robust than hardcoding the offset because the two baseline
 /// fixtures differ by one byte of signedAttrs body length.
 fn locate_content_sig(buf: &[u8], signed_attrs_end: usize) -> usize {
     const ECDSA_ALG: &[u8] = &[
@@ -290,12 +382,12 @@ fn locate_content_sig(buf: &[u8], signed_attrs_end: usize) -> usize {
     after_alg + SIG_HDR.len()
 }
 
-// ── Core: regenerate one fixture ─────────────────────────────────────
+// ── Core: regenerate one fixture for one anchor ──────────────────────
 
-fn generate_synthetic(orig: &[u8]) -> Vec<u8> {
+fn generate_synthetic(orig: &[u8], anchor: &SyntheticAnchorParams) -> Vec<u8> {
     assert!(
         orig.len() > CERT_START + CERT_LEN_TOTAL + 2500,
-        "input too small to be a DIIA p7s fixture"
+        "input too small to be a baseline p7s fixture"
     );
     let mut buf = orig.to_vec();
 
@@ -330,19 +422,23 @@ fn generate_synthetic(orig: &[u8]) -> Vec<u8> {
         replace_all(&mut buf, needle, rep);
     }
 
-    // Step 1b: length-preserving DN substitutions.
-    eprintln!("Step 1b: DN substitutions");
-    for (needle, rep) in DN_SUBS {
+    // Step 1b: length-preserving DN substitutions (per-anchor).
+    eprintln!("Step 1b: DN substitutions ({})", anchor.name);
+    for (needle, rep) in anchor.dn_subs {
         replace_all(&mut buf, needle, rep);
     }
 
     // Step 2: splice synthetic signer SPKI (SEC1 uncompressed).
     eprintln!("Step 2: retry loop (signer_seed × serial_tweak)");
-    let root_sk = derive_root_key();
+    let root_sk = derive_root_key(anchor.root_seed);
     let root_pk = sec1_uncompressed(&root_sk);
 
-    let (signer_seed, serial_tweak, signer_sk) =
-        retry_until_both_sigs_fit(&mut buf, &root_sk, content_sig_start);
+    let (signer_seed, serial_tweak, signer_sk) = retry_until_both_sigs_fit(
+        &mut buf,
+        &root_sk,
+        anchor.signer_seed_base,
+        content_sig_start,
+    );
 
     let signer_pk = sec1_uncompressed(&signer_sk);
 
@@ -355,19 +451,23 @@ fn generate_synthetic(orig: &[u8]) -> Vec<u8> {
         hex::encode(&signer_pk[1..33])
     );
     eprintln!(
-        "  TestAnchorA root pk X (hex BE): {}",
+        "  {} root pk X (hex BE): {}",
+        anchor.name,
         hex::encode(&root_pk[1..33])
     );
     eprintln!(
-        "  TestAnchorA root pk Y (hex BE): {}",
+        "  {} root pk Y (hex BE): {}",
+        anchor.name,
         hex::encode(&root_pk[33..65])
     );
     eprintln!(
-        "  TestAnchorA root pk X (decimal): {}",
+        "  {} root pk X (decimal): {}",
+        anchor.name,
         be_bytes_to_decimal(&root_pk[1..33])
     );
     eprintln!(
-        "  TestAnchorA root pk Y (decimal): {}",
+        "  {} root pk Y (decimal): {}",
+        anchor.name,
         be_bytes_to_decimal(&root_pk[33..65])
     );
 
@@ -412,14 +512,9 @@ fn canonicalize_signed_attrs(buf: &[u8], signed_attrs_end: usize) -> Vec<u8> {
 fn retry_until_both_sigs_fit(
     buf: &mut [u8],
     root_sk: &SigningKey,
+    signer_seed_base: &[u8],
     content_sig_start: usize,
 ) -> (u32, u32, SigningKey) {
-    // The DIIA fixture's cert_sig region is 70 bytes of raw DER (a
-    // complete ECDSA SEQ `30 44 02 20 r[32] 02 20 s[32]` — the leading
-    // `30 44` IS the outer SEQ header, not a sibling). So any
-    // `to_der()` call whose output is exactly 70 bytes fits
-    // byte-for-byte into the region; anything longer (71+ bytes) means
-    // r or s needed an extra leading-zero padding byte and we retry.
     const ORIG_DER_LEN: usize = CERT_SIG_LEN;
 
     for signer_seed_nonce in 0u32.. {
@@ -427,7 +522,7 @@ fn retry_until_both_sigs_fit(
             panic!("retry loop exceeded 10,000 seeds without convergence — bug?");
         }
 
-        let signer_sk = derive_signer_key(signer_seed_nonce);
+        let signer_sk = derive_signer_key(signer_seed_base, signer_seed_nonce);
         let signer_pk_sec1 = sec1_uncompressed(&signer_sk);
         buf[SPKI_PK_START..SPKI_PK_START + SPKI_PK_LEN]
             .copy_from_slice(&signer_pk_sec1);
@@ -565,25 +660,29 @@ fn main() {
         std::fs::create_dir_all(out).expect("output dir");
     }
 
-    for fname in FIXTURE_FILES {
-        let src = fixtures_dir.join(fname);
-        eprintln!("=== processing {} ===", fname);
-        let orig = std::fs::read(&src).expect("read fixture");
-        let syn = generate_synthetic(&orig);
-        let digest = Sha256::digest(&syn);
-        eprintln!("  output SHA-256: {}", hex::encode(digest));
+    for anchor in ANCHORS {
+        eprintln!("======== anchor: {} ========", anchor.name);
+        for fname in FIXTURE_FILES {
+            let src = fixtures_dir.join(fname);
+            let out_fname = format!("{}{}", anchor.output_prefix, fname);
+            eprintln!("=== processing {} → {} ===", fname, out_fname);
+            let orig = std::fs::read(&src).expect("read baseline fixture");
+            let syn = generate_synthetic(&orig, anchor);
+            let digest = Sha256::digest(&syn);
+            eprintln!("  output SHA-256: {}", hex::encode(digest));
 
-        let dst: PathBuf = if let Some(out) = &output_dir {
-            out.join(fname)
-        } else if in_place {
-            src
-        } else {
-            // Default: dry-run. Print only.
-            eprintln!("  dry-run (no write)");
-            continue;
-        };
-        std::fs::write(&dst, &syn).expect("write output");
-        eprintln!("  wrote {}", dst.display());
+            let dst: PathBuf = if let Some(out) = &output_dir {
+                out.join(&out_fname)
+            } else if in_place {
+                fixtures_dir.join(&out_fname)
+            } else {
+                // Default: dry-run. Print only.
+                eprintln!("  dry-run (no write)");
+                continue;
+            };
+            std::fs::write(&dst, &syn).expect("write output");
+            eprintln!("  wrote {}", dst.display());
+        }
     }
 }
 
