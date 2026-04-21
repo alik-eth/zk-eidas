@@ -36,6 +36,8 @@ pub enum P7sError {
     JsonFieldMissing(&'static str),
     #[error("ECDSA verification failed: {0}")]
     BadSignature(&'static str),
+    #[error("signer cert issuer DN does not match any known trust anchor: {0}")]
+    UnknownTrustAnchor(String),
     #[error("context mismatch: witness says {witness:?}, input says {input:?}")]
     ContextMismatch {
         witness: Vec<u8>,

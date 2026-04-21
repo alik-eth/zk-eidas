@@ -55,6 +55,26 @@ const X520_SUBJECT_SN_ANCHOR: [u8; 9] = [
 /// in sync with the circuit-side `kStableIdLen` constant.
 pub(crate) const STABLE_ID_LEN: usize = 16;
 
+/// Trust-anchor probe table (Task #36 host-side mirror of the
+/// submodule's `kTrustAnchors[]`). Each entry maps a unique,
+/// hard-to-spoof marker from the signer cert's issuer DN to the
+/// compile-time trust-anchor table index. Order must match the
+/// submodule's `kTrustAnchors[]` so `trust_anchor_index = N` on
+/// both sides selects the SAME anchor.
+///
+/// Phase 2b ships with index 0 = DIIA QTSP 2311, identified by its
+/// QTSP registration code `UA-43395033-2311` embedded in the issuer
+/// DN's serialNumber attribute. Task #37 appends non-DIIA QTSPs
+/// with their own per-QTSP markers.
+///
+/// Using a byte-level substring match on the issuer DN's DER is
+/// robust to DN attribute ordering (X.500 / X.509 RDNs are a SET
+/// and issuers are free to permute them) because the reg-code
+/// string itself is unique to DIIA and stable across cert re-issues.
+const TRUST_ANCHOR_PROBES: &[(&[u8], u32, &str)] = &[
+    (b"UA-43395033-2311", 0, "DIIA QTSP 2311 (Ukraine)"),
+];
+
 /// 17-byte CMS messageDigest attribute DER prefix (RFC 5652). Identical
 /// to `kSignedAttrsMdPrefix` in the p7s circuit, asserted on-wire at
 /// `signed_attrs[md_offset..md_offset+17]`. Attribute SEQUENCE hdr
@@ -165,6 +185,33 @@ pub(crate) fn locate_offsets(p7s: &[u8]) -> Result<P7sOffsets, P7sError> {
     let subject_dn_start_offset_in_tbs =
         find_subslice_unique(&tbs_der, &subject_dn_der)
             .ok_or(P7sError::OffsetNotFound("subject DN within TBS"))?;
+
+    // ── Trust-anchor selection (Task #36) ─────────────────────────────
+    // Probe the signer cert's issuer DN for a known QTSP marker and
+    // emit the matching trust-anchor table index. The circuit's
+    // compile-time `kTrustAnchors[]` and the host-side
+    // `TRUST_ANCHOR_PROBES` are order-aligned by construction: both
+    // use index 0 for DIIA, and future entries append symmetrically.
+    let issuer_der = signer_cert
+        .tbs_certificate
+        .issuer
+        .to_der()
+        .map_err(|e| P7sError::Der(format!("issuer DN encode: {e}")))?;
+    let trust_anchor_index = TRUST_ANCHOR_PROBES
+        .iter()
+        .find_map(|(marker, idx, _name)| {
+            if contains_subslice(&issuer_der, marker) {
+                Some(*idx)
+            } else {
+                None
+            }
+        })
+        .ok_or_else(|| {
+            P7sError::UnknownTrustAnchor(format!(
+                "issuer DN does not match any of {} known QTSP markers",
+                TRUST_ANCHOR_PROBES.len()
+            ))
+        })?;
 
     // Offset within cert_tbs of the 9-byte X.520 serialNumber attribute
     // prefix (SEQUENCE + OID + PrintableString hdr). Value bytes follow
@@ -393,6 +440,7 @@ pub(crate) fn locate_offsets(p7s: &[u8]) -> Result<P7sOffsets, P7sError> {
         json_declaration_len,
         json_timestamp_start: signed_content_start + json_timestamp_start_rel,
         json_timestamp_len,
+        trust_anchor_index,
     })
 }
 
@@ -475,4 +523,14 @@ fn find_subslice_unique(haystack: &[u8], needle: &[u8]) -> Option<usize> {
         }
     }
     first
+}
+
+/// `true` iff `needle` appears as a contiguous sub-slice of `haystack`
+/// at least once. Unlike `find_subslice_unique`, multiple matches are
+/// fine — trust-anchor probe markers just need presence, not position.
+fn contains_subslice(haystack: &[u8], needle: &[u8]) -> bool {
+    if needle.is_empty() || needle.len() > haystack.len() {
+        return false;
+    }
+    haystack.windows(needle.len()).any(|w| w == needle)
 }

@@ -133,9 +133,21 @@
 //!                                               (294 for DIIA fixtures).
 //!                                               Used by the in-circuit
 //!                                               range check.
-//!       `u32 trust_anchor_index`              — placeholder (0 in #34);
-//!                                               Task #36 wires real
-//!                                               trust-anchor selection.
+//!       `u32 trust_anchor_index`              — selects which
+//!                                               `kTrustAnchors[]` entry
+//!                                               the cert-sig ECDSA
+//!                                               verifies under. Phase
+//!                                               2b ships with one entry
+//!                                               (DIIA); Task #36 wired
+//!                                               both the in-circuit
+//!                                               bound check
+//!                                               (`vlt(index,
+//!                                                kTrustAnchorCount)`)
+//!                                               and the host-side
+//!                                               parser probe that
+//!                                               picks the index by
+//!                                               matching the signer
+//!                                               cert's issuer DN.
 //!     Public blob extends v10 with:
 //!       `u8  nullifier[32]`                   — SHA-256(stable_id ||
 //!                                               context) public output.
@@ -478,9 +490,13 @@ impl Witness {
             })?;
         out.extend_from_slice(&sn_offset_u32.to_le_bytes());
         out.extend_from_slice(&dn_offset_u32.to_le_bytes());
-        // v11 placeholder — Task #36 activates real trust-anchor
-        // selection when the trust-anchor table lands. Always 0 in #34.
-        out.extend_from_slice(&0u32.to_le_bytes());
+        // v11 / Task #36 — trust-anchor index selected by the parser
+        // (`locate_offsets` probes the signer cert's issuer DN for a
+        // known QTSP marker). C++ side bound-checks against
+        // `kTrustAnchorCount`; the in-circuit `vlt` constraint binds
+        // the same relation so a caller passing a higher-than-expected
+        // index surfaces as a host-side P7S_INVALID_INPUT before prove.
+        out.extend_from_slice(&off.trust_anchor_index.to_le_bytes());
 
         Ok(out)
     }

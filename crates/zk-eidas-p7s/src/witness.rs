@@ -117,6 +117,15 @@ pub struct P7sOffsets {
     /// Exposed as a public output for frontend-policy anti-replay.
     pub json_timestamp_start: usize,
     pub json_timestamp_len: usize,
+
+    /// Index into the compile-time `kTrustAnchors[]` table (in the p7s
+    /// circuit submodule) identifying which QTSP's root public key
+    /// the cert-sig ECDSA verifies against. Task #36 activates real
+    /// selection; Phase 2b ships with a single DIIA entry at index 0,
+    /// so the parser currently only returns 0 (for DIIA-issued certs)
+    /// or fails with `P7sError::UnknownTrustAnchor`. When Task #37
+    /// adds fixtures for other QTSPs the parser's probe set extends.
+    pub trust_anchor_index: u32,
 }
 
 /// Public outputs the verifier sees after the ZK proof passes.
