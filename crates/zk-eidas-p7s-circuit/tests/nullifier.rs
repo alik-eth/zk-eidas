@@ -1,29 +1,23 @@
-//! Phase 2b Task 34 — invariant 7: `nullifier == SHA-256(stable_id[16] ||
-//! context_raw)`, where `stable_id` is the 16-byte PrintableString
-//! value of the X.520 serialNumber attribute in cert_tbs's Subject DN
-//! (synthetic TestAnchorA stable-ID format; mirrors the real-DIIA
-//! RNOKPP layout of `TINUA-` + 10 digits). The host computes the
-//! same formula in `zk_eidas_p7s::compute_outputs` (Phase 1); the
-//! circuit enforces it so a malicious prover can't lie.
+//! Nullifier — `nullifier == SHA-256(stable_id[16] || context_raw)`,
+//! where `stable_id` is the 16-byte PrintableString value of the X.520
+//! serialNumber attribute in cert_tbs's Subject DN (TestAnchorA format:
+//! `TINUA-` + 10 digits). The host computes the same formula in
+//! `zk_eidas_p7s::compute_outputs`; the circuit enforces it so a
+//! malicious prover can't lie about the holder's identity.
 //!
-//! Tests (per plan §Step-14):
+//! Tests:
 //!   1. Happy: honest TestAnchorA fixture → prove+verify; in-circuit
 //!      nullifier equals the Phase 1 host-computed nullifier.
-//!   2. Cross-holder same RNOKPP: both `binding.qkb.p7s` and
-//!      `admin-binding.qkb.p7s` share the same holder RNOKPP — same
-//!      nullifier.
+//!   2. Cross-holder same stable ID: both `binding.qkb.p7s` and
+//!      `admin-binding.qkb.p7s` share the same synthetic holder → same
+//!      nullifier under the same context.
 //!   3. Tampered stable_id bytes in cert_tbs: SHA input changes,
 //!      prover refuses.
 //!   4. Tampered `subject_sn_offset` into issuer-DN serialNumber: the
 //!      dual-match range check `sn_offset > subject_dn_start` fails,
-//!      prover refuses. LOAD-BEARING soundness test — without the
-//!      range check, the prover could bind `nullifier` to the issuer
-//!      QTSP's reg code instead of the holder's RNOKPP.
-//!   5. Wrong public context: the prover commits to the honest
-//!      context-in-SHA, but the caller supplies a different public
-//!      context_hash → different nullifier in `PublicInputs` → the
-//!      in-circuit byte equality between computed SHA output and
-//!      public `nullifier` fails.
+//!      prover refuses. LOAD-BEARING soundness test.
+//!   5. Wrong public context: lied public `nullifier` doesn't match
+//!      the in-circuit SHA output, prover refuses.
 
 use sha2::{Digest, Sha256};
 use zk_eidas_p7s::{build_witness, compute_outputs};
@@ -35,7 +29,7 @@ const FIXTURE_ADMIN: &[u8] =
     include_bytes!("../../zk-eidas-p7s/fixtures/admin-binding.qkb.p7s");
 const DUMMY_ROOT_PK: [u8; 65] = [0x04; 65];
 
-// v11 blob tail layout (see invariant_1.rs for full layout). Only the
+// v11 blob tail layout (see cert_chain_ecdsa.rs for full layout). Only the
 // tail offsets are needed here for tampering tests.
 const CONTENT_SIG_S_END: usize = 5038;
 const SUBJECT_SN_OFFSET_IN_BLOB: usize = CONTENT_SIG_S_END; // 5038
@@ -99,7 +93,7 @@ fn expect_prove_refused(err: longfellow_sys::p7s::P7sFfiError) {
 /// 370 for the fixture — drifts here would change the anchor story,
 /// so we want a hard fail rather than a silent regression.
 #[test]
-fn invariant_7_nullifier_matches_phase1_host_output() {
+fn nullifier_nullifier_matches_phase1_host_output() {
     let inner = build_witness(FIXTURE_BINDING, b"0x", DUMMY_ROOT_PK).unwrap();
     assert_eq!(
         inner.offsets.subject_sn_offset_in_tbs, 370,
@@ -133,7 +127,7 @@ fn invariant_7_nullifier_matches_phase1_host_output() {
 /// cross-cert-renewal property invariant 7 guarantees (Phase 1
 /// comment on `outputs.rs:17-41`).
 #[test]
-fn invariant_7_cross_holder_same_rnokpp_same_nullifier() {
+fn nullifier_cross_holder_same_rnokpp_same_nullifier() {
     let w1 = build_witness(FIXTURE_BINDING, b"0x", DUMMY_ROOT_PK).unwrap();
     let w2 = build_witness(FIXTURE_ADMIN, b"0x", DUMMY_ROOT_PK).unwrap();
     let o1 = compute_outputs(&w1).unwrap();
@@ -166,7 +160,7 @@ fn invariant_7_cross_holder_same_rnokpp_same_nullifier() {
 ///   - Additionally, invariant 1's cert_tbs SHA-256 differs, so the
 ///     cert ECDSA fails — either trip is a valid rejection signal.
 #[test]
-fn invariant_7_tampered_stable_id_bytes_prover_refuses() {
+fn nullifier_tampered_stable_id_bytes_prover_refuses() {
     let inner = build_witness(FIXTURE_BINDING, b"0x", DUMMY_ROOT_PK).unwrap();
     let sn_offset = inner.offsets.subject_sn_offset_in_tbs;
     let w = Witness::new(inner);
@@ -207,7 +201,7 @@ fn invariant_7_tampered_stable_id_bytes_prover_refuses() {
 ///      vlt(294, 184) = false → assert1(0) → eval_circuit fails →
 ///      P7S_PROVER_FAILURE.
 #[test]
-fn invariant_7_tampered_stable_id_offset_into_issuer_dn_prover_refuses() {
+fn nullifier_tampered_stable_id_offset_into_issuer_dn_prover_refuses() {
     let inner = build_witness(FIXTURE_BINDING, b"0x", DUMMY_ROOT_PK).unwrap();
     let w = Witness::new(inner);
     let mut honest = w.to_ffi_bytes().expect("serialize");
@@ -245,7 +239,7 @@ fn invariant_7_tampered_stable_id_offset_into_issuer_dn_prover_refuses() {
 /// equality. P7S_PROVER_FAILURE is therefore the only expected code.
 #[cfg(feature = "test-bypass-host-anchors")]
 #[test]
-fn invariant_7_tampered_stable_id_offset_into_issuer_dn_bypass_parser() {
+fn nullifier_tampered_stable_id_offset_into_issuer_dn_bypass_parser() {
     let inner = build_witness(FIXTURE_BINDING, b"0x", DUMMY_ROOT_PK).unwrap();
     let w = Witness::new(inner);
     let mut tampered = w.to_ffi_bytes().expect("serialize");
@@ -285,7 +279,7 @@ fn invariant_7_tampered_stable_id_offset_into_issuer_dn_bypass_parser() {
 /// `context_hash` mismatch before reaching the nullifier equality,
 /// but either trip is a valid rejection signal.
 #[test]
-fn invariant_7_wrong_context_different_nullifier() {
+fn nullifier_wrong_context_different_nullifier() {
     let inner = build_witness(FIXTURE_BINDING, b"0x", DUMMY_ROOT_PK).unwrap();
     // Grab stable_id bytes BEFORE moving `inner` into Witness.
     let sn_start = inner.offsets.subject_sn_start;

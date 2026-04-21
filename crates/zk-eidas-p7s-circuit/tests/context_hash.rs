@@ -1,6 +1,6 @@
-//! Phase 2a Task 1b — invariant 9: `context_hash == SHA-256(context_bytes)`.
+//! Context hash — `context_hash == SHA-256(context_bytes)`.
 //!
-//! Happy-path: honest witness + the DIIA fixture's context bytes.
+//! Happy-path: honest witness + the fixture's context bytes.
 //! Negative 1 (wrong claimed hash): prover refuses to produce a bogus proof.
 //! Negative 2 (tampered context): prover refuses when the preimage
 //!   doesn't match the declared hash.

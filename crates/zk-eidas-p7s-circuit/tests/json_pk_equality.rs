@@ -1,9 +1,9 @@
-//! Phase 2a Task 20 — invariant 4: JSON "pk" field hex-decodes to
-//! `public.pk`, and the hex chars are byte-equal to the slice of
-//! `signed_content` at `json_pk_offset`.
+//! JSON pk equality — the JSON "pk" field hex-decodes to `public.pk`,
+//! and the hex chars are byte-equal to the slice of `signed_content`
+//! at `json_pk_offset`.
 //!
 //! Tests:
-//!   1. Happy: real DIIA fixture, expected pk → round-trips.
+//!   1. Happy: fixture pk → round-trips.
 //!   2. Wrong-public-pk: verifier rejects.
 //!   3. Tampered pk_hex in signed_content: prover refuses (byte-eq fails).
 //!   4. Invalid hex char at a pk position: prover refuses (HexDecode lookup fails).
@@ -52,7 +52,7 @@ fn public_for(pk: [u8; 65], ctx: &[u8]) -> PublicInputs {
 
 /// (1) Happy: honest witness + correct public.pk → round-trips.
 #[test]
-fn invariant_4_happy_round_trips() {
+fn json_pk_happy_round_trips() {
     let inner = build_witness(FIXTURE, b"0x", DUMMY_ROOT_PK).unwrap();
     let w = Witness::new(inner);
     let public = public_for(expected_pk(), b"0x");
@@ -66,7 +66,7 @@ fn invariant_4_happy_round_trips() {
 
 /// (2) Wrong public pk → verifier rejects (`Ok(false)`).
 #[test]
-fn invariant_4_wrong_public_pk_rejects() {
+fn json_pk_wrong_public_pk_rejects() {
     let inner = build_witness(FIXTURE, b"0x", DUMMY_ROOT_PK).unwrap();
     let w = Witness::new(inner);
     let correct = public_for(expected_pk(), b"0x");
@@ -91,7 +91,7 @@ fn invariant_4_wrong_public_pk_rejects() {
 /// AND the pk_hex copy consistently — HexDecode then catches it. To
 /// exercise the byte_range_eq edge we tamper signed_content only.
 #[test]
-fn invariant_4_tampered_signed_content_prover_refuses() {
+fn json_pk_tampered_signed_content_prover_refuses() {
     let inner = build_witness(FIXTURE, b"0x", DUMMY_ROOT_PK).unwrap();
     let w = Witness::new(inner);
 
@@ -134,7 +134,7 @@ fn invariant_4_tampered_signed_content_prover_refuses() {
 /// (4) Invalid hex char at a pk position: the 16-way HexDecode lookup
 /// rejects any char that isn't in `{'0'..'9', 'a'..'f'}`.
 #[test]
-fn invariant_4_invalid_hex_char_prover_refuses() {
+fn json_pk_invalid_hex_char_prover_refuses() {
     let inner = build_witness(FIXTURE, b"0x", DUMMY_ROOT_PK).unwrap();
     let w = Witness::new(inner);
     let honest = w.to_ffi_bytes().expect("serialize");
@@ -175,7 +175,7 @@ fn invariant_4_invalid_hex_char_prover_refuses() {
 /// trips byte-packing vs public.pk). This confirms the end-to-end
 /// integrity of the HexDecode path when pk_hex actually changes value.
 #[test]
-fn invariant_4_silent_pk_hex_substitution_prover_refuses() {
+fn json_pk_silent_pk_hex_substitution_prover_refuses() {
     // Build an honest witness, then serialize.
     let inner = build_witness(FIXTURE, b"0x", DUMMY_ROOT_PK).unwrap();
     let w = Witness::new(inner);
@@ -228,7 +228,7 @@ fn honest_proof_cached() -> &'static zk_eidas_p7s_circuit::Proof {
 
 proptest! {
     #[test]
-    fn invariant_4_proptest_wrong_public_pk(idx in 0usize..65, xor in 1u8..=255) {
+    fn json_pk_proptest_wrong_public_pk(idx in 0usize..65, xor in 1u8..=255) {
         let proof = honest_proof_cached();
         let mut wrong_pk = expected_pk();
         wrong_pk[idx] ^= xor;

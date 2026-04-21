@@ -1,9 +1,9 @@
-//! Phase 2a Task 23 — invariant 10: the JSON "declaration" field equals
-//! the single N=1 whitelist entry (`kDeclarationPhrase`, 510 ASCII bytes)
-//! compiled into the circuit.
+//! Declaration whitelist — the JSON "declaration" field equals the single
+//! N=1 whitelist entry (`kDeclarationPhrase`, 510 ASCII bytes) compiled
+//! into the circuit.
 //!
 //! Tests:
-//!   1. Happy: DIIA fixture declaration matches the whitelist.
+//!   1. Happy: fixture declaration matches the whitelist.
 //!   2. Tamper a declaration byte in signed_content: prover refuses.
 //!   3. Swap the declaration bytes with a non-whitelisted phrase (same
 //!      length, different content): prover refuses.
@@ -76,7 +76,7 @@ fn decl_offset(blob: &[u8]) -> usize {
 /// (1) Happy: the real fixture's declaration is the single v1 whitelist
 /// entry — prove+verify round-trips.
 #[test]
-fn invariant_10_happy_round_trips() {
+fn declaration_whitelist_happy_round_trips() {
     let inner = build_witness(FIXTURE, b"0x", DUMMY_ROOT_PK).unwrap();
     let w = Witness::new(inner);
     let public = public_for(b"0x");
@@ -90,7 +90,7 @@ fn invariant_10_happy_round_trips() {
 
 /// (2) Tampered declaration byte in signed_content: byte_range_eq rejects.
 #[test]
-fn invariant_10_tampered_byte_prover_refuses() {
+fn declaration_whitelist_tampered_byte_prover_refuses() {
     let inner = build_witness(FIXTURE, b"0x", DUMMY_ROOT_PK).unwrap();
     let w = Witness::new(inner);
     let honest = w.to_ffi_bytes().expect("serialize");
@@ -115,7 +115,7 @@ fn invariant_10_tampered_byte_prover_refuses() {
 /// length: byte_range_eq rejects. The replacement is an ASCII 'X' block
 /// of the exact whitelist length.
 #[test]
-fn invariant_10_non_whitelisted_phrase_prover_refuses() {
+fn declaration_whitelist_non_whitelisted_phrase_prover_refuses() {
     let inner = build_witness(FIXTURE, b"0x", DUMMY_ROOT_PK).unwrap();
     let w = Witness::new(inner);
     let honest = w.to_ffi_bytes().expect("serialize");

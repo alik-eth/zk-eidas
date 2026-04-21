@@ -33,7 +33,7 @@ use zk_eidas_p7s_circuit::{prove, verify, PublicInputs, Witness};
 const FIXTURE: &[u8] = include_bytes!("../../zk-eidas-p7s/fixtures/binding.qkb.p7s");
 const DUMMY_ROOT_PK: [u8; 65] = [0x04; 65];
 
-// v11 blob tail offsets — mirrors invariant_7.rs's `SUBJECT_SN_OFFSET_IN_BLOB`
+// v11 blob tail offsets — mirrors nullifier.rs's `SUBJECT_SN_OFFSET_IN_BLOB`
 // + 8 (sn_offset + dn_start_offset = two u32s). The trust_anchor_index
 // is the final u32 in the witness blob.
 const CONTENT_SIG_S_END: usize = 5038;

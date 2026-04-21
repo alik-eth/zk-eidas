@@ -1,19 +1,13 @@
-//! Phase 2a Task 26 — invariant 2a (+ merged SPKI binding):
+//! Content signature — the CMS content signature `(r2, s2)` is a valid
+//! P-256 ECDSA signature of `e2 = SHA-256(signedAttrs_canonical)` under
+//! the holder's signing key, with the SPKI binding that anchors the key.
 //!
-//!   * The CMS content signature `(r2, s2)` is a valid P-256 ECDSA
-//!     signature of `e2 = SHA-256(signedAttrs_canonical)` under the
-//!     holder's signing key, where `signedAttrs_canonical` is the
-//!     raw witnessed signedAttrs with the [0] IMPLICIT tag 0xA0
-//!     rewritten to SET OF tag 0x31 (the form CMS content sigs are
-//!     computed over).
-//!
-//!   * The holder's signing key is extracted host-side from
-//!     cert_tbs's SubjectPublicKeyInfo at `cert_tbs_spki_offset`,
-//!     and the hash circuit asserts (a) 26 bytes of DIIA P-256
-//!     SPKI DER prefix at the offset (anti-offset-redirect anchor)
-//!     and (b) the 65-byte SEC1 point byte-equal to the holder_pk
-//!     passed privately into the sig circuit. The X and Y
-//!     coordinates cross-bind hash→sig via MAC.
+//!   * `signedAttrs_canonical` is the raw witnessed signedAttrs with the
+//!     [0] IMPLICIT tag 0xA0 rewritten to SET OF tag 0x31.
+//!   * The holder's signing key is extracted from cert_tbs's SPKI at
+//!     `cert_tbs_spki_offset`; the hash circuit asserts a 26-byte P-256
+//!     SPKI DER prefix at that offset and the 65-byte SEC1 point byte-
+//!     equals the holder_pk cross-bound hash→sig via MAC.
 //!
 //! Tests:
 //!   1. Happy: honest witness round-trips (end-to-end content sig
@@ -23,10 +17,10 @@
 //!   3. Tampered content_sig_s — same as (2).
 //!   4. Tampered signedAttrs body byte — digest changes, content
 //!      sig no longer matches, prover refuses.
-//!   5. Tampered `cert_tbs_spki_offset` (the §10 SPKI prefix-anchor
-//!      negative): lying by ±1 byte slides the anchor window off
-//!      the real SPKI DER prefix, the in-circuit 26-byte prefix
-//!      assertion is unsatisfiable, prover refuses.
+//!   5. Tampered `cert_tbs_spki_offset` (SPKI prefix-anchor negative):
+//!      lying by ±1 byte slides the anchor window off the real SPKI
+//!      DER prefix, the in-circuit 26-byte prefix assertion is
+//!      unsatisfiable, prover refuses.
 
 use sha2::{Digest, Sha256};
 use zk_eidas_p7s::build_witness;
@@ -35,7 +29,7 @@ use zk_eidas_p7s_circuit::{prove, verify, PublicInputs, Witness};
 const FIXTURE: &[u8] = include_bytes!("../../zk-eidas-p7s/fixtures/binding.qkb.p7s");
 const DUMMY_ROOT_PK: [u8; 65] = [0x04; 65];
 
-// v11 blob layout constants — mirrors invariant_1.rs.
+// v11 blob layout constants — mirrors cert_chain_ecdsa.rs.
 const CERT_TBS_LEN_IN_BLOB: usize = 1310;
 const CERT_TBS_SPKI_OFFSET_IN_BLOB: usize = CERT_TBS_LEN_IN_BLOB + 4; // 1314
 const CERT_TBS_DATA_IN_BLOB: usize = CERT_TBS_SPKI_OFFSET_IN_BLOB + 4; // 1318
@@ -108,7 +102,7 @@ fn expect_prove_refused(err: longfellow_sys::p7s::P7sFfiError) {
 /// signedAttrs_canonical verifies under the holder key extracted
 /// from cert_tbs's SPKI, and every cross-circuit MAC agrees.
 #[test]
-fn invariant_2a_happy_round_trips() {
+fn content_signature_happy_round_trips() {
     let inner = build_witness(FIXTURE, b"0x", DUMMY_ROOT_PK).unwrap();
     let w = Witness::new(inner);
     let public = honest_public();
@@ -123,7 +117,7 @@ fn invariant_2a_happy_round_trips() {
 /// (2) Tampered content_sig_r: content (r2, s2) no longer verifies
 /// over honest e2 under holder_pk; ECDSA VerifyWitness3 fails.
 #[test]
-fn invariant_2a_tampered_content_sig_r_prover_refuses() {
+fn content_signature_tampered_content_sig_r_prover_refuses() {
     let inner = build_witness(FIXTURE, b"0x", DUMMY_ROOT_PK).unwrap();
     let w = Witness::new(inner);
     let mut honest = w.to_ffi_bytes().expect("serialize");
@@ -144,7 +138,7 @@ fn invariant_2a_tampered_content_sig_r_prover_refuses() {
 
 /// (3) Tampered content_sig_s: symmetric to (2).
 #[test]
-fn invariant_2a_tampered_content_sig_s_prover_refuses() {
+fn content_signature_tampered_content_sig_s_prover_refuses() {
     let inner = build_witness(FIXTURE, b"0x", DUMMY_ROOT_PK).unwrap();
     let w = Witness::new(inner);
     let mut honest = w.to_ffi_bytes().expect("serialize");
@@ -162,7 +156,7 @@ fn invariant_2a_tampered_content_sig_s_prover_refuses() {
 /// e2 no longer matches the content-sig's signed digest, ECDSA
 /// VerifyWitness3 fails (invariant 2a's ECDSA leg refuses).
 #[test]
-fn invariant_2a_tampered_signed_attrs_prover_refuses() {
+fn content_signature_tampered_signed_attrs_prover_refuses() {
     let inner = build_witness(FIXTURE, b"0x", DUMMY_ROOT_PK).unwrap();
     let w = Witness::new(inner);
     let mut honest = w.to_ffi_bytes().expect("serialize");
@@ -190,7 +184,7 @@ fn invariant_2a_tampered_signed_attrs_prover_refuses() {
 /// the anchor is load-bearing — a future refactor dropping either
 /// layer fails this test.
 #[test]
-fn invariant_2a_tampered_spki_offset_prover_refuses() {
+fn content_signature_tampered_spki_offset_prover_refuses() {
     let inner = build_witness(FIXTURE, b"0x", DUMMY_ROOT_PK).unwrap();
     let w = Witness::new(inner);
     let mut honest = w.to_ffi_bytes().expect("serialize");
@@ -241,7 +235,7 @@ fn invariant_2a_tampered_spki_offset_prover_refuses() {
 /// both layers have now seen a lying-offset witness.
 #[cfg(feature = "test-bypass-host-anchors")]
 #[test]
-fn invariant_2a_tampered_spki_offset_bypass_parser() {
+fn content_signature_tampered_spki_offset_bypass_parser() {
     let inner = build_witness(FIXTURE, b"0x", DUMMY_ROOT_PK).unwrap();
     let w = Witness::new(inner);
     let mut honest = w.to_ffi_bytes().expect("serialize");

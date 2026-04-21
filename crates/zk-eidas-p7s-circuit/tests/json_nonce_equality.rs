@@ -1,9 +1,9 @@
-//! Phase 2a Task 21 — invariant 5: JSON "nonce" field hex-decodes to
+//! JSON nonce equality — the JSON "nonce" field hex-decodes to
 //! `public.nonce`, and the hex chars are byte-equal to the slice of
 //! `signed_content` at `json_nonce_offset`.
 //!
-//! Tests mirror `invariant_4.rs`:
-//!   1. Happy: real DIIA fixture, expected nonce → round-trips.
+//! Tests mirror `json_pk_equality.rs`:
+//!   1. Happy: fixture nonce → round-trips.
 //!   2. Wrong public nonce: verifier rejects.
 //!   3. Tampered nonce bytes in signed_content: prover refuses (byte_range_eq).
 //!   4. Invalid hex char at a nonce position: prover refuses (HexDecode lookup).
@@ -74,7 +74,7 @@ fn nonce_offset(blob: &[u8]) -> usize {
 
 /// (1) Happy: honest witness + correct public.nonce → round-trips.
 #[test]
-fn invariant_5_happy_round_trips() {
+fn json_nonce_happy_round_trips() {
     let inner = build_witness(FIXTURE, b"0x", DUMMY_ROOT_PK).unwrap();
     let w = Witness::new(inner);
     let public = public_for(expected_nonce(), b"0x");
@@ -88,7 +88,7 @@ fn invariant_5_happy_round_trips() {
 
 /// (2) Wrong public nonce → verifier rejects.
 #[test]
-fn invariant_5_wrong_public_nonce_rejects() {
+fn json_nonce_wrong_public_nonce_rejects() {
     let inner = build_witness(FIXTURE, b"0x", DUMMY_ROOT_PK).unwrap();
     let w = Witness::new(inner);
     let correct = public_for(expected_nonce(), b"0x");
@@ -106,7 +106,7 @@ fn invariant_5_wrong_public_nonce_rejects() {
 
 /// (3) Tampered nonce bytes in signed_content: byte_range_eq fails.
 #[test]
-fn invariant_5_tampered_signed_content_prover_refuses() {
+fn json_nonce_tampered_signed_content_prover_refuses() {
     let inner = build_witness(FIXTURE, b"0x", DUMMY_ROOT_PK).unwrap();
     let w = Witness::new(inner);
     let honest = w.to_ffi_bytes().expect("serialize");
@@ -128,7 +128,7 @@ fn invariant_5_tampered_signed_content_prover_refuses() {
 
 /// (4) Invalid hex char at a nonce position → HexDecode lookup rejects.
 #[test]
-fn invariant_5_invalid_hex_char_prover_refuses() {
+fn json_nonce_invalid_hex_char_prover_refuses() {
     let inner = build_witness(FIXTURE, b"0x", DUMMY_ROOT_PK).unwrap();
     let w = Witness::new(inner);
     let honest = w.to_ffi_bytes().expect("serialize");
@@ -154,7 +154,7 @@ fn invariant_5_invalid_hex_char_prover_refuses() {
 /// (5) Silent nonce_hex substitution: both copies stay hex-valid, but
 /// the decoded nonce differs from public.nonce — byte packing rejects.
 #[test]
-fn invariant_5_silent_nonce_hex_substitution_prover_refuses() {
+fn json_nonce_silent_nonce_hex_substitution_prover_refuses() {
     let inner = build_witness(FIXTURE, b"0x", DUMMY_ROOT_PK).unwrap();
     let w = Witness::new(inner);
     let honest = w.to_ffi_bytes().expect("serialize");
@@ -191,7 +191,7 @@ fn honest_proof_cached() -> &'static zk_eidas_p7s_circuit::Proof {
 
 proptest! {
     #[test]
-    fn invariant_5_proptest_wrong_public_nonce(idx in 0usize..32, xor in 1u8..=255) {
+    fn json_nonce_proptest_wrong_public_nonce(idx in 0usize..32, xor in 1u8..=255) {
         let proof = honest_proof_cached();
         let mut wrong_nonce = expected_nonce();
         wrong_nonce[idx] ^= xor;

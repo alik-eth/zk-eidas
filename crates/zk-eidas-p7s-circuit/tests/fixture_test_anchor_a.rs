@@ -1,5 +1,5 @@
 //! End-to-end smoke: build witness blob → prove → verify against the
-//! TestAnchorA synthetic fixture. Covered by `invariant_4.rs` / `invariant_5.rs` too, but
+//! TestAnchorA synthetic fixture. Covered by `json_pk_equality.rs` / `json_nonce_equality.rs` too, but
 //! this file is the minimal "is the FFI linked" regression.
 
 use sha2::{Digest, Sha256};

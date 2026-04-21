@@ -1,13 +1,13 @@
-//! Phase 2a Task 22 — invariant 6: JSON "context" field byte-equals the
+//! JSON context equality — the JSON "context" field byte-equals the
 //! SHA-256 preimage held in the witness.
 //!
 //! The context byte-length is derived in-circuit from the SHA padding
-//! (Task 1b's invariant 9), so there is no independent length wire to
-//! attack. Tests focus on the byte-range equality.
+//! (context hash — see `context_hash.rs`), so there is no independent
+//! length wire to attack. Tests focus on the byte-range equality.
 //!
 //! Tests:
-//!   1. Happy: real DIIA fixture with context = "0x" → round-trips.
-//!   2. Wrong public context_hash: prover refuses (invariant 9 fails).
+//!   1. Happy: fixture with context = "0x" → round-trips.
+//!   2. Wrong public context_hash: prover refuses (context hash check fails).
 //!   3. Tampered JSON context bytes in signed_content: byte_range mismatch
 //!      at prove time.
 //!   4. Proptest over random short contexts (1..=32 bytes): every honest
@@ -78,7 +78,7 @@ fn context_offset(blob: &[u8]) -> usize {
 
 /// (1) Happy: the fixture's JSON context is literally "0x" (2 bytes).
 #[test]
-fn invariant_6_happy_round_trips() {
+fn json_context_happy_round_trips() {
     let ctx: &[u8] = b"0x";
     let inner = build_witness(FIXTURE, ctx, DUMMY_ROOT_PK).expect("parse fixture");
     let w = Witness::new(inner);
@@ -96,7 +96,7 @@ fn invariant_6_happy_round_trips() {
 /// invariant-6 test but confirms the cross-invariant plumbing still
 /// catches the error after Task 22's changes.
 #[test]
-fn invariant_6_wrong_public_context_hash_prover_refuses() {
+fn json_context_wrong_public_context_hash_prover_refuses() {
     let ctx: &[u8] = b"0x";
     let inner = build_witness(FIXTURE, ctx, DUMMY_ROOT_PK).unwrap();
     let w = Witness::new(inner);
@@ -114,7 +114,7 @@ fn invariant_6_wrong_public_context_hash_prover_refuses() {
 /// equality (invariant 6) fails because context_bytes (SHA-bound) still
 /// hold the real context while signed_content claims something else.
 #[test]
-fn invariant_6_tampered_signed_content_prover_refuses() {
+fn json_context_tampered_signed_content_prover_refuses() {
     let ctx: &[u8] = b"0x";
     let inner = build_witness(FIXTURE, ctx, DUMMY_ROOT_PK).unwrap();
     let w = Witness::new(inner);
@@ -154,7 +154,7 @@ fn honest_proof_cached() -> &'static zk_eidas_p7s_circuit::Proof {
 
 proptest! {
     #[test]
-    fn invariant_6_proptest_wrong_public_context_hash(idx in 0usize..32, xor in 1u8..=255) {
+    fn json_context_proptest_wrong_public_context_hash(idx in 0usize..32, xor in 1u8..=255) {
         let proof = honest_proof_cached();
         let mut wrong = public_for(b"0x");
         let honest_hash = wrong.context_hash;

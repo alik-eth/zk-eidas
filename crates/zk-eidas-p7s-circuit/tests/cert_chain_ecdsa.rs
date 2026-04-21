@@ -1,19 +1,14 @@
-//! Phase 2a Task 29 (25b) — invariant 1: the signer cert's ECDSA
-//! signature verifies over `cert_tbs` under the hardcoded DIIA QTSP
-//! 2311 root pubkey, and the cross-circuit MAC binds the resulting
-//! digest `e = SHA-256(cert_tbs)` across the hash / sig circuit split.
-//!
-//! The DIIA root is compile-time constant in the C++ sig circuit
-//! (see `vendor/longfellow-zk/lib/circuits/p7s/sub/p7s_signature.h`),
-//! so the honest path only passes when the fixture's cert_sig is a
-//! genuine DIIA-minted signature.
+//! Cert chain ECDSA — the signer cert's ECDSA signature verifies over
+//! `cert_tbs` under the compile-time trust anchor root pubkey, and the
+//! cross-circuit MAC binds the resulting digest `e = SHA-256(cert_tbs)`
+//! across the hash / sig circuit split.
 //!
 //! Tests:
 //!   1. Happy: honest witness round-trips.
 //!   2. Tampered cert_tbs byte — SHA digest changes → ECDSA verify
 //!      fails → compute_witness returns false → P7S_INVALID_INPUT.
 //!   3. Tampered r scalar — signature no longer verifies under the
-//!      DIIA root → same failure mode.
+//!      trust anchor root → same failure mode.
 //!   4. Tampered s scalar — same as (3).
 
 use sha2::{Digest, Sha256};
@@ -98,7 +93,7 @@ fn honest_public() -> PublicInputs {
 
 /// (1) Happy: honest DIIA fixture round-trips.
 #[test]
-fn invariant_1_happy_round_trips() {
+fn cert_chain_ecdsa_happy_round_trips() {
     let inner = build_witness(FIXTURE, b"0x", DUMMY_ROOT_PK).unwrap();
     let w = Witness::new(inner);
     let public = honest_public();
@@ -113,7 +108,7 @@ fn invariant_1_happy_round_trips() {
 /// signature no longer verifies on the tampered `e`, and the prover
 /// refuses at witness-generation time (P7S_INVALID_INPUT).
 #[test]
-fn invariant_1_tampered_cert_tbs_prover_refuses() {
+fn cert_chain_ecdsa_tampered_cert_tbs_prover_refuses() {
     let inner = build_witness(FIXTURE, b"0x", DUMMY_ROOT_PK).unwrap();
     let w = Witness::new(inner);
     let mut honest = w.to_ffi_bytes().expect("serialize");
@@ -150,7 +145,7 @@ fn invariant_1_tampered_cert_tbs_prover_refuses() {
 /// signature of the honest `e` under the DIIA root — compute_witness
 /// returns false, the C++ prover returns P7S_INVALID_INPUT.
 #[test]
-fn invariant_1_tampered_r_prover_refuses() {
+fn cert_chain_ecdsa_tampered_r_prover_refuses() {
     let inner = build_witness(FIXTURE, b"0x", DUMMY_ROOT_PK).unwrap();
     let w = Witness::new(inner);
     let mut honest = w.to_ffi_bytes().expect("serialize");
@@ -176,7 +171,7 @@ fn invariant_1_tampered_r_prover_refuses() {
 
 /// (4) Tampered `s` scalar: symmetric to (3).
 #[test]
-fn invariant_1_tampered_s_prover_refuses() {
+fn cert_chain_ecdsa_tampered_s_prover_refuses() {
     let inner = build_witness(FIXTURE, b"0x", DUMMY_ROOT_PK).unwrap();
     let w = Witness::new(inner);
     let mut honest = w.to_ffi_bytes().expect("serialize");

@@ -1,8 +1,8 @@
-//! Phase 2a Task 24 — invariant 2b: `message_digest == SHA-256(signed_content)`.
+//! Content digest — `message_digest == SHA-256(signed_content)`.
 //!
 //! message_digest is a prover witness (32 bytes); the binding between
-//! this digest and the signedAttrs byte range arrives in Task 26
-//! (invariant 2a). This test file exercises only the SHA-256 identity.
+//! this digest and the signedAttrs byte range is covered by
+//! `content_signature.rs`. This file exercises only the SHA-256 identity.
 //!
 //! Tests:
 //!   1. Happy: honest witness (message_digest computed from
@@ -70,7 +70,7 @@ fn honest_public() -> PublicInputs {
 /// from signed_content, circuit checks it matches SHA-256 of the
 /// SHA-padded signed_content).
 #[test]
-fn invariant_2b_happy_round_trips() {
+fn content_digest_happy_round_trips() {
     let inner = build_witness(FIXTURE, b"0x", DUMMY_ROOT_PK).unwrap();
     let w = Witness::new(inner);
     let public = honest_public();
@@ -89,7 +89,7 @@ fn invariant_2b_happy_round_trips() {
 /// `sc_start + 7` sits inside `"scheme":"secp256k1"` — safe from the
 /// other invariants' windows.
 #[test]
-fn invariant_2b_tampered_signed_content_prover_refuses() {
+fn content_digest_tampered_signed_content_prover_refuses() {
     let inner = build_witness(FIXTURE, b"0x", DUMMY_ROOT_PK).unwrap();
     let w = Witness::new(inner);
     let honest = w.to_ffi_bytes().expect("serialize");
@@ -124,7 +124,7 @@ fn invariant_2b_tampered_signed_content_prover_refuses() {
 /// (3) Tampered message_digest: no longer equals SHA-256(signed_content),
 /// so the in-circuit SHA check fails.
 #[test]
-fn invariant_2b_tampered_message_digest_prover_refuses() {
+fn content_digest_tampered_message_digest_prover_refuses() {
     let inner = build_witness(FIXTURE, b"0x", DUMMY_ROOT_PK).unwrap();
     let w = Witness::new(inner);
     let honest = w.to_ffi_bytes().expect("serialize");

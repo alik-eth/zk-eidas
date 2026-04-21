@@ -1,6 +1,5 @@
-//! Phase 2b Task 35 — invariant 8: out-of-circuit holder binding.
-//!
-//! Binds a ZK proof to the holder's secp256k1 Ethereum wallet via a
+//! Holder binding — out-of-circuit binding of a ZK proof to the
+//! holder's secp256k1 Ethereum wallet via a
 //! sidecar ECDSA signature over the canonical public-outputs digest.
 //! The ZK proof's sig side stays P-256-only; holder binding is
 //! blockchain-agnostic (any secp256k1 verifier, including EVM
