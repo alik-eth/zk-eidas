@@ -74,7 +74,7 @@
 //!     4. The sig circuit gains a second ECDSA VerifyCircuit; the
 //!     hash circuit extracts the 65-byte SEC1 point from cert_tbs via
 //!     `Routing::shift` at a host-witnessed offset, anchored by a
-//!     26-byte DIIA P-256 SPKI DER prefix assertion. Four messages
+//!     26-byte P-256 SPKI DER prefix assertion. Four messages
 //!     cross-bind hash→sig via MAC (kMacMessagesCount = 4): `e`, `e2`,
 //!     cert SPKI X, cert SPKI Y. Cert SPKI stays PRIVATE — no holder
 //!     identity in the public blob.
@@ -189,8 +189,8 @@ pub const MESSAGE_DIGEST_LEN: usize = 32;
 
 /// Fixed stable-ID value length (DIIA RNOKPP format: `TINUA-` prefix +
 /// 10 decimal digits = 16 bytes). Matches the parser's `STABLE_ID_LEN`
-/// and the circuit-side `kStableIdLen`. v1 is DIIA-only; Task #37 adds
-/// variable-length support for other ETSI QTSPs.
+/// and the circuit-side `kStableIdLen`. v1 supports this 16-byte length
+/// only; Task #37 adds variable-length support for other ETSI QTSPs.
 pub const STABLE_ID_LEN: usize = 16;
 
 /// 9-byte X.520 serialNumber attribute DER anchor asserted in-circuit
