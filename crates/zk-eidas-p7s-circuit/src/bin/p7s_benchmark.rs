@@ -1,10 +1,16 @@
-//! Benchmark suite for `zk-eidas-p7s-circuit` (Phase 2a exit bench).
+//! Benchmark suite for `zk-eidas-p7s-circuit` (Phase 2b exit bench).
 //!
 //! Measures cold-prove (first invocation, includes in-FFI circuit build),
 //! warm-prove (steady-state, with one throwaway prove as warm-up), verify,
 //! peak RSS (post-call; mdoc uses the same shortcut), witness/public blob
-//! sizes, and proof size for the single p7s circuit variant. Usage:
-//!   cargo run --release --bin p7s_benchmark [-- --json]
+//! sizes, and proof size. Phase 2b ships with N=2 trust-anchor
+//! multiplexer (Task #44), so this binary iterates over every fixture
+//! in `crates/zk-eidas-p7s/fixtures/*.qkb.p7s` and reports per-fixture
+//! numbers. The cold-prove cost is paid on the FIRST fixture only;
+//! subsequent fixtures see warm-cache cold-prove numbers which are
+//! reported as "first prove" but labelled per-fixture to avoid confusion.
+//!
+//! Usage: `cargo run --release --bin p7s_benchmark [-- --json]`.
 //!
 //! Single-threaded by design — parallel runs of the ECDSA-heavy sig
 //! circuit OOM a 32 GB machine. Do not parallelise this loop.
@@ -209,9 +215,42 @@ fn measure_median<F: Fn() -> R, R>(iterations: usize, f: F) -> (MedianStats, R) 
 // ── Fixture + p7s Benchmark ─────────────────────────────────────────
 
 const ITERATIONS: usize = 5;
-const FIXTURE_NAME: &str = "binding.qkb.p7s";
-const FIXTURE: &[u8] =
-    include_bytes!("../../../zk-eidas-p7s/fixtures/binding.qkb.p7s");
+
+/// Fixtures benched, in order. The first entry incurs the one-time
+/// in-FFI circuit build cost on its cold-prove invocation; every
+/// subsequent fixture's "cold prove" number is effectively a
+/// warm-circuit prove and is labelled as such in the report.
+///
+/// `binding.qkb.p7s` + `admin-binding.qkb.p7s` are TestAnchorA
+/// fixtures (`trust_anchor_index = 0`, Task #43a). `testanchor-b-*`
+/// are TestAnchorB fixtures (`trust_anchor_index = 1`, Task #44);
+/// benching both exercises the N=2 sig-side multiplexer and verifies
+/// that the non-zero branch has the same proof-size / timing profile
+/// as the zero branch (expected: identical, since both sides of the
+/// mux evaluate the same linear combination against `kTrustAnchors[]`).
+const FIXTURES: &[(&str, &[u8])] = &[
+    (
+        "binding.qkb.p7s",
+        include_bytes!("../../../zk-eidas-p7s/fixtures/binding.qkb.p7s"),
+    ),
+    (
+        "admin-binding.qkb.p7s",
+        include_bytes!("../../../zk-eidas-p7s/fixtures/admin-binding.qkb.p7s"),
+    ),
+    (
+        "testanchor-b-binding.qkb.p7s",
+        include_bytes!(
+            "../../../zk-eidas-p7s/fixtures/testanchor-b-binding.qkb.p7s"
+        ),
+    ),
+    (
+        "testanchor-b-admin-binding.qkb.p7s",
+        include_bytes!(
+            "../../../zk-eidas-p7s/fixtures/testanchor-b-admin-binding.qkb.p7s"
+        ),
+    ),
+];
+
 const DUMMY_ROOT_PK: [u8; 65] = [0x04; 65];
 const CONTEXT: &[u8] = b"0x";
 
@@ -221,6 +260,12 @@ const QR_CHUNK_PAYLOAD: usize = 2945;
 
 struct P7sResult {
     fixture_name: &'static str,
+    trust_anchor_index: u32,
+    /// True for the first fixture benched in the process — its
+    /// cold-prove includes the one-time in-FFI circuit build. Every
+    /// subsequent fixture's "first prove" is warm-circuit and is
+    /// labelled accordingly in the report.
+    is_circuit_cold: bool,
     witness_blob_bytes: usize,
     public_blob_bytes: usize,
     prove_cold: Measurement,
@@ -240,9 +285,12 @@ fn decode_hex_field(p7s: &[u8], start: usize, len: usize) -> Vec<u8> {
     out
 }
 
-fn build_fixture_witness_and_public() -> (Witness, PublicInputs, usize, usize) {
-    let inner = build_witness(FIXTURE, CONTEXT, DUMMY_ROOT_PK).expect("parse fixture");
+fn build_fixture_witness_and_public(
+    fixture: &[u8],
+) -> (Witness, PublicInputs, usize, usize, u32) {
+    let inner = build_witness(fixture, CONTEXT, DUMMY_ROOT_PK).expect("parse fixture");
     let off = inner.offsets;
+    let trust_anchor_index = off.trust_anchor_index;
     let mut pk = [0u8; 65];
     pk.copy_from_slice(&decode_hex_field(
         &inner.p7s_bytes,
@@ -266,7 +314,11 @@ fn build_fixture_witness_and_public() -> (Witness, PublicInputs, usize, usize) {
         pk,
         nonce,
         nullifier: outputs.nullifier,
-        trust_anchor_index: 0,
+        // Parser-picked. TestAnchorA fixtures → 0, TestAnchorB → 1
+        // (Task #44). Bench uses the parsed value directly so that
+        // the N=2 sig-side multiplexer is exercised on the right
+        // branch for each fixture.
+        trust_anchor_index,
         root_pk: [0u8; 65],
         timestamp: 0,
     };
@@ -275,20 +327,27 @@ fn build_fixture_witness_and_public() -> (Witness, PublicInputs, usize, usize) {
     let wit_blob_len = w.to_ffi_bytes().expect("serialize witness").len();
     let pub_blob_len = public.to_ffi_bytes().len();
 
-    (w, public, wit_blob_len, pub_blob_len)
+    (w, public, wit_blob_len, pub_blob_len, trust_anchor_index)
 }
 
-fn bench_p7s() -> P7sResult {
+fn bench_p7s_one(fixture_name: &'static str, fixture: &[u8], is_circuit_cold: bool) -> P7sResult {
     eprintln!(
-        "[p7s] Benchmarking circuit on fixture `{FIXTURE_NAME}` (N={ITERATIONS} iterations)..."
+        "[p7s] Benchmarking circuit on fixture `{fixture_name}` (N={ITERATIONS} iterations)..."
     );
 
-    let (witness, public, witness_blob_bytes, public_blob_bytes) =
-        build_fixture_witness_and_public();
+    let (witness, public, witness_blob_bytes, public_blob_bytes, trust_anchor_index) =
+        build_fixture_witness_and_public(fixture);
 
-    // Cold prove — first invocation, includes in-FFI circuit setup.
-    // Single-shot by design; median makes no sense for a one-time cost.
-    eprintln!("  cold prove (1 iteration, includes in-FFI circuit build)...");
+    // First prove — includes in-FFI circuit setup IF this is the
+    // first fixture in the process. Subsequent fixtures see a warm
+    // circuit on their "first prove"; numbers are still one-shot
+    // because the cold-vs-warm transition itself is a one-time cost
+    // that we report verbatim rather than averaging.
+    if is_circuit_cold {
+        eprintln!("  first prove (1 iteration, includes in-FFI circuit build — cold circuit)...");
+    } else {
+        eprintln!("  first prove (1 iteration, warm circuit)...");
+    }
     let mut cold_proof = None;
     let prove_cold = measure(|| {
         cold_proof = Some(prove(&witness, &public).expect("cold prove must succeed"));
@@ -335,7 +394,9 @@ fn bench_p7s() -> P7sResult {
     drop(proof);
 
     P7sResult {
-        fixture_name: FIXTURE_NAME,
+        fixture_name,
+        trust_anchor_index,
+        is_circuit_cold,
         witness_blob_bytes,
         public_blob_bytes,
         prove_cold,
@@ -380,18 +441,28 @@ fn round0(v: f64) -> f64 {
 // ── Output: Human Table ─────────────────────────────────────────────
 
 fn print_p7s_table(r: &P7sResult) {
-    println!("--- p7s Proving Pipeline ---");
+    println!("--- p7s Proving Pipeline ({}) ---", r.fixture_name);
     println!();
 
     let label_w = 30;
     let val_w = 16;
 
+    let cold_label = if r.is_circuit_cold {
+        "Prove (cold circuit, 1 iter)"
+    } else {
+        "Prove (warm circuit, 1 iter)"
+    };
+
     let rows: &[(&str, String)] = &[
         ("Fixture", r.fixture_name.to_string()),
+        (
+            "Trust-anchor index",
+            format!("{}", r.trust_anchor_index),
+        ),
         ("Witness blob size", format!("{} B", r.witness_blob_bytes)),
         ("Public blob size", format!("{} B", r.public_blob_bytes)),
         (
-            "Prove (cold, 1 iter)",
+            cold_label,
             fmt_ms(r.prove_cold.wall_ms),
         ),
         (
@@ -458,30 +529,13 @@ fn print_p7s_table(r: &P7sResult) {
 
 // ── Output: JSON ────────────────────────────────────────────────────
 
-fn print_json(info: &SystemInfo, r: &P7sResult) {
-    let system_json = format!(
-        concat!(
-            "{{",
-            "\"cpu\":{cpu},",
-            "\"cores\":{cores},",
-            "\"threads\":{threads},",
-            "\"ram_gb\":{ram},",
-            "\"os\":{os},",
-            "\"rust_version\":{rv}",
-            "}}"
-        ),
-        cpu = serde_json::to_string(&info.cpu).unwrap(),
-        cores = info.cores,
-        threads = info.threads,
-        ram = info.ram_gb,
-        os = serde_json::to_string(&info.os).unwrap(),
-        rv = serde_json::to_string(&info.rust_version).unwrap(),
-    );
-
-    let p7s_json = format!(
+fn result_json(r: &P7sResult) -> String {
+    format!(
         concat!(
             "{{",
             "\"fixture\":{fixture},",
+            "\"trust_anchor_index\":{tai},",
+            "\"is_circuit_cold\":{icc},",
             "\"witness_blob_bytes\":{wbl},",
             "\"public_blob_bytes\":{pbl},",
             "\"prove_cold_ms\":{pc},",
@@ -507,6 +561,8 @@ fn print_json(info: &SystemInfo, r: &P7sResult) {
             "}}"
         ),
         fixture = serde_json::to_string(r.fixture_name).unwrap(),
+        tai = r.trust_anchor_index,
+        icc = r.is_circuit_cold,
         wbl = r.witness_blob_bytes,
         pbl = r.public_blob_bytes,
         pc = round2(r.prove_cold.wall_ms),
@@ -529,8 +585,30 @@ fn print_json(info: &SystemInfo, r: &P7sResult) {
         qrc = r.qr_chunks_needed,
         qrp = QR_CHUNK_PAYLOAD,
         iter = ITERATIONS,
+    )
+}
+
+fn print_json(info: &SystemInfo, results: &[P7sResult]) {
+    let system_json = format!(
+        concat!(
+            "{{",
+            "\"cpu\":{cpu},",
+            "\"cores\":{cores},",
+            "\"threads\":{threads},",
+            "\"ram_gb\":{ram},",
+            "\"os\":{os},",
+            "\"rust_version\":{rv}",
+            "}}"
+        ),
+        cpu = serde_json::to_string(&info.cpu).unwrap(),
+        cores = info.cores,
+        threads = info.threads,
+        ram = info.ram_gb,
+        os = serde_json::to_string(&info.os).unwrap(),
+        rv = serde_json::to_string(&info.rust_version).unwrap(),
     );
 
+    let entries: Vec<String> = results.iter().map(result_json).collect();
     let out = format!(
         concat!(
             "{{",
@@ -539,7 +617,7 @@ fn print_json(info: &SystemInfo, r: &P7sResult) {
             "}}"
         ),
         system = system_json,
-        p7s = p7s_json,
+        p7s = entries.join(","),
     );
 
     println!("{out}");
@@ -552,7 +630,7 @@ fn main() {
     let info = collect_system_info();
 
     if !json_mode {
-        println!("=== zk-eidas-p7s-circuit Phase 2a benchmark ===");
+        println!("=== zk-eidas-p7s-circuit Phase 2b benchmark ===");
         println!(
             "System: {}, {}C/{}T, {}GB RAM",
             info.cpu, info.cores, info.threads, info.ram_gb
@@ -562,11 +640,18 @@ fn main() {
         println!();
     }
 
-    let result = bench_p7s();
+    let mut results: Vec<P7sResult> = Vec::with_capacity(FIXTURES.len());
+    for (i, (name, bytes)) in FIXTURES.iter().enumerate() {
+        let is_circuit_cold = i == 0;
+        let r = bench_p7s_one(name, bytes, is_circuit_cold);
+        results.push(r);
+    }
 
     if json_mode {
-        print_json(&info, &result);
+        print_json(&info, &results);
     } else {
-        print_p7s_table(&result);
+        for r in &results {
+            print_p7s_table(r);
+        }
     }
 }

@@ -1,136 +1,426 @@
-    Finished `release` profile [optimized] target(s) in 0.14s
-     Running `target/release/p7s_benchmark`
-=== zk-eidas-p7s-circuit Phase 2a benchmark ===
-System: Genuine Intel(R) CPU 0000 @ 2.60GHz, 8C/16T, 31GB RAM
-OS: Linux 6.19.10-200.fc43.x86_64 x86_64
-Rust: 1.94.1 (e408947bf 2026-03-25), release build
-
+    Finished `release` profile [optimized] target(s) in 0.13s
+     Running `target/release/p7s_benchmark --json`
 [p7s] Benchmarking circuit on fixture `binding.qkb.p7s` (N=5 iterations)...
-  cold prove (1 iteration, includes in-FFI circuit build)...
-[INFO][+25671.247 ms] ZK Commit start
-[INFO][+  201.260 ms] ZK Commitment done
-[INFO][+    0.018 ms] ZK Commit start
-[INFO][+  136.728 ms] ZK Commitment done
-[INFO][+ 1059.693 ms] ZK sumcheck done
-[INFO][+    6.960 ms] ZK constraints done
-[INFO][+   27.952 ms] Prover Done: flag
-[INFO][+  470.298 ms] ZK sumcheck done
-[INFO][+    2.991 ms] ZK constraints done
-[INFO][+   44.450 ms] Prover Done: flag
-[INFO][+    5.227 ms] com:32, sc:15136, com_proof:801416 [2730 el, 42525 el, 769 d in 225 rows]: 816584b
-[INFO][+    0.246 ms] com:32, sc:37056, com_proof:209292 [1364 el, 2835 el, 601 d in 15 rows]: 246380b
+  first prove (1 iteration, includes in-FFI circuit build — cold circuit)...
+[INFO][+26657.514 ms] ZK Commit start
+[INFO][+  206.334 ms] ZK Commitment done
+[INFO][+    0.016 ms] ZK Commit start
+[INFO][+  141.999 ms] ZK Commitment done
+[INFO][+ 1012.955 ms] ZK sumcheck done
+[INFO][+    7.432 ms] ZK constraints done
+[INFO][+   23.451 ms] Prover Done: flag
+[INFO][+  468.997 ms] ZK sumcheck done
+[INFO][+    2.304 ms] ZK constraints done
+[INFO][+   38.455 ms] Prover Done: flag
+[INFO][+    4.796 ms] com:32, sc:15136, com_proof:810456 [2730 el, 43092 el, 768 d in 228 rows]: 825624b
+[INFO][+    0.298 ms] com:32, sc:37056, com_proof:209004 [1364 el, 2835 el, 592 d in 15 rows]: 246092b
   warm prove (5 iterations)...
-[INFO][+    6.665 ms] ZK Commit start
-[INFO][+  205.434 ms] ZK Commitment done
+[INFO][+   15.519 ms] ZK Commit start
+[INFO][+  204.006 ms] ZK Commitment done
+[INFO][+    0.020 ms] ZK Commit start
+[INFO][+  149.218 ms] ZK Commitment done
+[INFO][+ 1046.076 ms] ZK sumcheck done
+[INFO][+    8.073 ms] ZK constraints done
+[INFO][+   24.682 ms] Prover Done: flag
+[INFO][+  470.108 ms] ZK sumcheck done
+[INFO][+    3.080 ms] ZK constraints done
+[INFO][+   39.838 ms] Prover Done: flag
+[INFO][+    4.824 ms] com:32, sc:15136, com_proof:809464 [2730 el, 43092 el, 737 d in 228 rows]: 824632b
+[INFO][+    0.250 ms] com:32, sc:37056, com_proof:209356 [1364 el, 2835 el, 603 d in 15 rows]: 246444b
+[INFO][+    6.593 ms] ZK Commit start
+[INFO][+  204.462 ms] ZK Commitment done
+[INFO][+    0.021 ms] ZK Commit start
+[INFO][+  139.054 ms] ZK Commitment done
+[INFO][+  976.744 ms] ZK sumcheck done
+[INFO][+    6.433 ms] ZK constraints done
+[INFO][+   24.163 ms] Prover Done: flag
+[INFO][+  460.164 ms] ZK sumcheck done
+[INFO][+    2.988 ms] ZK constraints done
+[INFO][+   39.319 ms] Prover Done: flag
+[INFO][+    4.622 ms] com:32, sc:15136, com_proof:810360 [2730 el, 43092 el, 765 d in 228 rows]: 825528b
+[INFO][+    0.315 ms] com:32, sc:37056, com_proof:209068 [1364 el, 2835 el, 594 d in 15 rows]: 246156b
+[INFO][+    6.438 ms] ZK Commit start
+[INFO][+  208.032 ms] ZK Commitment done
+[INFO][+    0.018 ms] ZK Commit start
+[INFO][+  141.737 ms] ZK Commitment done
+[INFO][+ 1036.814 ms] ZK sumcheck done
+[INFO][+    7.474 ms] ZK constraints done
+[INFO][+   25.110 ms] Prover Done: flag
+[INFO][+  526.774 ms] ZK sumcheck done
+[INFO][+    3.274 ms] ZK constraints done
+[INFO][+   43.802 ms] Prover Done: flag
+[INFO][+    4.978 ms] com:32, sc:15136, com_proof:810872 [2730 el, 43092 el, 781 d in 228 rows]: 826040b
+[INFO][+    0.253 ms] com:32, sc:37056, com_proof:208748 [1364 el, 2835 el, 584 d in 15 rows]: 245836b
+[INFO][+    7.025 ms] ZK Commit start
+[INFO][+  232.574 ms] ZK Commitment done
+[INFO][+    0.018 ms] ZK Commit start
+[INFO][+  152.754 ms] ZK Commitment done
+[INFO][+ 1030.816 ms] ZK sumcheck done
+[INFO][+    7.139 ms] ZK constraints done
+[INFO][+   23.998 ms] Prover Done: flag
+[INFO][+  503.913 ms] ZK sumcheck done
+[INFO][+    2.897 ms] ZK constraints done
+[INFO][+   43.456 ms] Prover Done: flag
+[INFO][+    4.881 ms] com:32, sc:15136, com_proof:810264 [2730 el, 43092 el, 762 d in 228 rows]: 825432b
+[INFO][+    0.256 ms] com:32, sc:37056, com_proof:209292 [1364 el, 2835 el, 601 d in 15 rows]: 246380b
+[INFO][+    6.770 ms] ZK Commit start
+[INFO][+  221.230 ms] ZK Commitment done
 [INFO][+    0.019 ms] ZK Commit start
-[INFO][+  143.684 ms] ZK Commitment done
-[INFO][+ 1010.516 ms] ZK sumcheck done
-[INFO][+    6.305 ms] ZK constraints done
-[INFO][+   23.426 ms] Prover Done: flag
-[INFO][+  470.072 ms] ZK sumcheck done
-[INFO][+    2.405 ms] ZK constraints done
-[INFO][+   40.465 ms] Prover Done: flag
-[INFO][+    5.104 ms] com:32, sc:15136, com_proof:800840 [2730 el, 42525 el, 751 d in 225 rows]: 816008b
-[INFO][+    0.360 ms] com:32, sc:37056, com_proof:209132 [1364 el, 2835 el, 596 d in 15 rows]: 246220b
-[INFO][+    6.931 ms] ZK Commit start
-[INFO][+  204.129 ms] ZK Commitment done
-[INFO][+    0.017 ms] ZK Commit start
-[INFO][+  137.989 ms] ZK Commitment done
-[INFO][+ 1017.705 ms] ZK sumcheck done
-[INFO][+    6.401 ms] ZK constraints done
-[INFO][+   24.489 ms] Prover Done: flag
-[INFO][+  472.702 ms] ZK sumcheck done
-[INFO][+    2.765 ms] ZK constraints done
-[INFO][+   39.134 ms] Prover Done: flag
-[INFO][+    4.901 ms] com:32, sc:15136, com_proof:800424 [2730 el, 42525 el, 738 d in 225 rows]: 815592b
-[INFO][+    0.329 ms] com:32, sc:37056, com_proof:209196 [1364 el, 2835 el, 598 d in 15 rows]: 246284b
-[INFO][+    6.513 ms] ZK Commit start
-[INFO][+  213.023 ms] ZK Commitment done
-[INFO][+    0.017 ms] ZK Commit start
-[INFO][+  136.661 ms] ZK Commitment done
-[INFO][+ 1030.502 ms] ZK sumcheck done
-[INFO][+    6.640 ms] ZK constraints done
-[INFO][+   23.880 ms] Prover Done: flag
-[INFO][+  457.695 ms] ZK sumcheck done
-[INFO][+    2.296 ms] ZK constraints done
-[INFO][+   36.403 ms] Prover Done: flag
-[INFO][+    4.646 ms] com:32, sc:15136, com_proof:801608 [2730 el, 42525 el, 775 d in 225 rows]: 816776b
-[INFO][+    0.257 ms] com:32, sc:37056, com_proof:208332 [1364 el, 2835 el, 571 d in 15 rows]: 245420b
-[INFO][+    5.691 ms] ZK Commit start
-[INFO][+  203.125 ms] ZK Commitment done
-[INFO][+    0.026 ms] ZK Commit start
-[INFO][+  135.317 ms] ZK Commitment done
-[INFO][+ 1050.070 ms] ZK sumcheck done
-[INFO][+    6.528 ms] ZK constraints done
-[INFO][+   25.075 ms] Prover Done: flag
-[INFO][+  482.689 ms] ZK sumcheck done
-[INFO][+    2.651 ms] ZK constraints done
-[INFO][+   39.827 ms] Prover Done: flag
-[INFO][+    4.920 ms] com:32, sc:15136, com_proof:801448 [2730 el, 42525 el, 770 d in 225 rows]: 816616b
-[INFO][+    0.356 ms] com:32, sc:37056, com_proof:208780 [1364 el, 2835 el, 585 d in 15 rows]: 245868b
-[INFO][+    5.643 ms] ZK Commit start
-[INFO][+  199.170 ms] ZK Commitment done
-[INFO][+    0.029 ms] ZK Commit start
-[INFO][+  141.553 ms] ZK Commitment done
-[INFO][+ 1037.378 ms] ZK sumcheck done
-[INFO][+    6.217 ms] ZK constraints done
-[INFO][+   22.127 ms] Prover Done: flag
-[INFO][+  466.303 ms] ZK sumcheck done
-[INFO][+    2.940 ms] ZK constraints done
-[INFO][+   41.036 ms] Prover Done: flag
-[INFO][+    4.997 ms] com:32, sc:15136, com_proof:801768 [2730 el, 42525 el, 780 d in 225 rows]: 816936b
-[INFO][+    0.423 ms] com:32, sc:37056, com_proof:208524 [1364 el, 2835 el, 577 d in 15 rows]: 245612b
+[INFO][+  148.501 ms] ZK Commitment done
+[INFO][+ 1086.316 ms] ZK sumcheck done
+[INFO][+    6.625 ms] ZK constraints done
+[INFO][+   24.896 ms] Prover Done: flag
+[INFO][+  472.736 ms] ZK sumcheck done
+[INFO][+    3.394 ms] ZK constraints done
+[INFO][+   45.869 ms] Prover Done: flag
+[INFO][+    4.859 ms] com:32, sc:15136, com_proof:810200 [2730 el, 43092 el, 760 d in 228 rows]: 825368b
+[INFO][+    0.259 ms] com:32, sc:37056, com_proof:208972 [1364 el, 2835 el, 591 d in 15 rows]: 246060b
   verify (5 iterations)...
-[INFO][+    2.966 ms] verifier: recv commit
-[INFO][+    0.018 ms] verifier: recv commit
-[INFO][+    0.053 ms] verifier: verify
-[INFO][+  376.507 ms] verify done: ok
+[INFO][+    2.463 ms] verifier: recv commit
+[INFO][+    0.026 ms] verifier: recv commit
+[INFO][+    0.080 ms] verifier: verify
+[INFO][+  396.998 ms] verify done: ok
+[INFO][+    0.032 ms] verifier: verify
+[INFO][+  364.750 ms] verify done: ok
+[INFO][+    2.147 ms] verifier: recv commit
+[INFO][+    0.026 ms] verifier: recv commit
+[INFO][+    0.067 ms] verifier: verify
+[INFO][+  394.858 ms] verify done: ok
 [INFO][+    0.017 ms] verifier: verify
-[INFO][+  343.299 ms] verify done: ok
-[INFO][+    2.501 ms] verifier: recv commit
-[INFO][+    0.015 ms] verifier: recv commit
+[INFO][+  353.519 ms] verify done: ok
+[INFO][+    2.851 ms] verifier: recv commit
+[INFO][+    0.025 ms] verifier: recv commit
+[INFO][+    0.074 ms] verifier: verify
+[INFO][+  389.812 ms] verify done: ok
+[INFO][+    0.019 ms] verifier: verify
+[INFO][+  337.877 ms] verify done: ok
+[INFO][+    1.950 ms] verifier: recv commit
+[INFO][+    0.020 ms] verifier: recv commit
 [INFO][+    0.055 ms] verifier: verify
-[INFO][+  385.416 ms] verify done: ok
-[INFO][+    0.016 ms] verifier: verify
-[INFO][+  342.713 ms] verify done: ok
-[INFO][+    2.354 ms] verifier: recv commit
+[INFO][+  390.789 ms] verify done: ok
+[INFO][+    0.018 ms] verifier: verify
+[INFO][+  346.355 ms] verify done: ok
+[INFO][+    2.075 ms] verifier: recv commit
+[INFO][+    0.014 ms] verifier: recv commit
+[INFO][+    0.056 ms] verifier: verify
+[INFO][+  391.287 ms] verify done: ok
+[INFO][+    0.020 ms] verifier: verify
+[INFO][+  342.385 ms] verify done: ok
+[p7s] Benchmarking circuit on fixture `admin-binding.qkb.p7s` (N=5 iterations)...
+  first prove (1 iteration, warm circuit)...
+[INFO][+    6.451 ms] ZK Commit start
+[INFO][+  209.873 ms] ZK Commitment done
+[INFO][+    0.018 ms] ZK Commit start
+[INFO][+  145.355 ms] ZK Commitment done
+[INFO][+  978.656 ms] ZK sumcheck done
+[INFO][+    7.111 ms] ZK constraints done
+[INFO][+   30.020 ms] Prover Done: flag
+[INFO][+  488.991 ms] ZK sumcheck done
+[INFO][+    2.682 ms] ZK constraints done
+[INFO][+   41.676 ms] Prover Done: flag
+[INFO][+    5.038 ms] com:32, sc:15136, com_proof:810424 [2730 el, 43092 el, 767 d in 228 rows]: 825592b
+[INFO][+    0.366 ms] com:32, sc:37056, com_proof:209100 [1364 el, 2835 el, 595 d in 15 rows]: 246188b
+  warm prove (5 iterations)...
+[INFO][+    6.221 ms] ZK Commit start
+[INFO][+  214.882 ms] ZK Commitment done
+[INFO][+    0.022 ms] ZK Commit start
+[INFO][+  144.265 ms] ZK Commitment done
+[INFO][+ 1031.900 ms] ZK sumcheck done
+[INFO][+    7.454 ms] ZK constraints done
+[INFO][+   28.247 ms] Prover Done: flag
+[INFO][+  479.592 ms] ZK sumcheck done
+[INFO][+    2.539 ms] ZK constraints done
+[INFO][+   43.602 ms] Prover Done: flag
+[INFO][+    4.860 ms] com:32, sc:15136, com_proof:810488 [2730 el, 43092 el, 769 d in 228 rows]: 825656b
+[INFO][+    0.410 ms] com:32, sc:37056, com_proof:208556 [1364 el, 2835 el, 578 d in 15 rows]: 245644b
+[INFO][+    6.868 ms] ZK Commit start
+[INFO][+  222.347 ms] ZK Commitment done
+[INFO][+    0.020 ms] ZK Commit start
+[INFO][+  138.996 ms] ZK Commitment done
+[INFO][+ 1003.497 ms] ZK sumcheck done
+[INFO][+    6.980 ms] ZK constraints done
+[INFO][+   22.979 ms] Prover Done: flag
+[INFO][+  433.976 ms] ZK sumcheck done
+[INFO][+    2.265 ms] ZK constraints done
+[INFO][+   37.630 ms] Prover Done: flag
+[INFO][+    4.338 ms] com:32, sc:15136, com_proof:809816 [2730 el, 43092 el, 748 d in 228 rows]: 824984b
+[INFO][+    0.321 ms] com:32, sc:37056, com_proof:208876 [1364 el, 2835 el, 588 d in 15 rows]: 245964b
+[INFO][+    6.252 ms] ZK Commit start
+[INFO][+  195.274 ms] ZK Commitment done
+[INFO][+    0.027 ms] ZK Commit start
+[INFO][+  131.356 ms] ZK Commitment done
+[INFO][+  938.492 ms] ZK sumcheck done
+[INFO][+    5.938 ms] ZK constraints done
+[INFO][+   23.171 ms] Prover Done: flag
+[INFO][+  421.332 ms] ZK sumcheck done
+[INFO][+    2.319 ms] ZK constraints done
+[INFO][+   37.279 ms] Prover Done: flag
+[INFO][+    4.512 ms] com:32, sc:15136, com_proof:810360 [2730 el, 43092 el, 765 d in 228 rows]: 825528b
+[INFO][+    0.244 ms] com:32, sc:37056, com_proof:209484 [1364 el, 2835 el, 607 d in 15 rows]: 246572b
+[INFO][+    5.595 ms] ZK Commit start
+[INFO][+  195.588 ms] ZK Commitment done
+[INFO][+    0.022 ms] ZK Commit start
+[INFO][+  125.897 ms] ZK Commitment done
+[INFO][+  909.239 ms] ZK sumcheck done
+[INFO][+    7.163 ms] ZK constraints done
+[INFO][+   27.686 ms] Prover Done: flag
+[INFO][+  474.569 ms] ZK sumcheck done
+[INFO][+    2.300 ms] ZK constraints done
+[INFO][+   40.335 ms] Prover Done: flag
+[INFO][+    4.538 ms] com:32, sc:15136, com_proof:810616 [2730 el, 43092 el, 773 d in 228 rows]: 825784b
+[INFO][+    0.297 ms] com:32, sc:37056, com_proof:208588 [1364 el, 2835 el, 579 d in 15 rows]: 245676b
+[INFO][+    5.980 ms] ZK Commit start
+[INFO][+  215.248 ms] ZK Commitment done
+[INFO][+    0.018 ms] ZK Commit start
+[INFO][+  140.435 ms] ZK Commitment done
+[INFO][+  973.970 ms] ZK sumcheck done
+[INFO][+    7.440 ms] ZK constraints done
+[INFO][+   22.313 ms] Prover Done: flag
+[INFO][+  442.589 ms] ZK sumcheck done
+[INFO][+    2.178 ms] ZK constraints done
+[INFO][+   35.859 ms] Prover Done: flag
+[INFO][+    4.339 ms] com:32, sc:15136, com_proof:811192 [2730 el, 43092 el, 791 d in 228 rows]: 826360b
+[INFO][+    0.231 ms] com:32, sc:37056, com_proof:208588 [1364 el, 2835 el, 579 d in 15 rows]: 245676b
+  verify (5 iterations)...
+[INFO][+    2.229 ms] verifier: recv commit
+[INFO][+    0.015 ms] verifier: recv commit
+[INFO][+    0.059 ms] verifier: verify
+[INFO][+  354.031 ms] verify done: ok
+[INFO][+    0.021 ms] verifier: verify
+[INFO][+  319.989 ms] verify done: ok
+[INFO][+    2.421 ms] verifier: recv commit
+[INFO][+    0.013 ms] verifier: recv commit
+[INFO][+    0.075 ms] verifier: verify
+[INFO][+  384.335 ms] verify done: ok
+[INFO][+    0.026 ms] verifier: verify
+[INFO][+  346.971 ms] verify done: ok
+[INFO][+    2.617 ms] verifier: recv commit
 [INFO][+    0.016 ms] verifier: recv commit
-[INFO][+    0.061 ms] verifier: verify
-[INFO][+  364.248 ms] verify done: ok
-[INFO][+    0.017 ms] verifier: verify
-[INFO][+  337.240 ms] verify done: ok
-[INFO][+    2.043 ms] verifier: recv commit
-[INFO][+    0.010 ms] verifier: recv commit
-[INFO][+    0.046 ms] verifier: verify
-[INFO][+  390.281 ms] verify done: ok
+[INFO][+    0.055 ms] verifier: verify
+[INFO][+  387.920 ms] verify done: ok
+[INFO][+    0.018 ms] verifier: verify
+[INFO][+  353.454 ms] verify done: ok
+[INFO][+    2.072 ms] verifier: recv commit
+[INFO][+    0.032 ms] verifier: recv commit
+[INFO][+    0.081 ms] verifier: verify
+[INFO][+  406.497 ms] verify done: ok
 [INFO][+    0.016 ms] verifier: verify
-[INFO][+  331.863 ms] verify done: ok
-[INFO][+    2.698 ms] verifier: recv commit
-[INFO][+    0.017 ms] verifier: recv commit
-[INFO][+    0.054 ms] verifier: verify
-[INFO][+  373.854 ms] verify done: ok
+[INFO][+  386.339 ms] verify done: ok
+[INFO][+    2.392 ms] verifier: recv commit
+[INFO][+    0.016 ms] verifier: recv commit
+[INFO][+    0.055 ms] verifier: verify
+[INFO][+  425.993 ms] verify done: ok
+[INFO][+    0.016 ms] verifier: verify
+[INFO][+  379.010 ms] verify done: ok
+[p7s] Benchmarking circuit on fixture `testanchor-b-binding.qkb.p7s` (N=5 iterations)...
+  first prove (1 iteration, warm circuit)...
+[INFO][+    6.382 ms] ZK Commit start
+[INFO][+  230.469 ms] ZK Commitment done
+[INFO][+    0.020 ms] ZK Commit start
+[INFO][+  165.929 ms] ZK Commitment done
+[INFO][+ 1085.676 ms] ZK sumcheck done
+[INFO][+    8.398 ms] ZK constraints done
+[INFO][+   26.598 ms] Prover Done: flag
+[INFO][+  478.583 ms] ZK sumcheck done
+[INFO][+    2.415 ms] ZK constraints done
+[INFO][+   42.194 ms] Prover Done: flag
+[INFO][+    4.763 ms] com:32, sc:15136, com_proof:810776 [2730 el, 43092 el, 778 d in 228 rows]: 825944b
+[INFO][+    0.367 ms] com:32, sc:37056, com_proof:209612 [1364 el, 2835 el, 611 d in 15 rows]: 246700b
+  warm prove (5 iterations)...
+[INFO][+    6.187 ms] ZK Commit start
+[INFO][+  226.723 ms] ZK Commitment done
+[INFO][+    0.017 ms] ZK Commit start
+[INFO][+  152.294 ms] ZK Commitment done
+[INFO][+ 1006.873 ms] ZK sumcheck done
+[INFO][+    6.334 ms] ZK constraints done
+[INFO][+   26.374 ms] Prover Done: flag
+[INFO][+  476.464 ms] ZK sumcheck done
+[INFO][+    2.550 ms] ZK constraints done
+[INFO][+   40.387 ms] Prover Done: flag
+[INFO][+    5.034 ms] com:32, sc:15136, com_proof:810296 [2730 el, 43092 el, 763 d in 228 rows]: 825464b
+[INFO][+    0.333 ms] com:32, sc:37056, com_proof:209036 [1364 el, 2835 el, 593 d in 15 rows]: 246124b
+[INFO][+    6.634 ms] ZK Commit start
+[INFO][+  213.313 ms] ZK Commitment done
+[INFO][+    0.016 ms] ZK Commit start
+[INFO][+  159.089 ms] ZK Commitment done
+[INFO][+ 1013.846 ms] ZK sumcheck done
+[INFO][+    6.462 ms] ZK constraints done
+[INFO][+   23.160 ms] Prover Done: flag
+[INFO][+  445.371 ms] ZK sumcheck done
+[INFO][+    2.238 ms] ZK constraints done
+[INFO][+   37.787 ms] Prover Done: flag
+[INFO][+    4.437 ms] com:32, sc:15136, com_proof:810744 [2730 el, 43092 el, 777 d in 228 rows]: 825912b
+[INFO][+    0.251 ms] com:32, sc:37056, com_proof:209388 [1364 el, 2835 el, 604 d in 15 rows]: 246476b
+[INFO][+    6.195 ms] ZK Commit start
+[INFO][+  204.850 ms] ZK Commitment done
+[INFO][+    0.026 ms] ZK Commit start
+[INFO][+  132.374 ms] ZK Commitment done
+[INFO][+  921.111 ms] ZK sumcheck done
+[INFO][+    6.343 ms] ZK constraints done
+[INFO][+   21.796 ms] Prover Done: flag
+[INFO][+  451.454 ms] ZK sumcheck done
+[INFO][+    2.545 ms] ZK constraints done
+[INFO][+   38.856 ms] Prover Done: flag
+[INFO][+    4.966 ms] com:32, sc:15136, com_proof:810520 [2730 el, 43092 el, 770 d in 228 rows]: 825688b
+[INFO][+    0.309 ms] com:32, sc:37056, com_proof:208460 [1364 el, 2835 el, 575 d in 15 rows]: 245548b
+[INFO][+    6.357 ms] ZK Commit start
+[INFO][+  205.282 ms] ZK Commitment done
+[INFO][+    0.018 ms] ZK Commit start
+[INFO][+  139.987 ms] ZK Commitment done
+[INFO][+  988.166 ms] ZK sumcheck done
+[INFO][+    7.528 ms] ZK constraints done
+[INFO][+   25.115 ms] Prover Done: flag
+[INFO][+  457.379 ms] ZK sumcheck done
+[INFO][+    2.527 ms] ZK constraints done
+[INFO][+   39.069 ms] Prover Done: flag
+[INFO][+    4.249 ms] com:32, sc:15136, com_proof:810776 [2730 el, 43092 el, 778 d in 228 rows]: 825944b
+[INFO][+    0.234 ms] com:32, sc:37056, com_proof:209004 [1364 el, 2835 el, 592 d in 15 rows]: 246092b
+[INFO][+    6.498 ms] ZK Commit start
+[INFO][+  211.966 ms] ZK Commitment done
+[INFO][+    0.022 ms] ZK Commit start
+[INFO][+  134.031 ms] ZK Commitment done
+[INFO][+  969.611 ms] ZK sumcheck done
+[INFO][+    6.209 ms] ZK constraints done
+[INFO][+   25.226 ms] Prover Done: flag
+[INFO][+  460.213 ms] ZK sumcheck done
+[INFO][+    2.177 ms] ZK constraints done
+[INFO][+   39.143 ms] Prover Done: flag
+[INFO][+    4.826 ms] com:32, sc:15136, com_proof:810008 [2730 el, 43092 el, 754 d in 228 rows]: 825176b
+[INFO][+    0.317 ms] com:32, sc:37056, com_proof:209036 [1364 el, 2835 el, 593 d in 15 rows]: 246124b
+  verify (5 iterations)...
+[INFO][+    2.645 ms] verifier: recv commit
+[INFO][+    0.018 ms] verifier: recv commit
+[INFO][+    0.065 ms] verifier: verify
+[INFO][+  412.666 ms] verify done: ok
+[INFO][+    0.027 ms] verifier: verify
+[INFO][+  346.432 ms] verify done: ok
+[INFO][+    2.205 ms] verifier: recv commit
+[INFO][+    0.011 ms] verifier: recv commit
+[INFO][+    0.057 ms] verifier: verify
+[INFO][+  377.789 ms] verify done: ok
+[INFO][+    0.025 ms] verifier: verify
+[INFO][+  340.334 ms] verify done: ok
+[INFO][+    2.328 ms] verifier: recv commit
+[INFO][+    0.014 ms] verifier: recv commit
+[INFO][+    0.062 ms] verifier: verify
+[INFO][+  397.353 ms] verify done: ok
+[INFO][+    0.055 ms] verifier: verify
+[INFO][+  358.321 ms] verify done: ok
+[INFO][+    2.427 ms] verifier: recv commit
+[INFO][+    0.022 ms] verifier: recv commit
+[INFO][+    0.066 ms] verifier: verify
+[INFO][+  385.405 ms] verify done: ok
+[INFO][+    0.032 ms] verifier: verify
+[INFO][+  342.199 ms] verify done: ok
+[INFO][+    2.349 ms] verifier: recv commit
+[INFO][+    0.012 ms] verifier: recv commit
+[INFO][+    0.052 ms] verifier: verify
+[INFO][+  386.810 ms] verify done: ok
+[INFO][+    0.018 ms] verifier: verify
+[INFO][+  344.257 ms] verify done: ok
+[p7s] Benchmarking circuit on fixture `testanchor-b-admin-binding.qkb.p7s` (N=5 iterations)...
+  first prove (1 iteration, warm circuit)...
+[INFO][+    6.866 ms] ZK Commit start
+[INFO][+  202.090 ms] ZK Commitment done
+[INFO][+    0.018 ms] ZK Commit start
+[INFO][+  138.350 ms] ZK Commitment done
+[INFO][+  956.800 ms] ZK sumcheck done
+[INFO][+    7.410 ms] ZK constraints done
+[INFO][+   25.973 ms] Prover Done: flag
+[INFO][+  456.852 ms] ZK sumcheck done
+[INFO][+    2.671 ms] ZK constraints done
+[INFO][+   41.517 ms] Prover Done: flag
+[INFO][+    4.621 ms] com:32, sc:15136, com_proof:810200 [2730 el, 43092 el, 760 d in 228 rows]: 825368b
+[INFO][+    0.327 ms] com:32, sc:37056, com_proof:208748 [1364 el, 2835 el, 584 d in 15 rows]: 245836b
+  warm prove (5 iterations)...
+[INFO][+    6.467 ms] ZK Commit start
+[INFO][+  205.436 ms] ZK Commitment done
+[INFO][+    0.019 ms] ZK Commit start
+[INFO][+  134.966 ms] ZK Commitment done
+[INFO][+  952.158 ms] ZK sumcheck done
+[INFO][+    6.591 ms] ZK constraints done
+[INFO][+   26.441 ms] Prover Done: flag
+[INFO][+  474.607 ms] ZK sumcheck done
+[INFO][+    2.820 ms] ZK constraints done
+[INFO][+   43.203 ms] Prover Done: flag
+[INFO][+    4.674 ms] com:32, sc:15136, com_proof:810776 [2730 el, 43092 el, 778 d in 228 rows]: 825944b
+[INFO][+    0.429 ms] com:32, sc:37056, com_proof:209484 [1364 el, 2835 el, 607 d in 15 rows]: 246572b
+[INFO][+    6.512 ms] ZK Commit start
+[INFO][+  217.780 ms] ZK Commitment done
+[INFO][+    0.017 ms] ZK Commit start
+[INFO][+  138.912 ms] ZK Commitment done
+[INFO][+ 1056.879 ms] ZK sumcheck done
+[INFO][+    7.497 ms] ZK constraints done
+[INFO][+   23.915 ms] Prover Done: flag
+[INFO][+  479.929 ms] ZK sumcheck done
+[INFO][+    2.427 ms] ZK constraints done
+[INFO][+   39.882 ms] Prover Done: flag
+[INFO][+    4.467 ms] com:32, sc:15136, com_proof:810776 [2730 el, 43092 el, 778 d in 228 rows]: 825944b
+[INFO][+    0.397 ms] com:32, sc:37056, com_proof:209132 [1364 el, 2835 el, 596 d in 15 rows]: 246220b
+[INFO][+    5.907 ms] ZK Commit start
+[INFO][+  220.704 ms] ZK Commitment done
+[INFO][+    0.023 ms] ZK Commit start
+[INFO][+  138.021 ms] ZK Commitment done
+[INFO][+ 1014.970 ms] ZK sumcheck done
+[INFO][+    6.812 ms] ZK constraints done
+[INFO][+   23.716 ms] Prover Done: flag
+[INFO][+  449.132 ms] ZK sumcheck done
+[INFO][+    2.946 ms] ZK constraints done
+[INFO][+   38.821 ms] Prover Done: flag
+[INFO][+    4.421 ms] com:32, sc:15136, com_proof:810264 [2730 el, 43092 el, 762 d in 228 rows]: 825432b
+[INFO][+    0.235 ms] com:32, sc:37056, com_proof:208908 [1364 el, 2835 el, 589 d in 15 rows]: 245996b
+[INFO][+    5.583 ms] ZK Commit start
+[INFO][+  197.413 ms] ZK Commitment done
+[INFO][+    0.017 ms] ZK Commit start
+[INFO][+  142.102 ms] ZK Commitment done
+[INFO][+  945.411 ms] ZK sumcheck done
+[INFO][+    6.661 ms] ZK constraints done
+[INFO][+   23.359 ms] Prover Done: flag
+[INFO][+  465.444 ms] ZK sumcheck done
+[INFO][+    2.061 ms] ZK constraints done
+[INFO][+   39.457 ms] Prover Done: flag
+[INFO][+    4.700 ms] com:32, sc:15136, com_proof:810008 [2730 el, 43092 el, 754 d in 228 rows]: 825176b
+[INFO][+    0.338 ms] com:32, sc:37056, com_proof:208972 [1364 el, 2835 el, 591 d in 15 rows]: 246060b
+[INFO][+    5.897 ms] ZK Commit start
+[INFO][+  205.356 ms] ZK Commitment done
+[INFO][+    0.019 ms] ZK Commit start
+[INFO][+  140.935 ms] ZK Commitment done
+[INFO][+  941.633 ms] ZK sumcheck done
+[INFO][+    7.228 ms] ZK constraints done
+[INFO][+   23.916 ms] Prover Done: flag
+[INFO][+  461.622 ms] ZK sumcheck done
+[INFO][+    2.734 ms] ZK constraints done
+[INFO][+   41.250 ms] Prover Done: flag
+[INFO][+    4.603 ms] com:32, sc:15136, com_proof:809784 [2730 el, 43092 el, 747 d in 228 rows]: 824952b
+[INFO][+    0.381 ms] com:32, sc:37056, com_proof:208812 [1364 el, 2835 el, 586 d in 15 rows]: 245900b
+  verify (5 iterations)...
+[INFO][+    2.123 ms] verifier: recv commit
+[INFO][+    0.012 ms] verifier: recv commit
+[INFO][+    0.052 ms] verifier: verify
+[INFO][+  405.531 ms] verify done: ok
 [INFO][+    0.022 ms] verifier: verify
-[INFO][+  335.844 ms] verify done: ok
---- p7s Proving Pipeline ---
-
-Fixture                        binding.qkb.p7s
-Witness blob size                       5038 B
-Public blob size                         133 B
-Prove (cold, 1 iter)                    27.56s
-Prove (warm, median)                     1.92s
-Prove (warm, min/max)            1.91s / 1.96s
-Verify (median)                       721.30ms
-Verify (min/max)              702.88ms / 729.77ms
-Proof size (total)                   1037.8 KB
-  schema header                            4 B
-  macs_b                                  64 B
-  hash_zk + sig_zk                   1037.7 KB
-QR chunks (V40 low-ECC)                    361
-Prove RSS (post-call)                  1234 MB
-Verify RSS (post-call)                 1234 MB
-Prove CPU util                             99%
-Verify CPU util                           100%
-
-Notes: RSS is post-call (handoff §7.3); `hash_zk + sig_zk` split is 
-self-delimited in C++ and not broken out here (handoff §7.4).
-
+[INFO][+  365.107 ms] verify done: ok
+[INFO][+    2.405 ms] verifier: recv commit
+[INFO][+    0.015 ms] verifier: recv commit
+[INFO][+    0.052 ms] verifier: verify
+[INFO][+  396.029 ms] verify done: ok
+[INFO][+    0.020 ms] verifier: verify
+[INFO][+  344.305 ms] verify done: ok
+[INFO][+    2.378 ms] verifier: recv commit
+[INFO][+    0.030 ms] verifier: recv commit
+[INFO][+    0.083 ms] verifier: verify
+[INFO][+  388.865 ms] verify done: ok
+[INFO][+    0.047 ms] verifier: verify
+[INFO][+  350.342 ms] verify done: ok
+[INFO][+    2.502 ms] verifier: recv commit
+[INFO][+    0.020 ms] verifier: recv commit
+[INFO][+    0.068 ms] verifier: verify
+[INFO][+  392.917 ms] verify done: ok
+[INFO][+    0.025 ms] verifier: verify
+[INFO][+  341.353 ms] verify done: ok
+[INFO][+    2.333 ms] verifier: recv commit
+[INFO][+    0.013 ms] verifier: recv commit
+[INFO][+    0.052 ms] verifier: verify
+[INFO][+  397.665 ms] verify done: ok
+[INFO][+    0.020 ms] verifier: verify
+[INFO][+  347.080 ms] verify done: ok

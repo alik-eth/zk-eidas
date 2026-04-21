@@ -88,6 +88,55 @@ This is because the dominant memory consumer is the circuit representation itsel
 The proving step adds only the witness assignment and the Ligero commitment buffers, which are modest relative to the circuit.
 
 %% ───────────────────────────────────────────────────────────────────
+\subsection{eIDAS~1 CAdES Pipeline (\textsc{p7s})}\label{sec:bench-p7s}
+
+Table~\ref{tab:p7s-bench} presents per-fixture benchmark results for the \textsc{p7s} eIDAS~1 CAdES proving pipeline at Phase~2b exit.
+The circuit verifies twelve binding invariants over a PKCS\#7 SignedData envelope (two ECDSA~P-256 signatures, four SHA-256 digests, JSON-body byte equalities, nullifier derivation, and trust-anchor multiplexing).
+Four fixtures are exercised: two signed under the synthetic \textsc{TestAnchorA} root (trust-anchor index~0), two under \textsc{TestAnchorB} (index~1).
+Only the first fixture incurs the one-time circuit-build cost; subsequent fixtures reuse the warm in-process circuit.
+
+\begin{table}[t]
+  \centering
+  \caption{\textsc{p7s} proving pipeline benchmarks at Phase~2b exit (median of 5 iterations).
+           Anchor~$A$ and~$B$ are two synthetic P-256 roots selected in-circuit by the public \texttt{trust\_anchor\_index}.}\label{tab:p7s-bench}
+  \begin{tabular}{lrrrr}
+    \toprule
+    Fixture & $A$ (binding) & $A$ (admin) & $B$ (binding) & $B$ (admin) \\
+    \midrule
+    Anchor index                 & 0          & 0          & 1          & 1          \\
+    Prove (cold, first fixture)  & 28.5\,s    & ---        & ---        & ---        \\
+    Prove (warm, median)         & 2.00\,s    & 1.85\,s    & 1.87\,s    & 1.86\,s    \\
+    Verify (median)              & 738\,ms    & 743\,ms    & 732\,ms    & 742\,ms    \\
+    Proof size                   & 1046\,KB   & 1047\,KB   & 1046\,KB   & 1046\,KB   \\
+    Witness blob                 & 5050\,B    & 5050\,B    & 5050\,B    & 5050\,B    \\
+    Public blob                  & 169\,B     & 169\,B     & 169\,B     & 169\,B     \\
+    Peak RSS                     & 1253\,MB   & 1253\,MB   & 1253\,MB   & 1253\,MB   \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\paragraph{Multi-QTSP transparency.}
+The four per-fixture columns in Table~\ref{tab:p7s-bench} differ only in measurement noise: the warm-prove spread across fixtures is under $\pm 4\%$ of the median, and proof sizes differ by at most 1\,KB (within the Ligero commitment rounding for different random transcripts).
+This confirms that the N${=}2$ sig-side multiplexer is \emph{functionally transparent} to proof cost: the circuit evaluates the same linear combination $\textit{root\_pk} = k_0 + \textit{idx} \cdot (k_1 - k_0)$ regardless of which anchor is selected, and a single $\textit{idx} \cdot (\textit{idx} - 1) == 0$ constraint suffices to pin the index to $\{0, 1\}$.
+Extending to $N{>}2$ replaces the 2-way expression with a generic Lagrange construction whose cost scales as $O(N)$ multiplications per coordinate --- small relative to the ECDSA sub-circuit dominating the sig-side cost.
+
+\paragraph{Phase~2a versus Phase~2b.}
+The Phase~2b pipeline adds invariant~7 (nullifier from the signer certificate's subject \texttt{serialNumber}) and the multi-QTSP trust-anchor multiplexer (extending invariant~1) to the ten invariants landed in Phase~2a.
+Warm-prove time increases from ${\sim}\,$1.48~s to ${\sim}\,$1.87~s (+26\%), and verification time from ${\sim}\,$567~ms to ${\sim}\,$738~ms (+30\%), driven primarily by the additional SHA-256 block for the nullifier preimage (stable-id $\parallel$ context) plus the N${=}2$ mux public input.
+Proof size grows by a modest ${\sim}\,$8~KB (${\sim}\,$0.8\%), reflecting the 32-byte nullifier added to the public-output section.
+Peak RSS is unchanged because the hash sub-circuit's wire count is dominated by the SHA block schedules for \texttt{cert\_tbs} and \texttt{signed\_attrs}, both unchanged since Phase~2a.
+
+\paragraph{Relationship to the mdoc pipeline.}
+The \textsc{p7s} and \textsc{mdoc} circuits share the Sumcheck$+$Ligero proving core and the cross-field MAC gadget, but differ in the number of ECDSA verifications and the input-payload shape.
+\textsc{p7s} is ${\sim}\,$40\% slower warm-prove than \textsc{mdoc}~1-attr (two ECDSA \texttt{VerifyCircuit}{s} vs one) and produces a ${\sim}\,$2.9$\times$ larger proof (dual \texttt{ZkProof} payload --- one per sub-circuit).
+Both numbers are inherent to the scope of the proven statement rather than artefacts of the implementation.
+
+\paragraph{Verifier posture.}
+Both \textsc{p7s} and \textsc{mdoc} ship with off-chain verifiers only.
+The verifier cost (${\sim}\,$700~ms dominated by Sumcheck re-evaluation and Ligero proximity checks) and the proof framing (${\sim}\,$1~MB dual-ZkProof for \textsc{p7s}; ${\sim}\,$365~KB single for \textsc{mdoc}) are both orders of magnitude above what an EVM precompile can accommodate.
+On-chain verification is a Phase~3 deliverable; the public-blob schema is intentionally stable (fixed u32 header plus fixed-size 32-byte fields) so that any future on-chain verifier --- whether a hand-translated Solidity circuit for a restricted statement, or a Risc0-in-EVM wrapper around the existing Longfellow verifier --- can consume the same public inputs without a schema migration.
+
+%% ───────────────────────────────────────────────────────────────────
 \subsection{Identity Escrow Pipeline}\label{sec:bench-escrow}
 
 Table~\ref{tab:escrow-bench} presents timing measurements for each operation in the identity escrow protocol (Algorithms~\ref{alg:keygen}--\ref{alg:recover}).
