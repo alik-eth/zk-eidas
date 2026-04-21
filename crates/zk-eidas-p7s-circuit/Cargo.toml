@@ -12,6 +12,11 @@ zk-eidas-p7s = { path = "../zk-eidas-p7s" }
 thiserror = { workspace = true }
 sha2 = "0.10"
 p256 = { version = "0.13", default-features = false, features = ["ecdsa", "std"] }
+# secp256k1 / k256 — out-of-circuit holder binding (invariant 8, Task 35).
+# Ethereum wallets sign on secp256k1; the ZK proof's sig circuit stays
+# P-256-only, so holder binding is a sidecar ECDSA signature rather
+# than a second in-circuit curve.
+k256 = { version = "0.13", default-features = false, features = ["ecdsa", "std"] }
 # Benchmark-only deps (used by the `p7s_benchmark` binary). Keeping them
 # as regular dependencies rather than dev-dependencies so `cargo run
 # --release --bin p7s_benchmark` works without a test-profile build.
@@ -30,6 +35,8 @@ test-bypass-host-anchors = [
 
 [dev-dependencies]
 proptest = "1"
+# OsRng for test keypair generation (holder_binding tests).
+rand = "0.8"
 
 [[bin]]
 name = "p7s_benchmark"

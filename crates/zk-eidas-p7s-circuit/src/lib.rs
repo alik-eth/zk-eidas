@@ -3,6 +3,7 @@
 //! Phase 2a: scaffolding + invariants 9, 4, 5, 6, 10, 2b, 1, 2a.
 //! Phase 2b: adds invariants 3, 7, 8 (DER walker + stable_id-dependent).
 
+pub mod holder_binding;
 pub mod prover;
 pub mod verifier;
 pub mod witness;
