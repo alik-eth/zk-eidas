@@ -31,8 +31,7 @@ use zk_eidas_p7s_circuit::{prove, verify, PublicInputs, Witness};
 const FIXTURE: &[u8] = include_bytes!("../../zk-eidas-p7s/fixtures/binding.qkb.p7s");
 const DUMMY_ROOT_PK: [u8; 65] = [0x04; 65];
 
-// v10 blob layout constants — mirror invariant_1.rs / invariant_2a.rs.
-// signed_attrs_md_offset sits immediately after signed_attrs_len.
+// v11 blob layout constants — mirror invariant_1.rs / invariant_2a.rs.
 const CERT_TBS_LEN_IN_BLOB: usize = 1310;
 const CERT_TBS_SPKI_OFFSET_IN_BLOB: usize = CERT_TBS_LEN_IN_BLOB + 4; // 1314
 const CERT_TBS_DATA_IN_BLOB: usize = CERT_TBS_SPKI_OFFSET_IN_BLOB + 4; // 1318
@@ -43,7 +42,8 @@ const SIGNED_ATTRS_MD_OFFSET_IN_BLOB: usize = SIGNED_ATTRS_LEN_IN_BLOB + 4; // 3
 const SIGNED_ATTRS_DATA_IN_BLOB: usize = SIGNED_ATTRS_MD_OFFSET_IN_BLOB + 4; // 3438
 const CONTENT_SIG_R_IN_BLOB: usize = SIGNED_ATTRS_DATA_IN_BLOB + 1536; // 4974
 const CONTENT_SIG_S_IN_BLOB: usize = CONTENT_SIG_R_IN_BLOB + 32; // 5006
-const BLOB_TOTAL_LEN: usize = CONTENT_SIG_S_IN_BLOB + 32; // 5038
+// v11 tail (+12 bytes): subject_sn_offset + subject_dn_start + trust_anchor_index.
+const BLOB_TOTAL_LEN: usize = CONTENT_SIG_S_IN_BLOB + 32 + 12; // 5050
 
 // signed_content lives at absolute blob offset 44 (version + ctx_len +
 // ctx[32] + sc_len = 44). Length is 1024.
@@ -77,10 +77,14 @@ fn expected_nonce() -> [u8; 32] {
 }
 
 fn honest_public() -> PublicInputs {
+    let w = build_witness(FIXTURE, b"0x", DUMMY_ROOT_PK).unwrap();
+    let outputs = zk_eidas_p7s::compute_outputs(&w).unwrap();
     PublicInputs {
         context_hash: Sha256::digest(b"0x").into(),
         pk: expected_pk(),
         nonce: expected_nonce(),
+        nullifier: outputs.nullifier,
+        trust_anchor_index: 0,
         root_pk: [0u8; 65],
         timestamp: 0,
     }

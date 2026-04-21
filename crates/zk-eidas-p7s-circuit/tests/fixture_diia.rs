@@ -28,6 +28,7 @@ fn prove_verify_round_trip_on_diia_fixture() {
         off.json_nonce_start,
         off.json_nonce_len,
     ));
+    let outputs = zk_eidas_p7s::compute_outputs(&inner).expect("compute outputs");
     let w = Witness::new(inner);
 
     let context_hash: [u8; 32] = Sha256::digest(b"0x").into();
@@ -35,6 +36,8 @@ fn prove_verify_round_trip_on_diia_fixture() {
         context_hash,
         pk,
         nonce,
+        nullifier: outputs.nullifier,
+        trust_anchor_index: 0,
         root_pk: [0u8; 65],
         timestamp: 0,
     };

@@ -23,7 +23,7 @@ use zk_eidas_p7s_circuit::{prove, verify, PublicInputs, Witness};
 const FIXTURE: &[u8] = include_bytes!("../../zk-eidas-p7s/fixtures/binding.qkb.p7s");
 const DUMMY_ROOT_PK: [u8; 65] = [0x04; 65];
 
-// v10 blob offsets — keep in sync with `witness.rs`'s serializer.
+// v11 blob offsets — keep in sync with `witness.rs`'s serializer.
 // Layout (LE u32s = 4 bytes each):
 //   0    version(4) + ctx_len(4) + ctx(32) + sc_len(4)             = 44
 //   44   signed_content(1024)                                      = 1068
@@ -35,9 +35,11 @@ const DUMMY_ROOT_PK: [u8; 65] = [0x04; 65];
 //   1310 cert_tbs_len(4) + cert_tbs_spki_offset(4)                 = 1318
 //   1318 cert_tbs(2048)                                            = 3366
 //   3366 cert_sig_r(32) + cert_sig_s(32)                           = 3430
-//   3430 signed_attrs_len(4) + signed_attrs_md_offset(4)           = 3438  ← v10
+//   3430 signed_attrs_len(4) + signed_attrs_md_offset(4)           = 3438
 //   3438 signed_attrs(1536)                                        = 4974
 //   4974 content_sig_r(32) + content_sig_s(32)                     = 5038
+//   5038 subject_sn_offset(4) + subject_dn_start(4)                = 5046  ← v11
+//   5046 trust_anchor_index(4)                                     = 5050  ← v11
 const CERT_TBS_LEN_IN_BLOB: usize = 1310;
 const CERT_TBS_SPKI_OFFSET_IN_BLOB: usize = CERT_TBS_LEN_IN_BLOB + 4; // 1314
 const CERT_TBS_DATA_IN_BLOB: usize = CERT_TBS_SPKI_OFFSET_IN_BLOB + 4; // 1318
@@ -48,7 +50,13 @@ const SIGNED_ATTRS_MD_OFFSET_IN_BLOB: usize = SIGNED_ATTRS_LEN_IN_BLOB + 4; // 3
 const SIGNED_ATTRS_DATA_IN_BLOB: usize = SIGNED_ATTRS_MD_OFFSET_IN_BLOB + 4; // 3438
 const CONTENT_SIG_R_IN_BLOB: usize = SIGNED_ATTRS_DATA_IN_BLOB + 1536; // 4974
 const CONTENT_SIG_S_IN_BLOB: usize = CONTENT_SIG_R_IN_BLOB + 32; // 5006
-const BLOB_TOTAL_LEN: usize = CONTENT_SIG_S_IN_BLOB + 32; // 5038
+#[allow(dead_code)]
+const SUBJECT_SN_OFFSET_IN_BLOB: usize = CONTENT_SIG_S_IN_BLOB + 32; // 5038
+#[allow(dead_code)]
+const SUBJECT_DN_START_IN_BLOB: usize = SUBJECT_SN_OFFSET_IN_BLOB + 4; // 5042
+#[allow(dead_code)]
+const TRUST_ANCHOR_IDX_IN_BLOB: usize = SUBJECT_DN_START_IN_BLOB + 4; // 5046
+const BLOB_TOTAL_LEN: usize = TRUST_ANCHOR_IDX_IN_BLOB + 4; // 5050
 
 fn expected_pk() -> [u8; 65] {
     let w = build_witness(FIXTURE, b"0x", DUMMY_ROOT_PK).unwrap();
@@ -75,10 +83,14 @@ fn expected_nonce() -> [u8; 32] {
 }
 
 fn honest_public() -> PublicInputs {
+    let w = build_witness(FIXTURE, b"0x", DUMMY_ROOT_PK).unwrap();
+    let outputs = zk_eidas_p7s::compute_outputs(&w).unwrap();
     PublicInputs {
         context_hash: Sha256::digest(b"0x").into(),
         pk: expected_pk(),
         nonce: expected_nonce(),
+        nullifier: outputs.nullifier,
+        trust_anchor_index: 0,
         root_pk: [0u8; 65],
         timestamp: 0,
     }

@@ -32,10 +32,14 @@ fn fixture_pk_and_nonce() -> ([u8; 65], [u8; 32]) {
 
 fn honest_public(context: &[u8]) -> PublicInputs {
     let (pk, nonce) = fixture_pk_and_nonce();
+    let w = build_witness(FIXTURE, context, DUMMY_ROOT_PK).unwrap();
+    let outputs = zk_eidas_p7s::compute_outputs(&w).unwrap();
     PublicInputs {
         context_hash: Sha256::digest(context).into(),
         pk,
         nonce,
+        nullifier: outputs.nullifier,
+        trust_anchor_index: 0,
         root_pk: [0u8; 65],
         timestamp: 0,
     }

@@ -107,6 +107,44 @@
 //!         md_value_offset - 17). Both DIIA fixtures measure 60 but
 //!         DIIA's BER ordering is non-canonical; host-witnessed.
 //!     Public blob unchanged from v9. Transcript seed "p7s-31-hash".
+//!
+//!   v11 (Task 34) — invariant 7: in-circuit nullifier from the X.520
+//!     serialNumber (stable ID) embedded in cert_tbs's Subject DN.
+//!     Binds `PublicInputs.nullifier = SHA-256(stable_id[16] ||
+//!     context[..ctx_len])`, matching Phase 1's host-side formula in
+//!     `crates/zk-eidas-p7s/src/outputs.rs`. The circuit routes the
+//!     9+16-byte anchor+value window from cert_tbs, asserts the
+//!     `30 17 06 03 55 04 05 13 10` DER prefix, range-checks
+//!     `subject_sn_offset_in_tbs > subject_dn_start_offset_in_tbs`
+//!     (dual-match protection: the ISSUER DN's serialNumber attribute
+//!     — the QTSP's registration code — has the SAME 9-byte prefix,
+//!     and without the range check a prover could bind the nullifier
+//!     to the issuer's ID instead of the holder's), and computes
+//!     `SHA-256(stable_id || context)` over a host-padded 64-byte
+//!     buffer.
+//!     Witness blob extends v10 with:
+//!       `u32 subject_sn_offset_in_tbs`        — host-witnessed offset of
+//!                                               the 9-byte anchor within
+//!                                               cert_tbs (370 for both
+//!                                               DIIA fixtures).
+//!       `u32 subject_dn_start_offset_in_tbs`  — host-witnessed offset of
+//!                                               the outer Subject DN
+//!                                               SEQUENCE within cert_tbs
+//!                                               (294 for DIIA fixtures).
+//!                                               Used by the in-circuit
+//!                                               range check.
+//!       `u32 trust_anchor_index`              — placeholder (0 in #34);
+//!                                               Task #36 wires real
+//!                                               trust-anchor selection.
+//!     Public blob extends v10 with:
+//!       `u8  nullifier[32]`                   — SHA-256(stable_id ||
+//!                                               context) public output.
+//!       `u32 trust_anchor_index`              — mirror of the witness
+//!                                               field.
+//!     v1 limitation: stable-ID length is hardcoded to 16 bytes (DIIA
+//!     RNOKPP format `TINUA-` + 10 digits). Non-DIIA QTSPs with
+//!     different RNOKPP-analog lengths are deferred to Task #37.
+//!     Transcript seed bumps "p7s-31-hash" -> "p7s-7-hash".
 
 use p256::ecdsa::Signature;
 use sha2::{Digest, Sha256};
@@ -117,7 +155,7 @@ use crate::CircuitError;
 
 /// Keep in sync with C++ constants in `p7s_circuit.h` and
 /// `sub/declaration_whitelist.h`.
-pub const SCHEMA_VERSION: u32 = 10;
+pub const SCHEMA_VERSION: u32 = 11;
 pub const MAX_CONTEXT: usize = 32;
 pub const MAX_SIGNED_CONTENT: usize = 1024;
 pub const PK_HEX_LEN: usize = 130;
@@ -126,6 +164,20 @@ pub const NONCE_HEX_LEN: usize = 64;
 pub const NONCE_BYTES: usize = 32;
 pub const DECLARATION_LEN: usize = 510;
 pub const MESSAGE_DIGEST_LEN: usize = 32;
+
+/// Fixed stable-ID value length (DIIA RNOKPP format: `TINUA-` prefix +
+/// 10 decimal digits = 16 bytes). Matches the parser's `STABLE_ID_LEN`
+/// and the circuit-side `kStableIdLen`. v1 is DIIA-only; Task #37 adds
+/// variable-length support for other ETSI QTSPs.
+pub const STABLE_ID_LEN: usize = 16;
+
+/// 9-byte X.520 serialNumber attribute DER anchor asserted in-circuit
+/// at `cert_tbs[subject_sn_offset..+9]`. SEQUENCE(l=23) + OID 2.5.4.5
+/// + PrintableString(l=16).
+pub const SUBJECT_SN_ANCHOR_LEN: usize = 9;
+
+/// Nullifier output size (SHA-256 digest).
+pub const NULLIFIER_LEN: usize = 32;
 
 /// Maximum signed_content length that fits within 16 SHA blocks after
 /// Merkle-Damgård padding: 16 × 64 − 9 = 1015.
@@ -402,6 +454,33 @@ impl Witness {
         out.extend_from_slice(&sa_padded);
         out.extend_from_slice(&content_sig_r);
         out.extend_from_slice(&content_sig_s);
+
+        // --- v11 (Task 34): stable-ID offsets + trust-anchor index ---
+        // Blob tail order matches C++ parse_witness_blob:
+        //   u32 subject_sn_offset_in_tbs,
+        //   u32 subject_dn_start_offset_in_tbs,
+        //   u32 trust_anchor_index.
+        // All three are host-witnessed; the circuit's invariant 7
+        // anchors them via byte-eq and a range check.
+        let sn_offset_u32 =
+            u32::try_from(off.subject_sn_offset_in_tbs).map_err(|_| {
+                CircuitError::InvalidWitness(format!(
+                    "subject_sn_offset_in_tbs {} overflows u32",
+                    off.subject_sn_offset_in_tbs
+                ))
+            })?;
+        let dn_offset_u32 =
+            u32::try_from(off.subject_dn_start_offset_in_tbs).map_err(|_| {
+                CircuitError::InvalidWitness(format!(
+                    "subject_dn_start_offset_in_tbs {} overflows u32",
+                    off.subject_dn_start_offset_in_tbs
+                ))
+            })?;
+        out.extend_from_slice(&sn_offset_u32.to_le_bytes());
+        out.extend_from_slice(&dn_offset_u32.to_le_bytes());
+        // v11 placeholder — Task #36 activates real trust-anchor
+        // selection when the trust-anchor table lands. Always 0 in #34.
+        out.extend_from_slice(&0u32.to_le_bytes());
 
         Ok(out)
     }

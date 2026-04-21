@@ -33,6 +33,28 @@ const DIIA_P256_SPKI_PREFIX: [u8; 26] = [
     0x03, 0x42, 0x00,                               // BIT STRING hdr (l=66)
 ];
 
+/// 9-byte X.520 serialNumber attribute DER prefix. Identical to
+/// `kSubjectSnAnchor` in the p7s circuit, asserted on-wire at
+/// `cert_tbs[subject_sn_offset..subject_sn_offset+9]`. Attribute
+/// SEQUENCE hdr (l=23 = 0x17) + OID 2.5.4.5 (id-at-serialNumber) +
+/// PrintableString hdr (l=16 = 0x10). The 16-byte stable-ID value
+/// follows. v1 (Task #34) fixes the lengths at 23/16 — valid for
+/// DIIA TINUA-prefixed RNOKPP stable-IDs which are always 16 bytes
+/// (`TINUA-` + 10 decimal digits). ETSI EN 319 412-1 §5.1.3 allows
+/// variable stable-ID lengths; support for non-DIIA QTSPs with
+/// different lengths is a Task #37 follow-up.
+#[cfg_attr(feature = "test-bypass-host-anchors", allow(dead_code))]
+const X520_SUBJECT_SN_ANCHOR: [u8; 9] = [
+    0x30, 0x17,                       // Attribute SEQUENCE hdr (l=23)
+    0x06, 0x03, 0x55, 0x04, 0x05,     // OID 2.5.4.5 (id-at-serialNumber)
+    0x13, 0x10,                       // PrintableString hdr (l=16)
+];
+
+/// Fixed stable-ID value length in bytes. Matches the DIIA RNOKPP
+/// format `TINUA-` (6 bytes) + 10 decimal digits = 16 bytes. Kept
+/// in sync with the circuit-side `kStableIdLen` constant.
+pub(crate) const STABLE_ID_LEN: usize = 16;
+
 /// 17-byte CMS messageDigest attribute DER prefix (RFC 5652). Identical
 /// to `kSignedAttrsMdPrefix` in the p7s circuit, asserted on-wire at
 /// `signed_attrs[md_offset..md_offset+17]`. Attribute SEQUENCE hdr
@@ -128,6 +150,61 @@ pub(crate) fn locate_offsets(p7s: &[u8]) -> Result<P7sOffsets, P7sError> {
         + find_subslice_unique(&cert_der, sn_inner)
             .ok_or(P7sError::OffsetNotFound("subject serialNumber"))?;
     let subject_sn_len = sn_inner.len();
+
+    // ── Subject DN start (invariant 7 dual-match range check anchor) ───
+    // Locate the outer Subject DN SEQUENCE within the TBS. Anything
+    // before it (in particular the Issuer DN, which also contains an
+    // X.520 serialNumber attribute for the QTSP's reg code) must be
+    // rejected as a stable-ID offset via the in-circuit range check
+    // `subject_sn_offset > subject_dn_start_offset`.
+    let subject_dn_der = signer_cert
+        .tbs_certificate
+        .subject
+        .to_der()
+        .map_err(|e| P7sError::Der(format!("subject DN encode: {e}")))?;
+    let subject_dn_start_offset_in_tbs =
+        find_subslice_unique(&tbs_der, &subject_dn_der)
+            .ok_or(P7sError::OffsetNotFound("subject DN within TBS"))?;
+
+    // Offset within cert_tbs of the 9-byte X.520 serialNumber attribute
+    // prefix (SEQUENCE + OID + PrintableString hdr). Value bytes follow
+    // at `subject_sn_offset_in_tbs + 9`. Host-witnessed — the subject
+    // DN's length varies across DIIA holders; the circuit anchors the
+    // 9-byte prefix on-wire via byte_eq.
+    const SUBJECT_SN_ANCHOR_LEN: usize = 9;
+    let subject_sn_offset_in_tbs = subject_sn_start
+        .checked_sub(cert_tbs_start)
+        .and_then(|p| p.checked_sub(SUBJECT_SN_ANCHOR_LEN))
+        .ok_or(P7sError::OffsetNotFound(
+            "subject serialNumber offset within cert_tbs",
+        ))?;
+    // v1 — enforce the DIIA-fixed 16-byte stable-ID length matching
+    // the circuit's compile-time `kStableIdLen`. Non-DIIA QTSPs with
+    // different RNOKPP-analog lengths are a Task #37 follow-up (when
+    // the circuit gains variable-length support).
+    if subject_sn_len != STABLE_ID_LEN {
+        return Err(P7sError::Cms(format!(
+            "subject serialNumber length {} != expected {} (v1 is DIIA-only; \
+             non-DIIA QTSP support is deferred to Task #37)",
+            subject_sn_len, STABLE_ID_LEN
+        )));
+    }
+    // Host-side 9-byte anchor check — gated by the shared test-bypass
+    // feature flag (same rationale as SPKI / messageDigest anchors:
+    // bypass lets invariant_7 tests exercise the in-circuit anchor as
+    // the sole enforcement layer).
+    #[cfg(not(feature = "test-bypass-host-anchors"))]
+    {
+        let anchor_actual =
+            &p7s[cert_tbs_start + subject_sn_offset_in_tbs..][..SUBJECT_SN_ANCHOR_LEN];
+        if anchor_actual != X520_SUBJECT_SN_ANCHOR {
+            return Err(P7sError::Cms(
+                "X.520 serialNumber attribute DER prefix does not match \
+                 (30 17 06 03 55 04 05 13 10 — id-at-serialNumber + \
+                 PrintableString(16))".into(),
+            ));
+        }
+    }
 
     // ── User signing pubkey (P-256 uncompressed point) ────────────────
     let spki_bitstring = signer_cert
@@ -296,6 +373,8 @@ pub(crate) fn locate_offsets(p7s: &[u8]) -> Result<P7sOffsets, P7sError> {
         cert_sig_len,
         subject_sn_start,
         subject_sn_len,
+        subject_sn_offset_in_tbs,
+        subject_dn_start_offset_in_tbs,
         user_signing_pk_start,
         content_sig_start,
         content_sig_len,

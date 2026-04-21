@@ -257,10 +257,16 @@ fn build_fixture_witness_and_public() -> (Witness, PublicInputs, usize, usize) {
     ));
 
     let context_hash: [u8; 32] = Sha256::digest(CONTEXT).into();
+    // v11 (Task 34): nullifier = SHA-256(stable_id || context). Bench
+    // reuses the host-side helper so any schema drift trips a test,
+    // not a runtime mismatch.
+    let outputs = zk_eidas_p7s::compute_outputs(&inner).expect("compute outputs");
     let public = PublicInputs {
         context_hash,
         pk,
         nonce,
+        nullifier: outputs.nullifier,
+        trust_anchor_index: 0,
         root_pk: [0u8; 65],
         timestamp: 0,
     };

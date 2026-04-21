@@ -53,6 +53,25 @@ pub struct P7sOffsets {
     /// serialNumber attribute value bytes (OID 2.5.4.5) — the stable ID.
     pub subject_sn_start: usize,
     pub subject_sn_len: usize,
+    /// Offset WITHIN `cert_tbs` of the 9-byte X.520 serialNumber
+    /// attribute DER prefix that immediately precedes the stable-ID
+    /// value. Equal to `subject_sn_start - cert_tbs_start - 9`.
+    /// Anchor bytes: `30 17 06 03 55 04 05 13 10` (Attribute SEQUENCE
+    /// hdr + OID 2.5.4.5 + PrintableString hdr). Invariant 7 routes
+    /// a 9+16-byte window from `cert_tbs` at this offset and asserts
+    /// the anchor on-wire. Host-witnessed because the subject-DN
+    /// layout varies across holders.
+    pub subject_sn_offset_in_tbs: usize,
+    /// Offset WITHIN `cert_tbs` of the outer Subject DN SEQUENCE
+    /// (the `0x30` tag that wraps all RDNs of the subject). Used by
+    /// invariant 7's dual-match range check
+    /// `subject_sn_offset_in_tbs > subject_dn_start_offset_in_tbs`
+    /// — prevents the prover from pointing the stable-ID window at
+    /// the ISSUER DN's serialNumber attribute (same 9-byte anchor
+    /// matches both the subject and the issuer QTSP's registration
+    /// code, which would re-anchor the nullifier under a DIFFERENT
+    /// stable-ID).
+    pub subject_dn_start_offset_in_tbs: usize,
     /// Uncompressed P-256 point of the user's signing key
     /// (0x04 || X[32] || Y[32]). 65 bytes.
     pub user_signing_pk_start: usize,

@@ -54,10 +54,14 @@ fn expected_nonce() -> [u8; 32] {
 }
 
 fn public_for(ctx: &[u8]) -> PublicInputs {
+    let w = build_witness(FIXTURE, ctx, DUMMY_ROOT_PK).unwrap();
+    let outputs = zk_eidas_p7s::compute_outputs(&w).unwrap();
     PublicInputs {
         context_hash: Sha256::digest(ctx).into(),
         pk: expected_pk(),
         nonce: expected_nonce(),
+        nullifier: outputs.nullifier,
+        trust_anchor_index: 0,
         root_pk: [0u8; 65],
         timestamp: 0,
     }
