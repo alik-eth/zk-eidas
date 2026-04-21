@@ -203,7 +203,7 @@ pub(crate) fn locate_offsets(p7s: &[u8]) -> Result<P7sOffsets, P7sError> {
     // emit the matching trust-anchor table index. The circuit's
     // compile-time `kTrustAnchors[]` and the host-side
     // `TRUST_ANCHOR_PROBES` are order-aligned by construction: both
-    // use index 0 for DIIA, and future entries append symmetrically.
+    // use index 0 for TestAnchorA, and future entries append symmetrically.
     let issuer_der = signer_cert
         .tbs_certificate
         .issuer
@@ -301,7 +301,7 @@ pub(crate) fn locate_offsets(p7s: &[u8]) -> Result<P7sOffsets, P7sError> {
             &p7s[cert_tbs_start + cert_tbs_spki_offset..][..SPKI_PREFIX_LEN];
         if spki_prefix_actual != DIIA_P256_SPKI_PREFIX {
             return Err(P7sError::Cms(
-                "cert SPKI DER prefix does not match DIIA P-256 template".into(),
+                "cert SPKI DER prefix does not match P-256 SPKI template".into(),
             ));
         }
     }

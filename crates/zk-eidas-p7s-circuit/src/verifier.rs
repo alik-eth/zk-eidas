@@ -12,10 +12,11 @@
 //!   u32 trust_anchor_index   ← v11 (Task 34) placeholder
 //!
 //! Notes:
-//!   * The DIIA QTSP 2311 root pubkey used by invariant 1 is a
-//!     compile-time constant in the C++ circuit — NOT part of the
-//!     public blob. `PublicInputs.root_pk` is retained for type-system
-//!     continuity but `to_ffi_bytes()` ignores it.
+//!   * The trust-anchor root pubkey used by invariant 1 is a compile-time
+//!     constant in the C++ circuit (TestAnchorA synthetic root post-#43a,
+//!     was DIIA QTSP 2311 pre-#43a) — NOT part of the public blob.
+//!     `PublicInputs.root_pk` is retained for type-system continuity but
+//!     `to_ffi_bytes()` ignores it.
 //!   * The user holder public key used by invariant 2a IS part of the
 //!     public blob — it's `pk[65]`, the same bytes invariant 4
 //!     constrains on the hash side. The C++ verifier host parses

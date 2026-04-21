@@ -31,7 +31,7 @@ pub struct P7sOffsets {
     pub signed_content_start: usize,
     pub signed_content_len: usize,
 
-    // --- Signer certificate (the user's DIIA qualified cert) ---
+    // --- Signer certificate (the user's qualified cert) ---
     /// Full DER cert bytes.
     pub cert_start: usize,
     pub cert_len: usize,
@@ -121,8 +121,8 @@ pub struct P7sOffsets {
     /// Index into the compile-time `kTrustAnchors[]` table (in the p7s
     /// circuit submodule) identifying which QTSP's root public key
     /// the cert-sig ECDSA verifies against. Task #36 activates real
-    /// selection; Phase 2b ships with a single DIIA entry at index 0,
-    /// so the parser currently only returns 0 (for DIIA-issued certs)
+    /// selection; Phase 2b ships with a single TestAnchorA entry at index 0,
+    /// so the parser currently only returns 0 (for TestAnchorA-issued certs)
     /// or fails with `P7sError::UnknownTrustAnchor`. When Task #37
     /// adds fixtures for other QTSPs the parser's probe set extends.
     pub trust_anchor_index: u32,

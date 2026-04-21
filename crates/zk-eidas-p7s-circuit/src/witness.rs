@@ -55,15 +55,16 @@
 //!     reason.
 //!
 //!   v8 (Task 29) — invariant 1: real ECDSA verification against the
-//!     hardcoded DIIA QTSP 2311 root pubkey, MAC-bound to
+//!     hardcoded trust-anchor root pubkey (DIIA QTSP 2311 pre-#43a;
+//!     TestAnchorA synthetic root post-#43a), MAC-bound to
 //!     `e = SHA-256(cert_tbs)`. Witness blob extends v7 with:
 //!     `u32 cert_tbs_len` (in [0, 2039]), `u8 cert_tbs[2048]` (raw +
 //!     zero pad; filler SHA-pads 32 blocks), `u8 cert_sig_r[32]`
 //!     (big-endian scalar, DER-parsed in Rust), `u8 cert_sig_s[32]`.
-//!     Public blob layout unchanged from v7. The DIIA root pubkey is
-//!     a compile-time constant baked into the C++ circuit; it is NOT
-//!     part of the public blob. The `PublicInputs.root_pk` field is
-//!     retained for type-system continuity but is not serialized.
+//!     Public blob layout unchanged from v7. The root pubkey is a
+//!     compile-time constant baked into the C++ circuit; it is NOT part
+//!     of the public blob. The `PublicInputs.root_pk` field is retained
+//!     for type-system continuity but is not serialized.
 //!     Transcript seed bumps to "p7s-29-hash".
 //!
 //!   v9 (Task 26, merged with former #30) — invariant 2a + SPKI
@@ -80,7 +81,7 @@
 //!
 //! Witness blob extends v8 with: `u32 cert_tbs_spki_offset` (offset of
 //! the SPKI SEQUENCE 0x30 tag WITHIN cert_tbs — host-witnessed
-//! because DIIA subject-DN byte length varies per holder),
+//! because subject-DN byte length varies per holder),
 //! `u32 signed_attrs_len` (in [0, 1527]), `u8 signed_attrs[1536]`
 //! (raw bytes + zero pad; first byte MUST be 0xA0 — the host filler
 //! rewrites byte 0 to 0x31, the CAdES-canonical SET OF tag the
@@ -104,8 +105,8 @@
 //!     Witness blob extends v9 with:
 //!       `u32 signed_attrs_md_offset` — offset of messageDigest
 //!         Attribute SEQUENCE tag within signed_attrs (absolute
-//!         md_value_offset - 17). Both DIIA fixtures measure 60 but
-//!         DIIA's BER ordering is non-canonical; host-witnessed.
+//!         md_value_offset - 17). Both TestAnchorA fixtures measure 60
+//!         but the BER ordering is non-canonical; host-witnessed.
 //!     Public blob unchanged from v9. Transcript seed "p7s-31-hash".
 //!
 //!   v11 (Task 34) — invariant 7: in-circuit nullifier from the X.520
@@ -126,11 +127,12 @@
 //!       `u32 subject_sn_offset_in_tbs`        — host-witnessed offset of
 //!                                               the 9-byte anchor within
 //!                                               cert_tbs (370 for both
-//!                                               DIIA fixtures).
+//!                                               TestAnchorA fixtures).
 //!       `u32 subject_dn_start_offset_in_tbs`  — host-witnessed offset of
 //!                                               the outer Subject DN
 //!                                               SEQUENCE within cert_tbs
-//!                                               (294 for DIIA fixtures).
+//!                                               (294 for TestAnchorA
+//!                                               fixtures).
 //!                                               Used by the in-circuit
 //!                                               range check.
 //!       `u32 trust_anchor_index`              — selects which
@@ -138,7 +140,7 @@
 //!                                               the cert-sig ECDSA
 //!                                               verifies under. Phase
 //!                                               2b ships with one entry
-//!                                               (DIIA); Task #36 wired
+//!                                               (TestAnchorA); Task #36 wired
 //!                                               both the in-circuit
 //!                                               bound check
 //!                                               (`vlt(index,
@@ -209,7 +211,7 @@ pub const CERT_TBS_MAX_BYTES: usize = 2048;
 pub const CERT_TBS_MAX_RAW: usize = CERT_TBS_MAX_BYTES - 9;
 
 /// 24 SHA blocks × 64 bytes = 1536. Max raw signedAttrs = 1527 (9-byte
-/// SHA pad floor). DIIA fixture measures 1387 bytes; 24 blocks gives
+/// SHA pad floor). TestAnchorA fixture measures 1387 bytes; 24 blocks gives
 /// ~140 bytes of headroom. If a real-world signedAttrs exceeds this,
 /// the host layer fails cleanly rather than truncating — the C++
 /// constant must be bumped in tandem.

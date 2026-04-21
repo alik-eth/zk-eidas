@@ -6,7 +6,7 @@
 //! linked by a cross-field MAC gadget) that the Phase-2a invariants hold
 //! on the witness:
 //!
-//!   * invariant 1  — signer cert's ECDSA verifies under the DIIA root
+//!   * invariant 1  — signer cert's ECDSA verifies under the TestAnchorA synthetic root
 //!   * invariant 4  — signed_content[pk_offset..] matches public.pk
 //!   * invariant 5  — signed_content[nonce_offset..] matches public.nonce
 //!   * invariant 6  — signed_content[ctx_offset..] matches context_bytes
