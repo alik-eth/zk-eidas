@@ -1,5 +1,5 @@
 //! End-to-end smoke: build witness blob → prove → verify against the
-//! DIIA fixture. Covered by `invariant_4.rs` / `invariant_5.rs` too, but
+//! TestAnchorA synthetic fixture. Covered by `invariant_4.rs` / `invariant_5.rs` too, but
 //! this file is the minimal "is the FFI linked" regression.
 
 use sha2::{Digest, Sha256};
@@ -17,7 +17,7 @@ fn decode_hex_field(p7s: &[u8], start: usize, len: usize) -> Vec<u8> {
 }
 
 #[test]
-fn prove_verify_round_trip_on_diia_fixture() {
+fn prove_verify_round_trip_on_test_anchor_a_fixture() {
     let inner = build_witness(FIXTURE, b"0x", DUMMY_ROOT_PK).expect("parse fixture");
     let off = inner.offsets;
     let mut pk = [0u8; 65];

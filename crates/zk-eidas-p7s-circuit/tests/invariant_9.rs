@@ -46,7 +46,7 @@ fn honest_public(context: &[u8]) -> PublicInputs {
 }
 
 #[test]
-fn happy_path_diia_context_round_trips() {
+fn happy_path_context_round_trips() {
     let ctx: &[u8] = b"0x";
     let inner = build_witness(FIXTURE, ctx, DUMMY_ROOT_PK).expect("parse fixture");
     let w = Witness::new(inner);

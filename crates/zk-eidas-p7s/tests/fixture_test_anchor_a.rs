@@ -1,15 +1,12 @@
-//! Integration test against a DIIA-shaped QKB binding fixture.
+//! Integration tests against the TestAnchorA synthetic QKB binding fixture.
 //!
 //! The fixture at `fixtures/binding.qkb.p7s` is a synthetic TestAnchorA
 //! CAdES envelope produced by `src/bin/gen_synthetic_fixtures.rs`
-//! (Task #43a). It mirrors the layout of the real DIIA QKB document
-//! it replaced — same offsets, same JSON shape, same RFC 3161 TSA
-//! countersignature shell — but the signer cert DN + SPKI + cert sig
-//! + content sig + ESSCertIDv2 hash were regenerated with a
-//! deterministic synthetic root and signer keypair so the fixture
-//! carries no real personal QES signature. The file name is kept as
-//! `fixture_diia.rs` to minimise review churn; it exercises the
-//! DIIA-shaped code path that #36 retained.
+//! (Task #43a). Same offsets, same JSON shape, same RFC 3161 TSA
+//! countersignature shell as the original — but the signer cert DN + SPKI
+//! + cert sig + content sig + ESSCertIDv2 hash were regenerated with a
+//! deterministic synthetic root and signer keypair so the fixture carries
+//! no real personal QES signature.
 
 use hex_literal::hex;
 use sha2::{Digest, Sha256};

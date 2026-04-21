@@ -12,7 +12,7 @@
 //! Tests:
 //!   1. Happy: honest DIIA fixture → prove + verify succeeds with
 //!      `trust_anchor_index = 0` (the parser-picked value). Same
-//!      round-trip as `fixture_diia.rs` but scoped to the
+//!      round-trip as `fixture_test_anchor_a.rs` but scoped to the
 //!      trust-anchor surface.
 //!   2. Out-of-range: host-tamper the witness-blob `trust_anchor_index`
 //!      to `1` (no such entry in the N=1 table). Both the C++
@@ -93,11 +93,11 @@ fn expect_prove_refused(err: longfellow_sys::p7s::P7sFfiError) {
 /// (1) Honest round-trip at `trust_anchor_index = 0`. The parser's
 /// issuer-DN probe picks 0 for the DIIA fixture, the in-circuit
 /// `vlt(0, 1)` is satisfied, and the cert-sig ECDSA verifies under
-/// `kTrustAnchors[0]`. This mirrors `fixture_diia::prove_verify_round_trip`
+/// `kTrustAnchors[0]`. This mirrors `fixture_test_anchor_a::prove_verify_round_trip_on_test_anchor_a_fixture`
 /// — duplicated here as a dedicated trust-anchor-surface test so the
 /// full regression suite still passes post-refactor.
 #[test]
-fn trust_anchor_happy_diia_index_0_prover_accepts() {
+fn trust_anchor_happy_index_0_prover_accepts() {
     let inner = build_witness(FIXTURE, b"0x", DUMMY_ROOT_PK).unwrap();
     // Parser-picked index. For DIIA fixtures this must be 0.
     assert_eq!(
