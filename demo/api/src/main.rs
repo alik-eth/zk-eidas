@@ -2204,6 +2204,10 @@ pub fn build_app(circuits_path: &str) -> (Router, Arc<AppState>) {
 
     let router = Router::new()
         .route("/issuer/issue", post(issue_credential))
+        .route(
+            "/p7s/holder-binding/verify",
+            post(post_verify_p7s_holder_binding),
+        )
         .route("/holder/prove", post(generate_proof))
         .route("/verifier/verify", post(verify_proof))
         .route("/holder/proof-export", post(export_proof))
@@ -2230,6 +2234,102 @@ pub fn build_app(circuits_path: &str) -> (Router, Arc<AppState>) {
         .layer(build_cors_layer())
         .with_state(state.clone());
     (router, state)
+}
+
+// === P7s holder binding (invariant 8, out-of-circuit) ===
+//
+// Sidecar to the Phase 2b p7s ZK proof: the holder signs a canonical
+// 32-byte digest of the proof's public outputs (`context_hash || pk ||
+// nonce || nullifier`) with their Ethereum-wallet secp256k1 key. This
+// endpoint lets a verifier check the binding signature; the ZK proof
+// itself is verified through the p7s-specific verify path (landed
+// separately in Task 32).
+//
+// Payload bytes are hex-encoded with an optional `0x` prefix. All
+// parse failures are 400 BAD_REQUEST; a well-formed request whose
+// signature does not verify returns 200 OK with `valid: false`.
+
+#[derive(Deserialize)]
+struct P7sHolderBindingVerifyRequest {
+    /// SEC1 uncompressed secp256k1 point, 65 bytes (leading 0x04).
+    pk: String,
+    /// Canonical outputs hash the holder signed — 32 bytes,
+    /// `SHA-256(context_hash || pk || nonce || nullifier)`. Callers
+    /// compute this from the proof's `PublicInputs` via
+    /// `ProofOutputsHash::from_public_inputs` (zk-eidas-p7s-circuit).
+    outputs_hash: String,
+    /// ECDSA signature in ASN.1 DER encoding.
+    signature_der: String,
+}
+
+#[derive(Serialize)]
+struct P7sHolderBindingVerifyResponse {
+    valid: bool,
+}
+
+fn decode_hex_input(
+    field: &str,
+    value: &str,
+    expected_len: Option<usize>,
+) -> Result<Vec<u8>, (StatusCode, String)> {
+    let cleaned = value.strip_prefix("0x").unwrap_or(value);
+    let bytes = hex::decode(cleaned).map_err(|e| {
+        (
+            StatusCode::BAD_REQUEST,
+            format!("{field}: invalid hex: {e}"),
+        )
+    })?;
+    if let Some(want) = expected_len {
+        if bytes.len() != want {
+            return Err((
+                StatusCode::BAD_REQUEST,
+                format!(
+                    "{field}: expected {want} bytes, got {}",
+                    bytes.len()
+                ),
+            ));
+        }
+    }
+    Ok(bytes)
+}
+
+async fn post_verify_p7s_holder_binding(
+    State(_state): State<Arc<AppState>>,
+    Json(req): Json<P7sHolderBindingVerifyRequest>,
+) -> Result<Json<P7sHolderBindingVerifyResponse>, (StatusCode, String)> {
+    use k256::ecdsa::{Signature, VerifyingKey};
+    use zk_eidas_p7s_circuit::holder_binding::{verify_holder_binding, ProofOutputsHash};
+
+    let pk_bytes = decode_hex_input("pk", &req.pk, Some(65))?;
+    let outputs_bytes = decode_hex_input("outputs_hash", &req.outputs_hash, Some(32))?;
+    let sig_bytes = decode_hex_input("signature_der", &req.signature_der, None)?;
+
+    // SEC1 parse failure is a caller error (well-formed hex but not a
+    // valid secp256k1 point). 400 rather than 200+valid=false because
+    // the bytes aren't a key at all — caller needs to fix their input,
+    // not their signature.
+    let verifying_key = VerifyingKey::from_sec1_bytes(&pk_bytes).map_err(|e| {
+        (
+            StatusCode::BAD_REQUEST,
+            format!("pk: not a valid SEC1 secp256k1 point: {e}"),
+        )
+    })?;
+
+    // DER-malformed signature is likewise a 400 — distinct from a
+    // well-formed signature that happens not to verify.
+    let signature = Signature::from_der(&sig_bytes).map_err(|e| {
+        (
+            StatusCode::BAD_REQUEST,
+            format!("signature_der: invalid DER: {e}"),
+        )
+    })?;
+
+    let mut outputs_arr = [0u8; 32];
+    outputs_arr.copy_from_slice(&outputs_bytes);
+    let outputs = ProofOutputsHash(outputs_arr);
+
+    let valid = verify_holder_binding(&verifying_key, &outputs, &signature).is_ok();
+    Ok(Json(P7sHolderBindingVerifyResponse { valid }))
 }
 
 // === Main ===
@@ -3310,5 +3410,98 @@ mod tests {
             "org.iso.18013.5.1.mDL",
             &[0u8; 8],
         ).expect("verify failed");
+    }
+
+    // === P7s holder-binding verify endpoint (invariant 8, Task 40) ===
+    //
+    // Smoke-level tests for `POST /p7s/holder-binding/verify`. Signing
+    // path is already covered at the library level by
+    // `crates/zk-eidas-p7s-circuit/tests/invariant_8.rs`; these hit
+    // the HTTP handler to confirm hex decoding + 400/200 contract +
+    // cryptographic accept/reject.
+
+    fn mint_holder_binding_fixture() -> (String, String, String) {
+        use k256::ecdsa::SigningKey;
+        use rand::rngs::OsRng;
+        use zk_eidas_p7s_circuit::holder_binding::{sign_holder_binding, ProofOutputsHash};
+
+        let sk = SigningKey::random(&mut OsRng);
+        let pk = sk.verifying_key();
+        let outputs = ProofOutputsHash([0x42u8; 32]);
+        let sig = sign_holder_binding(&sk, &outputs);
+
+        // SEC1 uncompressed = 0x04 || X || Y, 65 bytes total.
+        let pk_hex = hex::encode(pk.to_encoded_point(false).as_bytes());
+        let outputs_hex = hex::encode(outputs.0);
+        let sig_hex = hex::encode(sig.to_der().as_bytes());
+        (pk_hex, outputs_hex, sig_hex)
+    }
+
+    #[tokio::test]
+    #[serial]
+    async fn p7s_holder_binding_verify_happy() {
+        let f = setup().await;
+        let (pk, outputs_hash, signature_der) = mint_holder_binding_fixture();
+        let res = reqwest::Client::new()
+            .post(format!("{}/p7s/holder-binding/verify", f.base_url))
+            .json(&serde_json::json!({
+                "pk": pk,
+                "outputs_hash": outputs_hash,
+                "signature_der": signature_der,
+            }))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(res.status(), 200);
+        let body: serde_json::Value = res.json().await.unwrap();
+        assert_eq!(body["valid"], true);
+    }
+
+    #[tokio::test]
+    #[serial]
+    async fn p7s_holder_binding_verify_tampered_outputs_returns_valid_false() {
+        let f = setup().await;
+        let (pk, outputs_hash, signature_der) = mint_holder_binding_fixture();
+        // Flip one bit in outputs_hash — well-formed bytes, well-formed
+        // signature, but no longer the pair that was signed.
+        let mut tampered = hex::decode(&outputs_hash).unwrap();
+        tampered[0] ^= 0x01;
+        let tampered_hex = hex::encode(&tampered);
+
+        let res = reqwest::Client::new()
+            .post(format!("{}/p7s/holder-binding/verify", f.base_url))
+            .json(&serde_json::json!({
+                "pk": pk,
+                "outputs_hash": tampered_hex,
+                "signature_der": signature_der,
+            }))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(
+            res.status(),
+            200,
+            "well-formed request with bad sig is 200 + valid=false, not 400",
+        );
+        let body: serde_json::Value = res.json().await.unwrap();
+        assert_eq!(body["valid"], false);
+    }
+
+    #[tokio::test]
+    #[serial]
+    async fn p7s_holder_binding_verify_malformed_hex_returns_400() {
+        let f = setup().await;
+        let (_pk, outputs_hash, signature_der) = mint_holder_binding_fixture();
+        let res = reqwest::Client::new()
+            .post(format!("{}/p7s/holder-binding/verify", f.base_url))
+            .json(&serde_json::json!({
+                "pk": "not-valid-hex",
+                "outputs_hash": outputs_hash,
+                "signature_der": signature_der,
+            }))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(res.status(), 400);
     }
 }

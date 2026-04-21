@@ -22,15 +22,15 @@
 //! identity), not about which certificate root vouched for the
 //! underlying cert chain.
 //!
-//! Task 35 ships the lib surface only: `ProofOutputsHash` + its
-//! `from_components` constructor + `sign_holder_binding` /
-//! `verify_holder_binding`. The `PublicInputs`-derived helper
-//! (`ProofOutputsHash::from_public_inputs`) and the demo-layer
-//! wiring (API `/p7s/holder-binding/verify` endpoint +
-//! `personal_sign` UI flow) are deferred to Task 35b (#40), which
-//! runs after Task 36 pins the final `PublicInputs` shape — that
-//! way the helper lands once the trust-anchor-index landscape is
-//! finalized, without churning the hash encoding between tasks.
+//! History: Task 35 shipped the primitive lib surface
+//! (`ProofOutputsHash` + `from_components` + `sign_holder_binding` /
+//! `verify_holder_binding`) before `PublicInputs` had stabilized.
+//! Task 35b / #40 adds `from_public_inputs` and the demo-api verify
+//! endpoint once Task 36 pinned the final `PublicInputs` shape
+//! (post-`nullifier`, post-`trust_anchor_index`). The
+//! `personal_sign` UI flow is deferred to Task #32 because it needs
+//! a p7s proof-gen UI path that does not exist yet — building one
+//! here would be a throwaway stub.
 
 use k256::ecdsa::{
     signature::{Signer, Verifier},
@@ -38,10 +38,13 @@ use k256::ecdsa::{
 };
 use sha2::{Digest, Sha256};
 
-/// Canonical 32-byte digest the holder signs over. Constructed by
-/// callers from the proof's public outputs; the lib is agnostic to how
-/// the bytes are derived (the `from_public_inputs` helper lands in
-/// Task 35b / #40 once the `PublicInputs` shape is pinned).
+use crate::PublicInputs;
+
+/// Canonical 32-byte digest the holder signs over. Build from the raw
+/// four-component path via [`ProofOutputsHash::from_components`] or
+/// directly from a [`PublicInputs`] via
+/// [`ProofOutputsHash::from_public_inputs`] — the two paths are
+/// byte-identical because `from_public_inputs` just delegates.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ProofOutputsHash(pub [u8; 32]);
 
@@ -62,6 +65,15 @@ impl ProofOutputsHash {
         h.update(nonce);
         h.update(nullifier);
         ProofOutputsHash(h.finalize().into())
+    }
+
+    /// Compute the canonical digest directly from a verifier's
+    /// [`PublicInputs`]. Delegates to [`from_components`] over
+    /// `(context_hash, pk, nonce, nullifier)` — the `trust_anchor_index`
+    /// / `root_pk` / `timestamp` fields are deliberately NOT part of
+    /// the digest (see module header for the soundness argument).
+    pub fn from_public_inputs(pi: &PublicInputs) -> Self {
+        Self::from_components(&pi.context_hash, &pi.pk, &pi.nonce, &pi.nullifier)
     }
 }
 

@@ -3353,6 +3353,7 @@ dependencies = [
  "base64",
  "chrono",
  "hex",
+ "k256",
  "libc",
  "longfellow-sys",
  "ml-kem",
@@ -3367,6 +3368,7 @@ dependencies = [
  "tokio",
  "tower-http",
  "zk-eidas-mdoc",
+ "zk-eidas-p7s-circuit",
  "zk-eidas-types",
  "zk-eidas-utils",
 ]

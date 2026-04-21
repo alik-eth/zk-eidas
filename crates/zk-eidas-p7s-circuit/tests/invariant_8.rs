@@ -12,17 +12,18 @@
 //!      → reject with `HolderBindingError::Invalid`.
 //!   3. Tampered outputs: signature minted over outputs H, verifier
 //!      passes tampered outputs H' (one bit flipped) → reject.
-//!   4. Canonical-encoding stability: same inputs to `from_components`
-//!      always produce the same digest; changing any one component
-//!      changes the digest — the load-bearing property for holder
-//!      binding to detect proof-output substitution.
-//!
-//! The `from_public_inputs` helper (reads a `PublicInputs` directly)
-//! and the demo-layer wiring (API `/p7s/holder-binding/verify`
-//! endpoint + `personal_sign` UI flow) land in Task 35b (#40) after
-//! Task 36 pins the final `PublicInputs` shape. This file exercises
-//! the primitive signing / verification API and the `from_components`
-//! canonical-encoding path only.
+//!   4. Canonical-encoding stability (`from_components` path): same
+//!      inputs to `from_components` always produce the same digest;
+//!      changing any one component changes the digest — the
+//!      load-bearing property for holder binding to detect
+//!      proof-output substitution.
+//!   5. Trust-anchor-index exclusion (Task #40, `from_public_inputs`
+//!      path): the canonical digest is invariant under changes to
+//!      `PublicInputs.trust_anchor_index` / `root_pk` / `timestamp`
+//!      but shifts under changes to claim-content fields (checked
+//!      via `nullifier`). Pins the Phase 2b Q3 decision that holder
+//!      binding is blockchain-agnostic — the holder signs what the
+//!      proof CLAIMS, not which anchor verified it.
 
 use k256::ecdsa::SigningKey;
 use rand::rngs::OsRng;
@@ -102,5 +103,69 @@ fn from_components_is_stable_and_distinct_under_change() {
     assert_ne!(
         h1, h3,
         "changing nullifier must change the digest (collision-free)",
+    );
+}
+
+#[test]
+fn holder_binding_hash_excludes_trust_anchor_index() {
+    // Soundness test for the Phase 2b Q3 design decision: holder
+    // binding is blockchain-agnostic and independent of which root
+    // CA vouched for the holder's cert chain. The canonical digest
+    // MUST be identical across PublicInputs that differ only in
+    // `trust_anchor_index` / `root_pk` / `timestamp` — those are
+    // anchor-selection / issuance metadata, not "what the proof
+    // claims." Flipping any of them must not alter the signed bytes.
+    use zk_eidas_p7s_circuit::PublicInputs;
+
+    let base = PublicInputs {
+        context_hash: [0x11u8; 32],
+        pk: [0x22u8; 65],
+        nonce: [0x33u8; 32],
+        nullifier: [0x44u8; 32],
+        trust_anchor_index: 0,
+        root_pk: [0x55u8; 65],
+        timestamp: 1_700_000_000,
+    };
+    let h_base = ProofOutputsHash::from_public_inputs(&base);
+
+    // Same claim content, different trust anchor index.
+    let mut alt_index = base.clone();
+    alt_index.trust_anchor_index = 42;
+    assert_eq!(
+        h_base,
+        ProofOutputsHash::from_public_inputs(&alt_index),
+        "digest must ignore trust_anchor_index",
+    );
+
+    // Same claim content, different root_pk (the compile-time anchor
+    // material that matches the index).
+    let mut alt_root = base.clone();
+    alt_root.root_pk = [0xAAu8; 65];
+    assert_eq!(
+        h_base,
+        ProofOutputsHash::from_public_inputs(&alt_root),
+        "digest must ignore root_pk",
+    );
+
+    // Same claim content, different timestamp (issuance metadata).
+    let mut alt_ts = base.clone();
+    alt_ts.timestamp = 1_800_000_000;
+    assert_eq!(
+        h_base,
+        ProofOutputsHash::from_public_inputs(&alt_ts),
+        "digest must ignore timestamp",
+    );
+
+    // Positive control: a claim-content change DOES shift the digest.
+    // Here we flip `nullifier` — same rationale as
+    // `from_components_is_stable_and_distinct_under_change`, but
+    // verified through the `from_public_inputs` path so the two
+    // construction paths can't silently disagree.
+    let mut alt_nullifier = base;
+    alt_nullifier.nullifier[0] ^= 0x01;
+    assert_ne!(
+        h_base,
+        ProofOutputsHash::from_public_inputs(&alt_nullifier),
+        "digest MUST change when nullifier changes (from_public_inputs path)",
     );
 }
