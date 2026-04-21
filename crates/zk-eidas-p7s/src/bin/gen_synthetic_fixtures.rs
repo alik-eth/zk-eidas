@@ -165,18 +165,20 @@ const DN_SUBS_TESTANCHOR_A: &[(&[u8], &[u8])] = &[
         b"State enterprise \"DIIA\"",
         b"Synthetic Test QTSP Inc",
     ),
-    // 20-byte pair (subject DN commonName — note trailing space).
-    (b"Vovkotrub Oleksandr ", b"Test Holder Subject "),
+    //
+    // NOTE: the subject-DN PII substitutions (commonName / stable-ID /
+    // givenName / surname) were removed from this table after the
+    // Phase 2b push because the committed fixture is already
+    // post-substitution — the generator finds zero matches for those
+    // needles and the entries were dead code carrying source-side PII.
+    // The table below covers the non-PII, publicly-registered QTSP
+    // identifiers only. To re-derive a TestAnchorA fixture from a
+    // pristine DIIA p7s, restore those four entries out-of-tree.
+    //
     // 16-byte pair (QTSP reg-code — the TRUST_ANCHOR_PROBES marker).
     (b"UA-43395033-2311", b"TQSA-00000000-01"),
-    // 16-byte pair (subject stable-ID).
-    (b"TINUA-3627506575", b"TINUA-1111111111"),
     // 14-byte pair (legal entity reg code).
     (b"NTRUA-43395033", b"NTRUA-00000000"),
-    // 10-byte pair (subject givenName — trailing space).
-    (b"Oleksandr ", b"TestHoldr "),
-    // 9-byte pair (subject surname).
-    (b"Vovkotrub", b"TestHoldX"),
     // 4-byte pair (locality).
     (b"Kyiv", b"Test"),
 ];
