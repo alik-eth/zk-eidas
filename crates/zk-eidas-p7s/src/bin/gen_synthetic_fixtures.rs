@@ -104,6 +104,40 @@ const SIGNED_ATTRS_START: usize = 2477;
 #[allow(dead_code)]
 const CONTENT_SIG_LEN: usize = 70;
 
+// ── Length-preserving TSA region substitution table (Task 45) ────────
+//
+// These strings appear exclusively in (or primarily in) the TSA
+// countersignature region. They are applied globally like DN_SUBS —
+// any occurrences inside the signer cert TBS or signedAttrs are
+// covered by the subsequent re-signing steps (cert_sig + content_sig),
+// so the output remains self-consistent.
+//
+// The TSA countersignature's message_imprint remains stale (it already
+// was after #43a; no circuit invariant reads the TSA path).
+
+const TSA_SUBS: &[(&[u8], &[u8])] = &[
+    // 22-byte pair: TSA cert common name.
+    (
+        b"TSA-server QTSP \"DIIA\"",
+        b"TSA-server QTSP \"TSYN\"",
+    ),
+    // 45-byte pair: TSA issuer organisation.
+    (
+        b"Ministry of digital transformation of Ukraine",
+        b"Ukrainian Test TSA Authority (fixture only)  ",
+    ),
+    // 16-byte pair: TSA cert serialNumber UA-43395033-2552 (QTSP TSA).
+    (b"UA-43395033-2552", b"TQSA-00000000-02"),
+    // 16-byte pair: TSA cert serialNumber UA-43395033-2506 (TSA root).
+    (b"UA-43395033-2506", b"TQSA-00000000-03"),
+    // 14-byte pair: TSA CA hostname (rfc822Name + URI host).
+    (b"ca.diia.gov.ua", b"ca.synth.local"),
+    // 14-byte pair: TSA CA email in Subject Alternative Name.
+    (b"ca@diia.gov.ua", b"ca@synth.local"),
+    // 10-byte pair: certificate bundle filename inside a URI extension.
+    (b"diia_ecdsa", b"test_ecdsa"),
+];
+
 // ── Length-preserving DN substitution table (handoff §3.2) ───────────
 //
 // Each (needle, replacement) pair is byte-identical in length. Order
@@ -290,8 +324,14 @@ fn generate_synthetic(orig: &[u8]) -> Vec<u8> {
     );
     eprintln!("  content_sig_start: {}", content_sig_start);
 
-    // Step 1: length-preserving DN substitutions.
-    eprintln!("Step 1: DN substitutions");
+    // Step 1a: length-preserving TSA region substitutions (Task 45).
+    eprintln!("Step 1a: TSA region substitutions");
+    for (needle, rep) in TSA_SUBS {
+        replace_all(&mut buf, needle, rep);
+    }
+
+    // Step 1b: length-preserving DN substitutions.
+    eprintln!("Step 1b: DN substitutions");
     for (needle, rep) in DN_SUBS {
         replace_all(&mut buf, needle, rep);
     }
